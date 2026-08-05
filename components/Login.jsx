@@ -11,11 +11,7 @@ export default function Login({ error }) {
     <div className="wrap">
       <div className="login">
         <p className="eyebrow">Cuaderno de ruta</p>
-        <h1>
-          Tus datos,
-          <br />
-          <em>leídos bien</em>
-        </h1>
+        <h1>Analiza tu<br /><em>rendimiento</em></h1>
 
         <p>
           Conecta tu cuenta y este panel leerá todas tus salidas en bicicleta: velocidad en llano,
@@ -23,14 +19,10 @@ export default function Login({ error }) {
         </p>
 
         {error && (
-          <div className="callout warn" style={{ textAlign: 'left' }}>
-            {MENSAJES[error] || 'Algo no funcionó al conectar con Strava.'}
-          </div>
+          <div className="callout warn">{MENSAJES[error] || 'Algo no funcionó al conectar con Strava.'}</div>
         )}
 
-        <a className="btn btn-strava" href="/api/auth/strava">
-          Conectar con Strava
-        </a>
+        <a className="btn btn-strava" href="/api/auth/strava">Conectar con Strava</a>
 
         <div className="pasos">
           <strong>Qué permisos se piden y por qué</strong>
@@ -38,10 +30,10 @@ export default function Login({ error }) {
             <li>Ver tus actividades, incluidas las privadas: es lo que alimenta todo el análisis.</li>
             <li>Ver tu perfil: solo para mostrar tu nombre y tu peso si lo tienes puesto.</li>
           </ol>
-          <p style={{ margin: '10px 0 0' }}>
-            No se escribe nada en tu cuenta y no se guarda ninguna actividad en ningún servidor:
-            los datos viajan de Strava a tu navegador cada vez que abres el panel. Puedes revocar
-            el acceso cuando quieras desde los ajustes de tu cuenta de Strava.
+          <p style={{ margin: '12px 0 0' }}>
+            No se escribe nada en tu cuenta y no se guarda ninguna actividad en ningún servidor: los
+            datos viajan de Strava a tu navegador cada vez que abres el panel. Puedes revocar el
+            acceso cuando quieras desde los ajustes de tu cuenta de Strava.
           </p>
         </div>
       </div>

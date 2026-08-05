@@ -2,24 +2,33 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Entrenamientos from './Entrenamientos';
-import Perfil from './Perfil';
+import Zonas from './Zonas';
+import Objetivos from './Objetivos';
+import Semana from './Semana';
+import Consejo from './Consejo';
 import { Linea, Barras, Carga } from './Graficos';
 import {
-  PERFILES_BICI, ZONAS, detectarPuertos, serieCarga, umbralEstimado,
-  vatios, vatiosSalida, vatiosPuerto, repartoZonas,
+  PERFILES_BICI, detectarPuertos, serieCarga, umbralEstimado,
+  vatios, vatiosSalida, vatiosPuerto, repartoZonas, repartoGlobal,
+  calcularZonas, ultimosDias, consejoEntrenador,
   num, duracion, fechaCorta, kmh, km, metrosPorKm, vamSalida, esLlana,
 } from '@/lib/metrics';
 
 const PESTANAS = [
   ['resumen', 'Resumen'],
   ['entrenamientos', 'Entrenamientos'],
+  ['zonas', 'Zonas'],
   ['llano', 'Llano'],
   ['subida', 'Subida'],
   ['carga', 'Carga y forma'],
+  ['objetivos', 'Objetivos'],
   ['proyeccion', 'Proyección'],
 ];
 
-const CFG_INICIAL = { peso: 75, bici: 11, fcmax: 185, cda: 0.36, crr: 0.008, perfil: 'gravel_alto' };
+const CFG_INICIAL = {
+  peso: 75, bici: 11, fcmax: 185, cda: 0.36, crr: 0.008, perfil: 'gravel_alto',
+  modeloZonas: 'fcmax', zonasPropias: null,
+};
 
 export default function Dashboard({ atleta }) {
   const [salidas, setSalidas] = useState(null);
@@ -91,17 +100,28 @@ export default function Dashboard({ atleta }) {
     [salidas, excluidas]
   );
 
-  /* --- cargamos el detalle de la salida mas reciente para el perfil de cabecera --- */
-  const ultima = activas.length ? activas[activas.length - 1] : null;
+  /*
+    Precarga de las ultimas salidas con pulsometro. Sin esto, el apartado
+    de zonas y el umbral estimado arrancan vacios hasta que el usuario abre
+    salidas a mano. Se limita a cinco para no gastar el cupo de Strava.
+  */
   useEffect(() => {
-    if (ultima && !cache[ultima.id]) pedirStreams(ultima.id).catch(() => {});
-  }, [ultima, cache, pedirStreams]);
-
-  const streamsUltima = ultima ? cache[ultima.id] : null;
-  const puertosUltima = useMemo(
-    () => (streamsUltima ? detectarPuertos(streamsUltima, { minMetros: 800, minDesnivel: 60, minPend: 3.5 }) : []),
-    [streamsUltima]
-  );
+    if (!activas.length) return;
+    const pendientes = [...activas]
+      .reverse()
+      .filter((s) => s.fcMedia && !cache[s.id])
+      .slice(0, 5);
+    if (!pendientes.length) return;
+    let vivo = true;
+    (async () => {
+      for (const s of pendientes) {
+        if (!vivo) return;
+        try { await pedirStreams(s.id); } catch { /* sin detalle, seguimos */ }
+      }
+    })();
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activas.length]);
 
   const umbral = useMemo(() => {
     const todos = Object.entries(cache).flatMap(([id, st]) =>
@@ -112,6 +132,22 @@ export default function Dashboard({ atleta }) {
 
   const masaTotal = cfg.peso + cfg.bici;
   const wPara30 = vatios(30 / 3.6, 0, masaTotal, cfg.cda, cfg.crr);
+
+  /* Zonas del usuario: una sola fuente de verdad para todo el panel. */
+  const zonas = useMemo(() => calcularZonas(cfg), [cfg]);
+
+  const dias = useMemo(
+    () => ultimosDias(activas, cfg, zonas, umbral, 7),
+    [activas, cfg, zonas, umbral]
+  );
+  const consejo = useMemo(
+    () => consejoEntrenador(activas, cfg, zonas, umbral),
+    [activas, cfg, zonas, umbral]
+  );
+  const global = useMemo(
+    () => repartoGlobal(cache, zonas, excluidas),
+    [cache, zonas, excluidas]
+  );
 
   if (error && !salidas) {
     return (
@@ -141,45 +177,36 @@ export default function Dashboard({ atleta }) {
             Cuaderno de ruta · {activas.length} salidas
             {activas.length > 0 && ` · desde ${fechaCorta(activas[0].fecha)}`}
           </p>
-          <h1>El puerto<br />que estás<br /><em>subiendo</em></h1>
+          <h1>Analiza tu<br /><em>rendimiento</em></h1>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <div className="usuario">
-            {atleta?.foto && <img src={atleta.foto} alt="" />}
-            <div className="n">
+            {atleta?.foto
+              ? <img src={atleta.foto} alt="" />
+              : <div className="ini">{(atleta?.nombre || '?').charAt(0)}</div>}
+            <div>
               <b>{atleta?.nombre || 'Conectado'}</b>
               <span>vía Strava</span>
             </div>
           </div>
-          <button className="btn-sec" onClick={cargar} disabled={refrescando}>
+          <button onClick={cargar} disabled={refrescando}>
             {refrescando ? 'Actualizando…' : 'Actualizar'}
           </button>
-          <form action="/api/auth/logout" method="post"
-            onSubmit={(e) => { e.preventDefault();
-              fetch('/api/auth/logout', { method: 'POST' }).then(() => window.location.reload()); }}>
-            <button className="btn-sec" type="submit">Salir</button>
-          </form>
+          <button onClick={() =>
+            fetch('/api/auth/logout', { method: 'POST' }).then(() => window.location.reload())}>
+            Salir
+          </button>
         </div>
       </div>
 
       {error && <div className="callout warn">{error}</div>}
 
-      {/* ---------- perfil de cabecera ---------- */}
-      {ultima && (
-        <div className="card" style={{ marginTop: 24 }}>
-          <div style={{ fontFamily: 'var(--display)', textTransform: 'uppercase',
-            letterSpacing: '.06em', fontSize: 17, fontWeight: 700 }}>
-            {ultima.nombre}
-          </div>
-          <div style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--ink3)',
-            margin: '2px 0 12px', textTransform: 'uppercase' }}>
-            Tu última salida · {num(km(ultima), 1)} km · +{num(ultima.desnivel, 0)} m · {duracion(ultima.tiempoMovimiento)}
-          </div>
-          {streamsUltima
-            ? <Perfil streams={streamsUltima} puertos={puertosUltima} fcmax={cfg.fcmax} altura={200} />
-            : <p className="cargando"><span className="spin" />Cargando el perfil…</p>}
-        </div>
-      )}
+      <h3 style={{ marginTop: 10 }}>Últimos siete días</h3>
+      <Semana dias={dias} />
+
+      <div style={{ marginTop: 22 }}>
+        <Consejo consejo={consejo} />
+      </div>
 
       <nav role="tablist">
         {PESTANAS.map(([id, txt]) => (
@@ -191,8 +218,7 @@ export default function Dashboard({ atleta }) {
 
       {/* ---------- constantes ---------- */}
       <div className="panel">
-        <h4>Tus constantes</h4>
-        <p>Estos valores alimentan todos los cálculos. Cámbialos y el panel se recalcula al momento.</p>
+        <h3 style={{ marginBottom: 14 }}>Tus constantes</h3>
         <div className="fields">
           <div>
             <label htmlFor="peso">Peso ciclista (kg)</label>
@@ -220,19 +246,29 @@ export default function Dashboard({ atleta }) {
             </select>
           </div>
         </div>
+        <p className="hint" style={{ margin: '14px 0 0' }}>
+          Estos valores alimentan todos los cálculos. Cámbialos y el panel se recalcula al momento.
+          Las zonas de frecuencia cardíaca se configuran en su propia pestaña.
+        </p>
       </div>
 
       {pestana === 'resumen' && (
-        <Resumen salidas={activas} cfg={cfg} umbral={umbral} wPara30={wPara30}
-          masaTotal={masaTotal} cache={cache} excluidas={excluidas} setExcluidas={setExcluidas}
-          todas={salidas} />
+        <Resumen salidas={activas} cfg={cfg} umbral={umbral} masaTotal={masaTotal}
+          excluidas={excluidas} setExcluidas={setExcluidas} todas={salidas} />
       )}
       {pestana === 'entrenamientos' && (
-        <Entrenamientos salidas={salidas} cfg={cfg} cache={cache} pedirStreams={pedirStreams} />
+        <Entrenamientos salidas={salidas} cfg={cfg} zonas={zonas} cache={cache}
+          pedirStreams={pedirStreams} />
+      )}
+      {pestana === 'zonas' && (
+        <Zonas cfg={cfg} setCfg={setCfg} zonas={zonas} reparto={global} />
       )}
       {pestana === 'llano' && <Llano salidas={activas} cfg={cfg} masaTotal={masaTotal} />}
       {pestana === 'subida' && <Subida salidas={activas} cfg={cfg} cache={cache} umbral={umbral} masaTotal={masaTotal} />}
-      {pestana === 'carga' && <CargaTab salidas={activas} cfg={cfg} umbral={umbral} cache={cache} />}
+      {pestana === 'carga' && <CargaTab salidas={activas} cfg={cfg} umbral={umbral} zonas={zonas} global={global} />}
+      {pestana === 'objetivos' && (
+        <Objetivos salidas={activas} cfg={cfg} cache={cache} excluidas={excluidas} masaTotal={masaTotal} />
+      )}
       {pestana === 'proyeccion' && <Proyeccion salidas={activas} cfg={cfg} umbral={umbral} masaTotal={masaTotal} />}
 
       <footer>
@@ -258,103 +294,49 @@ function Dato({ k, v, u, d, cl }) {
   );
 }
 
-function Resumen({ salidas, cfg, umbral, wPara30, masaTotal, cache, excluidas, setExcluidas, todas }) {
+function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas, todas }) {
   if (!salidas.length) return <p className="hint">No hay salidas seleccionadas.</p>;
 
   const suma = (f) => salidas.reduce((a, s) => a + f(s), 0);
   const llanas = salidas.filter(esLlana);
   const mejorLlano = llanas.length ? Math.max(...llanas.map(kmh)) : 0;
-
-  const puertos = Object.entries(cache).flatMap(([id, st]) =>
-    excluidas.has(Number(id)) ? [] : detectarPuertos(st, { minMetros: 800, minDesnivel: 60, minPend: 4 })
-  );
-  const mejor6 = puertos.filter((p) => p.pendiente >= 5.8 && p.pendiente <= 7.5)
-    .sort((a, b) => b.metros - a.metros)[0];
-  const mejor8 = puertos.filter((p) => p.pendiente >= 7.5)
-    .sort((a, b) => b.metros - a.metros)[0];
-
-  const wActual = mejorLlano ? vatios(mejorLlano / 3.6, 0, masaTotal, cfg.cda, cfg.crr) : 0;
-  const wCarretera = vatios(30 / 3.6, 0, masaTotal, 0.30, 0.005);
-
-  const objetivos = [
-    {
-      n: '30 km/h en llano',
-      pct: Math.min(100, (mejorLlano / 30) * 100),
-      color: 'var(--water)',
-      dato: `${num(mejorLlano, 1)} de 30 km/h`,
-      nota: mejorLlano
-        ? `Tu mejor registro en terreno llano. Faltan ${num(30 - mejorLlano, 1)} km/h, que en potencia significan pasar de ${num(wActual, 0)} a ${num(wPara30, 0)} W sostenidos.`
-        : 'Aún no hay salidas en terreno llano puro para medirlo.',
-    },
-    {
-      n: 'Puerto de 5 km al 6–7 %',
-      pct: mejor6 ? Math.min(100, (mejor6.metros / 5000) * 100) : 0,
-      color: 'var(--road)',
-      dato: mejor6 ? `${num(mejor6.metros / 1000, 2)} de 5 km` : 'sin datos aún',
-      nota: mejor6
-        ? `Tu ascenso más largo en ese rango de pendiente: ${num(mejor6.metros / 1000, 2)} km al ${num(mejor6.pendiente, 1)} %. Faltan ${num(Math.max(0, 5 - mejor6.metros / 1000), 2)} km de pendiente sostenida.`
-        : 'Abre alguna salida con puertos en la pestaña Entrenamientos para que el panel los analice.',
-    },
-    {
-      n: '2–3 km al 8–9 %',
-      pct: mejor8 ? Math.min(100, (mejor8.metros / 2000) * 100) : 0,
-      color: 'var(--signal)',
-      dato: mejor8 ? `${num(mejor8.metros / 1000, 2)} km al ${num(mejor8.pendiente, 1)} %` : 'sin datos aún',
-      nota: mejor8
-        ? `Tu mejor ascenso por encima del 7,5 %. ${mejor8.vam ? `Lo subiste a ${num(mejor8.vam, 0)} m/h.` : ''}`
-        : 'Todavía no hay ningún ascenso analizado por encima del 7,5 %.',
-    },
-  ];
-
   const sinFC = salidas.filter((s) => !s.fcMedia).length;
+  const wPara30 = vatios(30 / 3.6, 0, masaTotal, cfg.cda, cfg.crr);
+  const wCarretera = vatios(30 / 3.6, 0, masaTotal, 0.3, 0.005);
 
   return (
     <>
-      <h3>Dónde estás hoy</h3>
+      <h2>Dónde estás hoy</h2>
       <div className="grid">
         <Dato k="Distancia total" v={num(suma(km), 0)} u="km" d={`${salidas.length} salidas`} />
         <Dato k="Desnivel acumulado" v={num(suma((s) => s.desnivel), 0)} u="m" />
         <Dato k="Horas sobre la bici" v={num(suma((s) => s.tiempoMovimiento) / 3600, 1)} u="h"
           d="tiempo en movimiento" />
         <Dato k="Salida media" v={num(suma(km) / salidas.length, 1)} u="km" />
+        <Dato k="Mejor registro en llano" v={mejorLlano ? num(mejorLlano, 1) : '—'} u="km/h"
+          d={mejorLlano ? 'terreno realmente llano' : 'sin salidas llanas'} />
         <Dato k="Umbral estimado" v={umbral} u="W" d={`${num(umbral / cfg.peso, 2)} W/kg`} />
-        <Dato k="Velocidad media" v={num(suma(kmh) / salidas.length, 1)} u="km/h" d="todo terreno" />
       </div>
 
-      <h3>Tus objetivos</h3>
-      <p className="hint">Medidos contra tu mejor registro real, no contra una media.</p>
-      {objetivos.map((o) => (
-        <div className="goal" key={o.n}>
-          <div className="top2">
-            <span className="name">{o.n}</span>
-            <span className="pct" style={{ color: o.color }}>{num(o.pct, 0)} %</span>
-          </div>
-          <div className="bar"><i style={{ width: `${o.pct}%`, background: o.color }} /></div>
-          <p className="note">
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{o.dato}</span> · {o.nota}
-          </p>
-        </div>
-      ))}
-
-      <h3>Lo que dicen tus números</h3>
       <div className="callout warn">
-        <strong>Mantener 30 km/h con tu configuración actual exige unos {num(wPara30, 0)} W sostenidos.</strong>{' '}
-        Con una bici de carretera y posición baja, esos mismos 30 km/h bajan a {num(wCarretera, 0)} W:{' '}
-        <strong>{num(wPara30 - wCarretera, 0)} W de diferencia</strong> sin ganar un solo vatio de forma.
-        En llano, la aerodinámica pesa más que el motor.
+        <strong>Mantener 30 km/h con tu configuración actual exige unos {num(wPara30, 0)} W
+        sostenidos.</strong> Con una bici de carretera y posición baja, esos mismos 30 km/h bajan a{' '}
+        {num(wCarretera, 0)} W: {num(wPara30 - wCarretera, 0)} W de diferencia sin ganar un solo
+        vatio de forma. En llano, la aerodinámica pesa más que el motor.
       </div>
+
       {sinFC > 0 && (
         <div className="callout">
-          <strong>{sinFC} de tus {salidas.length} salidas no tienen frecuencia cardíaca.</strong> Sin ese dato
-          no hay forma de saber si entrenaste en zona 2 o te pasaste. Graba siempre con el Garmin y en unos
-          meses este panel valdrá el doble.
+          <strong>{sinFC} de tus {salidas.length} salidas no tienen frecuencia cardíaca.</strong> Sin
+          ese dato, su intensidad en el calendario es una estimación a partir del desnivel y la
+          velocidad. Graba siempre con el Garmin y en unos meses este panel valdrá el doble.
         </div>
       )}
 
-      <h3>Qué salidas entran en el análisis</h3>
+      <h2>Qué salidas entran en el análisis</h2>
       <p className="hint">
-        Desmarca las que no sean representativas (paradas largas, ruta acompañando a alguien, error de
-        registro) y desaparecerán de todos los cálculos.
+        Desmarca las que no sean representativas (paradas largas, ruta acompañando a alguien, error
+        de registro) y desaparecerán de todos los cálculos.
       </p>
       <div className="scroll">
         <table>
@@ -368,9 +350,9 @@ function Resumen({ salidas, cfg, umbral, wPara30, masaTotal, cache, excluidas, s
             {[...todas].reverse().map((s) => {
               const dentro = !excluidas.has(s.id);
               return (
-                <tr key={s.id} style={{ opacity: dentro ? 1 : 0.4 }}>
+                <tr key={s.id} style={{ opacity: dentro ? 1 : 0.35 }}>
                   <td>
-                    {s.nombre}{' '}
+                    {s.nombre}
                     <span className={`tag ${esLlana(s) ? 'lla' : metrosPorKm(s) > 12 ? 'col' : ''}`}>
                       {esLlana(s) ? 'llano' : metrosPorKm(s) > 12 ? 'puerto' : 'mixto'}
                     </span>
@@ -384,7 +366,7 @@ function Resumen({ salidas, cfg, umbral, wPara30, masaTotal, cache, excluidas, s
                   <td>{s.fcMedia ? num(s.fcMedia, 0) : '—'}</td>
                   <td>{num(vatiosSalida(s, cfg), 0)}</td>
                   <td>
-                    <input type="checkbox" checked={dentro} style={{ width: 17, height: 17, cursor: 'pointer' }}
+                    <input type="checkbox" checked={dentro}
                       onChange={() => {
                         const n = new Set(excluidas);
                         dentro ? n.add(s.id) : n.delete(s.id);
@@ -408,7 +390,7 @@ function Llano({ salidas, cfg, masaTotal }) {
 
   return (
     <>
-      <h3>Velocidad en llano</h3>
+      <h2>Velocidad en llano</h2>
       <p className="hint">
         Solo salidas con menos de 5 m de desnivel por kilómetro: terreno realmente llano, donde el
         objetivo de 30 km/h tiene sentido.
@@ -420,7 +402,7 @@ function Llano({ salidas, cfg, masaTotal }) {
         />
       </div>
 
-      <h3>Qué potencia exige cada velocidad</h3>
+      <h2>Qué potencia exige cada velocidad</h2>
       <p className="hint">Calculado con física real de ciclismo para tu peso y tu configuración.</p>
       <div className="scroll">
         <table>
@@ -432,11 +414,11 @@ function Llano({ salidas, cfg, masaTotal }) {
               const w = vatios(v / 3.6, 0, masaTotal, cfg.cda, cfg.crr);
               const esTuyo = Math.abs(v - mejor) < 1;
               return (
-                <tr key={v} style={esTuyo ? { background: '#EBF0E8', fontWeight: 600 } : null}>
+                <tr key={v} style={esTuyo ? { background: 'var(--card2)' } : null}>
                   <td>{v} km/h {esTuyo && <span className="tag">tu nivel</span>}</td>
                   <td>{num(w, 0)} W</td>
                   <td>{num(w / cfg.peso, 2)}</td>
-                  <td style={{ color: w > wMejor ? 'var(--road)' : 'var(--moss)' }}>
+                  <td style={{ color: w > wMejor ? 'var(--orange)' : 'var(--green)' }}>
                     {w > wMejor ? '+' : ''}{num(w - wMejor, 0)} W
                   </td>
                 </tr>
@@ -469,14 +451,14 @@ function Subida({ salidas, cfg, cache, umbral, masaTotal }) {
   const pctUmbral = (w / umbral) * 100;
 
   const veredicto =
-    pctUmbral < 80 ? ['Cómodo. Ritmo de fondo, lo aguantas sin problema.', 'var(--moss)']
-      : pctUmbral < 95 ? ['Exigente pero sostenible. Este es tu terreno de progreso.', 'var(--signal)']
-      : pctUmbral < 108 ? ['Al límite. Solo si el puerto es el objetivo del día.', 'var(--road)']
-      : ['Fuera de alcance hoy. Necesitas más base antes de intentarlo.', 'var(--road)'];
+    pctUmbral < 80 ? ['Cómodo. Ritmo de fondo, lo aguantas sin problema.', 'var(--green)']
+      : pctUmbral < 95 ? ['Exigente pero sostenible. Este es tu terreno de progreso.', 'var(--amber)']
+      : pctUmbral < 108 ? ['Al límite. Solo si el puerto es el objetivo del día.', 'var(--orange)']
+      : ['Fuera de alcance hoy. Necesitas más base antes de intentarlo.', 'var(--red)'];
 
   return (
     <>
-      <h3>Tus mejores ascensos</h3>
+      <h2>Tus mejores ascensos</h2>
       <p className="hint">
         Detectados sobre el perfil de las salidas que has abierto. Cuantas más veas en la pestaña
         Entrenamientos, más completa será esta tabla.
@@ -516,7 +498,7 @@ function Subida({ salidas, cfg, cache, umbral, masaTotal }) {
         </div>
       )}
 
-      <h3>VAM por salida</h3>
+      <h2>VAM por salida</h2>
       <p className="hint">
         Metros verticales por hora sobre el total de la salida. No es el VAM puro de subida, pero al
         comparar sesiones del mismo tipo muestra la tendencia.
@@ -528,9 +510,9 @@ function Subida({ salidas, cfg, cache, umbral, masaTotal }) {
         />
       </div>
 
-      <h3>Calculadora de ascensos</h3>
+      <h2>Calculadora de ascensos</h2>
       <p className="hint">Introduce cualquier puerto y te digo el tiempo y la potencia que exige.</p>
-      <div className="panel" style={{ borderLeftColor: 'var(--signal)' }}>
+      <div className="panel">
         <div className="fields">
           <div><label htmlFor="ck">Longitud (km)</label>
             <input id="ck" type="number" min="0.3" max="30" step="0.1" value={calc.km}
@@ -548,7 +530,7 @@ function Subida({ salidas, cfg, cache, umbral, masaTotal }) {
         <Dato k="Tiempo estimado" v={duracion(seg)} d={`a ${calc.vam} m/h`} />
         <Dato k="Velocidad" v={num(v * 3.6, 1)} u="km/h" d="media de ascenso" />
         <Dato k="Potencia necesaria" v={num(w, 0)} u="W" d={`${num(w / cfg.peso, 2)} W/kg`} />
-        <div className="stat" style={{ borderLeft: `4px solid ${veredicto[1]}` }}>
+        <div className="stat" style={{ borderLeft: `3px solid ${veredicto[1]}` }}>
           <div className="k">Exigencia</div>
           <div className="v" style={{ color: veredicto[1] }}>{num(pctUmbral, 0)} <small>% del umbral</small></div>
           <div className="d">{veredicto[0]}</div>
@@ -558,27 +540,19 @@ function Subida({ salidas, cfg, cache, umbral, masaTotal }) {
   );
 }
 
-function CargaTab({ salidas, cfg, umbral, cache }) {
+function CargaTab({ salidas, cfg, umbral, zonas, global: rep }) {
   const serie = useMemo(() => serieCarga(salidas, cfg, umbral), [salidas, cfg, umbral]);
   const ult = serie[serie.length - 1];
 
-  const conFC = salidas.filter((s) => s.fcMedia);
-  const repartos = Object.entries(cache)
-    .map(([id, st]) => repartoZonas(st, cfg.fcmax))
-    .filter(Boolean);
-  const medio = repartos.length
-    ? [0, 1, 2, 3, 4].map((k) => repartos.reduce((a, r) => a + r.porcentaje[k], 0) / repartos.length)
-    : null;
-
   const estado = !ult ? ['—', 'var(--ink2)']
-    : ult.forma > 10 ? ['Fresco', 'var(--moss)']
-    : ult.forma > -10 ? ['Equilibrado', 'var(--water)']
-    : ult.forma > -25 ? ['Cargado', 'var(--signal)']
-    : ['Muy cargado', 'var(--road)'];
+    : ult.forma > 10 ? ['Fresco', 'var(--green)']
+    : ult.forma > -10 ? ['Equilibrado', 'var(--blue)']
+    : ult.forma > -25 ? ['Cargado', 'var(--amber)']
+    : ['Muy cargado', 'var(--red)'];
 
   return (
     <>
-      <h3>Carga, fatiga y forma</h3>
+      <h2>Carga, fatiga y forma</h2>
       <p className="hint">
         La <strong>condición</strong> es tu base acumulada a 42 días; la <strong>fatiga</strong>, el
         cansancio de los últimos 7; la <strong>forma</strong>, la diferencia entre ambas.
@@ -586,16 +560,16 @@ function CargaTab({ salidas, cfg, umbral, cache }) {
       <div className="chart">
         <Carga serie={serie} />
         <div className="legend">
-          <span><i style={{ background: 'var(--water)' }} />Condición</span>
-          <span><i style={{ background: 'var(--road)' }} />Fatiga</span>
-          <span><i style={{ background: 'var(--moss)' }} />Forma</span>
+          <span><i style={{ background: 'var(--blue)' }} />Condición</span>
+          <span><i style={{ background: 'var(--red)' }} />Fatiga</span>
+          <span><i style={{ background: 'var(--green)' }} />Forma</span>
         </div>
       </div>
       {ult && (
-        <div className="grid">
+        <div className="grid" style={{ marginTop: 14 }}>
           <Dato k="Condición" v={num(ult.condicion, 0)} d="base aeróbica acumulada" />
           <Dato k="Fatiga" v={num(ult.fatiga, 0)} d="carga de los últimos 7 días" />
-          <div className="stat" style={{ borderLeft: `4px solid ${estado[1]}` }}>
+          <div className="stat" style={{ borderLeft: `3px solid ${estado[1]}` }}>
             <div className="k">Forma</div>
             <div className="v" style={{ color: estado[1] }}>
               {ult.forma > 0 ? '+' : ''}{num(ult.forma, 0)}
@@ -606,36 +580,38 @@ function CargaTab({ salidas, cfg, umbral, cache }) {
         </div>
       )}
       <div className="callout">
-        <em>Matiz:</em> la serie arranca de cero en tu primera salida registrada, así que las primeras
-        semanas de condición están artificialmente bajas. La forma solo es fiable pasados un par de meses.
+        <em>Matiz:</em> la serie arranca de cero en tu primera salida registrada, así que las
+        primeras semanas de condición están artificialmente bajas. La forma solo es fiable pasados
+        un par de meses.
       </div>
 
-      <h3>Reparto de intensidad</h3>
-      {!medio ? (
+      <h2>Reparto de intensidad</h2>
+      {!rep || rep.total === 0 ? (
         <div className="callout">
-          Abre alguna salida con pulsómetro en la pestaña <strong>Entrenamientos</strong> para ver aquí
-          el reparto medio por zonas.
+          Abre alguna salida con pulsómetro en <strong>Entrenamientos</strong> para ver aquí el
+          reparto por zonas. El desglose completo, con varias vistas, está en la pestaña{' '}
+          <strong>Zonas</strong>.
         </div>
       ) : (
         <>
           <p className="hint">
-            Media de las {repartos.length} salidas analizadas con frecuencia cardíaca. El modelo
-            polarizado busca en torno al 80 % en zona 1–2 y el 20 % en alta intensidad.
+            Acumulado de las {rep.analizadas} salidas analizadas. El modelo polarizado busca en
+            torno al 80 % en zona 1–2 y el 20 % en alta intensidad.
           </p>
           <div className="chart">
             <svg viewBox="0 0 1000 60" width="100%">
               {(() => {
                 let acc = 0;
-                return ZONAS.map((z, k) => {
-                  const w = (medio[k] / 100) * 1000;
+                return zonas.map((z, k) => {
+                  const w = (rep.porcentaje[k] / 100) * 1000;
                   const x = acc; acc += w;
                   return w > 0 ? (
                     <g key={z.n}>
                       <rect x={x} y="10" width={w} height="34" fill={z.color} />
                       {w > 55 && (
-                        <text x={x + w / 2} y="32" textAnchor="middle" fill="#fff" fontSize="13"
-                          fontWeight="600" fontFamily="ui-monospace,Menlo,monospace">
-                          {num(medio[k], 0)} %
+                        <text x={x + w / 2} y="32" textAnchor="middle" fill="#0E1116" fontSize="13"
+                          fontWeight="500" fontFamily="ui-monospace,Menlo,monospace">
+                          {num(rep.porcentaje[k], 0)} %
                         </text>
                       )}
                     </g>
@@ -644,15 +620,15 @@ function CargaTab({ salidas, cfg, umbral, cache }) {
               })()}
             </svg>
             <div className="legend">
-              {ZONAS.map((z) => <span key={z.n}><i style={{ background: z.color }} />Z{z.n} {z.nombre}</span>)}
+              {zonas.map((z) => <span key={z.n}><i style={{ background: z.color }} />Z{z.n} {z.nombre}</span>)}
             </div>
           </div>
-          {medio[2] > 25 && (
+          {rep.porcentaje[2] > 25 && (
             <div className="callout warn">
-              <strong>Se te está yendo {num(medio[2], 0)} % del tiempo a zona 3.</strong> Es el terreno
-              intermedio que cansa como el entrenamiento duro pero no da los beneficios de ninguno de los
-              dos. En las salidas de fondo, obligarte a bajar de {Math.round(cfg.fcmax * 0.75)} ppm aunque
-              tengas que poner un desarrollo ridículo en las rampas.
+              <strong>Se te está yendo {num(rep.porcentaje[2], 0)} % del tiempo a zona 3.</strong> Es
+              el terreno intermedio que cansa como el entrenamiento duro pero no da los beneficios de
+              ninguno de los dos. En las salidas de fondo, obligarte a bajar de {zonas[2].desde} ppm
+              aunque tengas que poner un desarrollo ridículo en las rampas.
             </div>
           )}
         </>
@@ -696,7 +672,7 @@ function Proyeccion({ salidas, cfg, umbral, masaTotal }) {
 
   return (
     <>
-      <h3>Tu curva hacia los 30 km/h</h3>
+      <h2>Tu curva hacia los 30 km/h</h2>
       <div className="chart">
         <Linea puntos={llanas.map((s) => ({ y: kmh(s), etiqueta: fechaCorta(s.fecha) }))}
           objetivo={30} unidad="km/h" minY={10} maxY={32} />
@@ -708,7 +684,7 @@ function Proyeccion({ salidas, cfg, umbral, masaTotal }) {
         Ese cambio te adelanta el objetivo más que un año de entrenamiento.
       </div>
 
-      <h3>Test de FTP: qué esperar</h3>
+      <h2>Test de FTP: qué esperar</h2>
       <p className="hint">
         Cuando hagas el test de 20 minutos, aquí tienes el rango en el que deberían caer tus números
         según lo que ya has demostrado sobre la bici.

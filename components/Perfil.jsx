@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ZONAS, zonaDeFC, num } from '@/lib/metrics';
+import { zonaDeFC, num } from '@/lib/metrics';
 
 /*
   Perfil de altimetria.
@@ -13,7 +13,7 @@ import { ZONAS, zonaDeFC, num } from '@/lib/metrics';
 export default function Perfil({
   streams,
   puertos = [],
-  fcmax = 185,
+  zonas,
   modo = 'relieve',
   zonaFoco = null,
   altura = 260,
@@ -44,16 +44,33 @@ export default function Perfil({
   const W = 1000, H = altura, L = 44, R = 14, T = 18, B = 30;
   const maxA = Math.max(...datos.a);
   const minA = Math.min(...datos.a);
-  const rango = Math.max(maxA - minA, 30);
-  const base = Math.max(0, minA - rango * 0.12);
-  const techo = maxA + rango * 0.14;
   const maxD = datos.d[datos.d.length - 1];
+
+  /*
+    Escala vertical honesta.
+
+    Si el eje se ajusta siempre al desnivel real, una salida llana con
+    cuarenta metros de ondulacion se dibuja igual de dramatica que un
+    puerto de seiscientos, y el perfil miente. La solucion es fijar un
+    rango minimo proporcional a la distancia: una salida de 40 km se
+    encuadra en al menos 250 m de altura, de modo que lo llano se ve
+    llano y solo lo que sube de verdad ocupa la pantalla.
+  */
+  const rangoReal = maxA - minA;
+  const rangoMinimo = Math.max(120, Math.min(400, maxD * 6));
+  const rango = Math.max(rangoReal, rangoMinimo);
+  const holgura = rango * 0.14;
+  const centro = (maxA + minA) / 2;
+  let base = centro - rango / 2 - holgura * 0.4;
+  let techo = centro + rango / 2 + holgura * 0.6;
+  if (base < 0 && minA >= 0) { techo -= base; base = 0; }
 
   const X = (k) => L + (k / maxD) * (W - L - R);
   const Y = (v) => H - B - ((v - base) / (techo - base)) * (H - T - B);
 
   /* --- lineas de altura de referencia --- */
-  const escalon = rango > 600 ? 200 : rango > 300 ? 100 : rango > 120 ? 50 : 25;
+  const vista = techo - base;
+  const escalon = vista > 900 ? 250 : vista > 600 ? 200 : vista > 300 ? 100 : vista > 140 ? 50 : 25;
   const guias = [];
   for (let v = Math.ceil(base / escalon) * escalon; v < techo; v += escalon) guias.push(v);
 
@@ -61,9 +78,9 @@ export default function Perfil({
   const tramos = [];
   if (modo === 'zonas' && datos.fc) {
     let ini = 0;
-    let zAct = datos.fc[0] ? zonaDeFC(datos.fc[0], fcmax).n : null;
+    let zAct = datos.fc[0] ? zonaDeFC(datos.fc[0], zonas).n : null;
     for (let i = 1; i < datos.d.length; i++) {
-      const z = datos.fc[i] ? zonaDeFC(datos.fc[i], fcmax).n : null;
+      const z = datos.fc[i] ? zonaDeFC(datos.fc[i], zonas).n : null;
       if (z !== zAct || i === datos.d.length - 1) {
         tramos.push({ ini, fin: i, zona: zAct });
         ini = i - 1 < 0 ? 0 : i - 1;
@@ -115,38 +132,38 @@ export default function Perfil({
       >
         <defs>
           <linearGradient id="relieve" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#C9BCA2" stopOpacity=".85" />
-            <stop offset="100%" stopColor="#C9BCA2" stopOpacity=".12" />
+            <stop offset="0%" stopColor="#4A5563" stopOpacity=".55" />
+            <stop offset="100%" stopColor="#4A5563" stopOpacity=".05" />
           </linearGradient>
         </defs>
 
         {guias.map((v) => (
           <g key={v}>
-            <line x1={L} y1={Y(v)} x2={W - R} y2={Y(v)} stroke="#DDE2D6" strokeWidth="1" />
-            <text x={L - 8} y={Y(v) + 4} textAnchor="end" fill="#8A968E"
+            <line x1={L} y1={Y(v)} x2={W - R} y2={Y(v)} stroke="#2A3341" strokeWidth="1" />
+            <text x={L - 8} y={Y(v) + 4} textAnchor="end" fill="#6B7684"
               fontSize="10" fontFamily="ui-monospace,Menlo,monospace">{v}</text>
           </g>
         ))}
 
-        {modo === 'zonas' && datos.fc ? (
+        {modo === 'zonas' && datos.fc && zonas ? (
           <>
             {tramos.map((t, i) => {
-              const z = ZONAS.find((x) => x.n === t.zona);
+              const z = zonas.find((x) => x.n === t.zona);
               const atenuado = zonaFoco && t.zona !== zonaFoco;
               return (
                 <path key={i} d={areaPath(t.ini, t.fin)}
-                  fill={z ? z.color : '#C9BCA2'}
+                  fill={z ? z.color : '#4A5563'}
                   opacity={atenuado ? 0.13 : 0.82} />
               );
             })}
-            <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#1A2420"
+            <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#0E1116"
               strokeWidth="1.2" strokeLinejoin="round" opacity=".55" />
           </>
         ) : (
           <>
             <path d={areaPath(0, datos.d.length - 1)} fill="url(#relieve)" />
-            <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#1A2420"
-              strokeWidth="1.6" strokeLinejoin="round" />
+            <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#C8CFD8"
+              strokeWidth="1.7" strokeLinejoin="round" />
           </>
         )}
 
@@ -159,11 +176,11 @@ export default function Perfil({
             return (
               <g key={i}>
                 <path d={lineaPath(a, b)} fill="none"
-                  stroke={activo ? '#B4372B' : '#D99A21'}
+                  stroke={activo ? '#D14B42' : '#E0A82E'}
                   strokeWidth={activo ? 4.5 : 3.2} strokeLinecap="round" />
                 {(activo || puertos.length <= 4) && (
                   <text x={X((datos.d[a] + datos.d[b]) / 2)} y={Y(datos.a[b]) - 11}
-                    textAnchor="middle" fill={activo ? '#B4372B' : '#8A968E'}
+                    textAnchor="middle" fill={activo ? '#D14B42' : '#9BA5B4'}
                     fontSize="11" fontWeight="600" fontFamily="ui-monospace,Menlo,monospace">
                     {num(p.metros / 1000, 1)} km · {num(p.pendiente, 1)} %
                   </text>
@@ -172,9 +189,9 @@ export default function Perfil({
             );
           })}
 
-        <line x1={L} y1={H - B} x2={W - R} y2={H - B} stroke="#C9BCA2" strokeWidth="1" />
+        <line x1={L} y1={H - B} x2={W - R} y2={H - B} stroke="#2A3341" strokeWidth="1" />
         {[0, 0.25, 0.5, 0.75, 1].map((f) => (
-          <text key={f} x={X(maxD * f)} y={H - 9} textAnchor="middle" fill="#8A968E"
+          <text key={f} x={X(maxD * f)} y={H - 9} textAnchor="middle" fill="#6B7684"
             fontSize="10" fontFamily="ui-monospace,Menlo,monospace">
             {num(maxD * f, 0)} km
           </text>
@@ -183,20 +200,20 @@ export default function Perfil({
         {hover != null && (
           <g pointerEvents="none">
             <line x1={X(datos.d[hover])} y1={T} x2={X(datos.d[hover])} y2={H - B}
-              stroke="#1A2420" strokeWidth="1" strokeDasharray="3 3" opacity=".5" />
+              stroke="#9BA5B4" strokeWidth="1" strokeDasharray="3 3" opacity=".55" />
             <circle cx={X(datos.d[hover])} cy={Y(datos.a[hover])} r="4.5"
-              fill="#FBFCF9" stroke="#1A2420" strokeWidth="2" />
+              fill="#0E1116" stroke="#E8EAED" strokeWidth="2" />
             <g transform={`translate(${Math.min(X(datos.d[hover]) + 10, W - 150)},${T + 4})`}>
               <rect width="140" height={datos.fc ? 50 : 34} rx="2"
-                fill="#1A2420" opacity=".92" />
-              <text x="9" y="18" fill="#F2F4EF" fontSize="11.5"
+                fill="#212936" stroke="#3A4553" opacity=".97" />
+              <text x="9" y="18" fill="#E8EAED" fontSize="11.5"
                 fontFamily="ui-monospace,Menlo,monospace">
                 {num(datos.d[hover], 2)} km · {num(datos.a[hover], 0)} m
               </text>
               {datos.fc && (
-                <text x="9" y="36" fill="#F2F4EF" fontSize="11.5"
+                <text x="9" y="36" fill="#E8EAED" fontSize="11.5"
                   fontFamily="ui-monospace,Menlo,monospace">
-                  {datos.fc[hover] ? `${datos.fc[hover]} ppm · Z${zonaDeFC(datos.fc[hover], fcmax).n}` : 'sin FC'}
+                  {datos.fc[hover] ? `${datos.fc[hover]} ppm · Z${zonaDeFC(datos.fc[hover], zonas).n}` : 'sin FC'}
                 </text>
               )}
             </g>

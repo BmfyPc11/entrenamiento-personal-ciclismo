@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import Perfil from './Perfil';
 import {
-  ZONAS, detectarPuertos, repartoZonas, vatiosPuerto, vatiosSalida,
+  detectarPuertos, repartoZonas, vatiosPuerto, vatiosSalida,
   num, duracion, fechaLarga, kmh, km, metrosPorKm,
 } from '@/lib/metrics';
 
-export default function Entrenamientos({ salidas, cfg, cache, pedirStreams }) {
+export default function Entrenamientos({ salidas, cfg, zonas, cache, pedirStreams }) {
   const ordenadas = useMemo(
     () => [...salidas].sort((a, b) => (a.fecha < b.fecha ? 1 : -1)),
     [salidas]
@@ -43,8 +43,8 @@ export default function Entrenamientos({ salidas, cfg, cache, pedirStreams }) {
   );
 
   const reparto = useMemo(
-    () => (streams ? repartoZonas(streams, cfg.fcmax) : null),
-    [streams, cfg.fcmax]
+    () => (streams ? repartoZonas(streams, zonas) : null),
+    [streams, zonas]
   );
 
   const tieneFC = !!(streams && streams.fc);
@@ -53,7 +53,7 @@ export default function Entrenamientos({ salidas, cfg, cache, pedirStreams }) {
 
   return (
     <div>
-      <h3>Elige una salida</h3>
+      <h2>Elige una salida</h2>
       <p className="hint">
         Todas tus actividades en bicicleta registradas en Strava, de la más reciente a la más antigua.
       </p>
@@ -75,7 +75,7 @@ export default function Entrenamientos({ salidas, cfg, cache, pedirStreams }) {
 
       {salida && (
         <>
-          <h3 style={{ marginBottom: 2 }}>{salida.nombre}</h3>
+          <h2 style={{ marginBottom: 2 }}>{salida.nombre}</h2>
           <p className="hint" style={{ textTransform: 'capitalize', marginBottom: 18 }}>
             {fechaLarga(salida.fecha)}
           </p>
@@ -97,7 +97,7 @@ export default function Entrenamientos({ salidas, cfg, cache, pedirStreams }) {
           </div>
 
           {/* ---------- perfil ---------- */}
-          <h3>Perfil de la ruta</h3>
+          <h2>Perfil de la ruta</h2>
           <p className="hint">
             Pasa el cursor por encima para ver la altitud y la frecuencia cardíaca en cada punto.
           </p>
@@ -109,7 +109,7 @@ export default function Entrenamientos({ salidas, cfg, cache, pedirStreams }) {
               <Perfil
                 streams={streams}
                 puertos={puertos}
-                fcmax={cfg.fcmax}
+                zonas={zonas}
                 modo={modo}
                 zonaFoco={zonaFoco}
                 puertoFoco={puertoFoco}
@@ -119,11 +119,11 @@ export default function Entrenamientos({ salidas, cfg, cache, pedirStreams }) {
 
             {streams && (
               <>
-                <div className="zonas">
+                <div className="chips">
                   <button
                     aria-pressed={modo === 'relieve'}
                     onClick={() => { setModo('relieve'); setZonaFoco(null); }}
-                    style={modo === 'relieve' ? { background: '#1A2420', borderColor: '#1A2420' } : null}
+                    style={modo === 'relieve' ? { background: 'var(--ink)', borderColor: 'var(--ink)' } : null}
                   >
                     Relieve y puertos
                   </button>
@@ -132,7 +132,7 @@ export default function Entrenamientos({ salidas, cfg, cache, pedirStreams }) {
                     disabled={!tieneFC}
                     onClick={() => setModo('zonas')}
                     title={tieneFC ? '' : 'Esta salida no tiene frecuencia cardíaca'}
-                    style={modo === 'zonas' ? { background: '#1A2420', borderColor: '#1A2420' } : null}
+                    style={modo === 'zonas' ? { background: 'var(--ink)', borderColor: 'var(--ink)' } : null}
                   >
                     Zonas de frecuencia cardíaca
                   </button>
@@ -140,15 +140,15 @@ export default function Entrenamientos({ salidas, cfg, cache, pedirStreams }) {
 
                 {modo === 'zonas' && tieneFC && (
                   <>
-                    <div className="zonas" style={{ marginTop: 8 }}>
+                    <div className="chips" style={{ marginTop: 8 }}>
                       <button
                         aria-pressed={zonaFoco === null}
                         onClick={() => setZonaFoco(null)}
-                        style={zonaFoco === null ? { background: '#4A5A52', borderColor: '#4A5A52' } : null}
+                        style={zonaFoco === null ? { background: 'var(--ink2)', borderColor: 'var(--ink2)' } : null}
                       >
                         Todas
                       </button>
-                      {ZONAS.map((z) => (
+                      {zonas.map((z) => (
                         <button
                           key={z.n}
                           aria-pressed={zonaFoco === z.n}
@@ -161,8 +161,8 @@ export default function Entrenamientos({ salidas, cfg, cache, pedirStreams }) {
                       ))}
                     </div>
                     <p className="hint" style={{ marginTop: 10, marginBottom: 0 }}>
-                      Zonas calculadas sobre una frecuencia cardíaca máxima de {cfg.fcmax} ppm.
-                      Selecciona una zona para ver exactamente en qué tramos de la ruta estuviste en ella.
+                      Selecciona una zona para ver exactamente en qué tramos de la ruta estuviste
+                      en ella. Los límites se configuran en la pestaña Zonas.
                     </p>
                   </>
                 )}
@@ -178,13 +178,13 @@ export default function Entrenamientos({ salidas, cfg, cache, pedirStreams }) {
           </div>
 
           {/* ---------- puertos ---------- */}
-          <h3>Puertos de esta salida</h3>
+          <h2>Puertos de esta salida</h2>
           <p className="hint">
             Detectados automáticamente sobre el perfil. Ajusta los mínimos si quieres ver solo las
             subidas serias o incluir también las rampas cortas.
           </p>
 
-          <div className="panel" style={{ borderLeftColor: 'var(--signal)' }}>
+          <div className="panel">
             <div className="fields">
               <div>
                 <label htmlFor="mm">Longitud mínima (m)</label>
@@ -228,7 +228,7 @@ export default function Entrenamientos({ salidas, cfg, cache, pedirStreams }) {
                     <tr key={i}
                       onMouseEnter={() => setPuertoFoco(i)}
                       onMouseLeave={() => setPuertoFoco(null)}
-                      style={{ cursor: 'pointer', background: puertoFoco === i ? '#F0F3EB' : undefined }}>
+                      style={{ cursor: 'pointer', background: puertoFoco === i ? 'var(--card2)' : undefined }}>
                       <td>Subida {i + 1}</td>
                       <td>{num(p.kmInicio, 1)}–{num(p.kmFin, 1)}</td>
                       <td>{num(p.metros / 1000, 2)} km</td>
@@ -265,13 +265,13 @@ export default function Entrenamientos({ salidas, cfg, cache, pedirStreams }) {
           {/* ---------- reparto de intensidad ---------- */}
           {reparto && (
             <>
-              <h3>Reparto de intensidad</h3>
+              <h2>Reparto de intensidad</h2>
               <p className="hint">Cuánto tiempo pasaste en cada zona durante esta salida.</p>
               <div className="chart">
                 <svg viewBox="0 0 1000 64" width="100%">
                   {(() => {
                     let acc = 0;
-                    return ZONAS.map((z, k) => {
+                    return zonas.map((z, k) => {
                       const w = (reparto.porcentaje[k] / 100) * 1000;
                       const x = acc;
                       acc += w;
@@ -280,13 +280,13 @@ export default function Entrenamientos({ salidas, cfg, cache, pedirStreams }) {
                         <g key={z.n}>
                           <rect x={x} y="8" width={w} height="34" fill={z.color} />
                           {w > 55 && (
-                            <text x={x + w / 2} y="30" textAnchor="middle" fill="#fff"
+                            <text x={x + w / 2} y="30" textAnchor="middle" fill="#0E1116"
                               fontSize="13" fontWeight="600" fontFamily="ui-monospace,Menlo,monospace">
                               {num(reparto.porcentaje[k], 0)} %
                             </text>
                           )}
                           {w > 90 && (
-                            <text x={x + w / 2} y="57" textAnchor="middle" fill="#4A5A52"
+                            <text x={x + w / 2} y="57" textAnchor="middle" fill="#6B7684"
                               fontSize="11" fontFamily="ui-monospace,Menlo,monospace">
                               {duracion(reparto.segundos[k])}
                             </text>
@@ -297,7 +297,7 @@ export default function Entrenamientos({ salidas, cfg, cache, pedirStreams }) {
                   })()}
                 </svg>
                 <div className="legend">
-                  {ZONAS.map((z) => (
+                  {zonas.map((z) => (
                     <span key={z.n}><i style={{ background: z.color }} />Z{z.n} {z.nombre}</span>
                   ))}
                 </div>
