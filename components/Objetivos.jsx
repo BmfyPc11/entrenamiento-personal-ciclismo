@@ -1,81 +1,89 @@
 'use client';
 
-import { detectarPuertos, vatios, num, esLlana, kmh } from '@/lib/metrics';
+import { vatios, num } from '@/lib/metrics';
+import { calcularObjetivos, BarrasObjetivo, OBJETIVOS_INICIALES } from './objetivosLib';
 
-export default function Objetivos({ salidas, cfg, cache, excluidas, masaTotal }) {
-  const llanas = salidas.filter(esLlana);
-  const mejorLlano = llanas.length ? Math.max(...llanas.map(kmh)) : 0;
+export default function Objetivos({ salidas, cfg, cache, excluidas, masaTotal, objetivos, setObjetivos }) {
+  const r = calcularObjetivos({ salidas, cache, excluidas, cfg, masaTotal, obj: objetivos });
+  const o = r.o;
+  const set = (k, v) => setObjetivos({ ...o, [k]: v });
 
-  const puertos = Object.entries(cache).flatMap(([id, st]) =>
-    excluidas.has(Number(id)) ? [] : detectarPuertos(st, { minMetros: 800, minDesnivel: 60, minPend: 4 })
-  );
-  const mejor6 = puertos.filter((p) => p.pendiente >= 5.8 && p.pendiente <= 7.5)
-    .sort((a, b) => b.metros - a.metros)[0];
-  const mejor8 = puertos.filter((p) => p.pendiente > 7.5)
-    .sort((a, b) => b.metros - a.metros)[0];
-
-  const wActual = mejorLlano ? vatios(mejorLlano / 3.6, 0, masaTotal, cfg.cda, cfg.crr) : 0;
-  const wPara30 = vatios(30 / 3.6, 0, masaTotal, cfg.cda, cfg.crr);
-  const wCarretera = vatios(30 / 3.6, 0, masaTotal, 0.3, 0.005);
-
-  const lista = [
-    {
-      n: '30 km/h de crucero en llano',
-      pct: Math.min(100, (mejorLlano / 30) * 100),
-      color: 'var(--blue)',
-      dato: mejorLlano ? `${num(mejorLlano, 1)} de 30 km/h` : 'sin medir',
-      nota: mejorLlano
-        ? `Tu mejor registro en terreno realmente llano. Los ${num(30 - mejorLlano, 1)} km/h que faltan significan pasar de ${num(wActual, 0)} a ${num(wPara30, 0)} W sostenidos.`
-        : 'Aún no hay salidas en terreno llano puro para medirlo.',
-    },
-    {
-      n: 'Puerto de 5 km al 6–7 %',
-      pct: mejor6 ? Math.min(100, (mejor6.metros / 5000) * 100) : 0,
-      color: 'var(--red)',
-      dato: mejor6 ? `${num(mejor6.metros / 1000, 2)} de 5 km` : 'sin datos aún',
-      nota: mejor6
-        ? `Tu ascenso más largo en ese rango: ${num(mejor6.metros / 1000, 2)} km al ${num(mejor6.pendiente, 1)} %. Faltan ${num(Math.max(0, 5 - mejor6.metros / 1000), 2)} km de pendiente sostenida, que es cuestión de elegir el puerto adecuado más que de forma.`
-        : 'Abre salidas con desnivel en Entrenamientos para que el panel las analice.',
-    },
-    {
-      n: '2–3 km al 8–9 %',
-      pct: mejor8 ? Math.min(100, (mejor8.metros / 2000) * 100) : 0,
-      color: 'var(--amber)',
-      dato: mejor8 ? `${num(mejor8.metros / 1000, 2)} km al ${num(mejor8.pendiente, 1)} %` : 'sin datos aún',
-      nota: mejor8
-        ? `Tu mejor ascenso por encima del 7,5 %.${mejor8.vam ? ` Lo subiste a ${num(mejor8.vam, 0)} metros verticales por hora.` : ''}`
-        : 'Todavía no hay ningún ascenso analizado por encima del 7,5 %.',
-    },
-  ];
+  const wCarretera = vatios(o.llano / 3.6, 0, masaTotal, 0.3, 0.005);
 
   return (
     <>
       <h2>Tus objetivos</h2>
       <p className="hint">
-        Medidos contra tu mejor registro real, no contra una media. Cuantas más salidas abras en
-        Entrenamientos, más afinada será la medición de los dos objetivos de subida.
+        Medidos contra tu mejor registro real, no contra una media: un objetivo se alcanza el día
+        que lo consigues una vez. Cuantas más salidas abras en Entrenamientos, más afinada será la
+        medición de los dos objetivos de subida.
       </p>
 
-      {lista.map((o) => (
-        <div className="goal" key={o.n}>
-          <div className="top2">
-            <span className="name">{o.n}</span>
-            <span className="pct" style={{ color: o.color }}>{num(o.pct, 0)} %</span>
+      <BarrasObjetivo lista={r.lista} />
+
+      <h2>Ajusta lo que persigues</h2>
+      <p className="hint">
+        Los valores por defecto son los que veníamos usando. Cámbialos si quieres apuntar más alto
+        o partir de una meta más cercana; el progreso se recalcula al momento.
+      </p>
+
+      <div className="panel">
+        <h3 style={{ marginBottom: 14 }}>Velocidad en llano</h3>
+        <div className="fields">
+          <div>
+            <label htmlFor="o1">Objetivo de crucero (km/h)</label>
+            <input id="o1" type="number" min="15" max="50" step="0.5" value={o.llano}
+              onChange={(e) => set('llano', +e.target.value || 30)} />
           </div>
-          <div className="bar"><i style={{ width: `${o.pct}%`, background: o.color }} /></div>
-          <p className="note">
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 12.5, color: 'var(--ink)' }}>{o.dato}</span>
-            {' · '}{o.nota}
-          </p>
         </div>
-      ))}
+      </div>
+
+      <div className="panel" style={{ marginTop: 14 }}>
+        <h3 style={{ marginBottom: 14 }}>Puerto largo</h3>
+        <div className="fields">
+          <div>
+            <label htmlFor="o2">Longitud (km)</label>
+            <input id="o2" type="number" min="1" max="30" step="0.5" value={o.puertoKm}
+              onChange={(e) => set('puertoKm', +e.target.value || 5)} />
+          </div>
+          <div>
+            <label htmlFor="o3">Pendiente mínima (%)</label>
+            <input id="o3" type="number" min="2" max="15" step="0.5" value={o.puertoPend}
+              onChange={(e) => set('puertoPend', +e.target.value || 6)} />
+          </div>
+        </div>
+      </div>
+
+      <div className="panel" style={{ marginTop: 14 }}>
+        <h3 style={{ marginBottom: 14 }}>Rampa corta</h3>
+        <div className="fields">
+          <div>
+            <label htmlFor="o4">Longitud (km)</label>
+            <input id="o4" type="number" min="0.5" max="15" step="0.5" value={o.rampaKm}
+              onChange={(e) => set('rampaKm', +e.target.value || 2)} />
+          </div>
+          <div>
+            <label htmlFor="o5">Pendiente mínima (%)</label>
+            <input id="o5" type="number" min="4" max="20" step="0.5" value={o.rampaPend}
+              onChange={(e) => set('rampaPend', +e.target.value || 8)} />
+          </div>
+        </div>
+        <p className="hint" style={{ margin: '14px 0 0' }}>
+          Esta pendiente marca también la frontera con el puerto largo: los ascensos por encima de
+          ella cuentan aquí y no allí.
+        </p>
+      </div>
+
+      <button style={{ marginTop: 16 }} onClick={() => setObjetivos({ ...OBJETIVOS_INICIALES })}>
+        Restaurar los valores por defecto
+      </button>
 
       <div className="callout warn">
-        <strong>El objetivo del llano es mucho más ambicioso que los dos de subida.</strong> Mantener
-        30 km/h con tu configuración actual pide unos {num(wPara30, 0)} W sostenidos; con una bici de
-        carretera en posición baja, los mismos 30 km/h bajan a {num(wCarretera, 0)} W. Son{' '}
-        {num(wPara30 - wCarretera, 0)} W de diferencia sin ganar un solo vatio de forma. En llano la
-        aerodinámica pesa más que el motor.
+        <strong>El objetivo del llano es mucho más ambicioso que los dos de subida.</strong>{' '}
+        Mantener {num(o.llano, 0)} km/h con tu configuración actual pide unos {num(r.wObjetivo, 0)} W
+        sostenidos; con una bici de carretera en posición baja, los mismos {num(o.llano, 0)} km/h
+        bajan a {num(wCarretera, 0)} W. Son {num(r.wObjetivo - wCarretera, 0)} W de diferencia sin
+        ganar un solo vatio de forma. En llano la aerodinámica pesa más que el motor.
       </div>
     </>
   );

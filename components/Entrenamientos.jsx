@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import Perfil from './Perfil';
 import {
-  detectarPuertos, repartoZonas, vatiosPuerto, vatiosSalida,
+  detectarPuertos, repartoZonas, repartoDureza, valorarEntrenamiento,
+  TRAMOS_DUREZA, vatiosPuerto, vatiosSalida,
   num, duracion, fechaLarga, kmh, km, metrosPorKm,
 } from '@/lib/metrics';
 
-export default function Entrenamientos({ salidas, cfg, zonas, cache, pedirStreams }) {
+export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, pedirStreams }) {
   const ordenadas = useMemo(
     () => [...salidas].sort((a, b) => (a.fecha < b.fecha ? 1 : -1)),
     [salidas]
@@ -16,6 +17,8 @@ export default function Entrenamientos({ salidas, cfg, zonas, cache, pedirStream
   const [sel, setSel] = useState(ordenadas[0]?.id ?? null);
   const [modo, setModo] = useState('relieve');
   const [zonaFoco, setZonaFoco] = useState(null);
+  const [durezaFoco, setDurezaFoco] = useState(null);
+  const [mono, setMono] = useState(false);
   const [puertoFoco, setPuertoFoco] = useState(null);
   const [criterio, setCriterio] = useState({ minMetros: 500, minDesnivel: 30, minPend: 3 });
   const [cargando, setCargando] = useState(false);
@@ -46,6 +49,7 @@ export default function Entrenamientos({ salidas, cfg, zonas, cache, pedirStream
     () => (streams ? repartoZonas(streams, zonas) : null),
     [streams, zonas]
   );
+  const dureza = useMemo(() => (streams ? repartoDureza(streams) : null), [streams]);
 
   const tieneFC = !!(streams && streams.fc);
 
@@ -112,6 +116,8 @@ export default function Entrenamientos({ salidas, cfg, zonas, cache, pedirStream
                 zonas={zonas}
                 modo={modo}
                 zonaFoco={zonaFoco}
+                durezaFoco={durezaFoco}
+                mono={mono}
                 puertoFoco={puertoFoco}
                 altura={300}
               />
@@ -122,21 +128,69 @@ export default function Entrenamientos({ salidas, cfg, zonas, cache, pedirStream
                 <div className="chips">
                   <button
                     aria-pressed={modo === 'relieve'}
-                    onClick={() => { setModo('relieve'); setZonaFoco(null); }}
+                    onClick={() => { setModo('relieve'); setZonaFoco(null); setDurezaFoco(null); }}
                     style={modo === 'relieve' ? { background: 'var(--ink)', borderColor: 'var(--ink)' } : null}
                   >
-                    Relieve y puertos
+                    Información
+                  </button>
+                  <button
+                    aria-pressed={modo === 'dureza'}
+                    onClick={() => { setModo('dureza'); setZonaFoco(null); }}
+                    style={modo === 'dureza' ? { background: 'var(--ink)', borderColor: 'var(--ink)' } : null}
+                  >
+                    Perfil y dureza
                   </button>
                   <button
                     aria-pressed={modo === 'zonas'}
                     disabled={!tieneFC}
-                    onClick={() => setModo('zonas')}
+                    onClick={() => { setModo('zonas'); setDurezaFoco(null); }}
                     title={tieneFC ? '' : 'Esta salida no tiene frecuencia cardíaca'}
                     style={modo === 'zonas' ? { background: 'var(--ink)', borderColor: 'var(--ink)' } : null}
                   >
                     Zonas de frecuencia cardíaca
                   </button>
                 </div>
+
+                {modo === 'dureza' && dureza && (
+                  <>
+                    <div className="chips" style={{ marginTop: 8 }}>
+                      <button
+                        aria-pressed={durezaFoco === null}
+                        onClick={() => setDurezaFoco(null)}
+                        style={durezaFoco === null ? { background: 'var(--ink2)', borderColor: 'var(--ink2)' } : null}
+                      >
+                        Todo
+                      </button>
+                      {TRAMOS_DUREZA.map((t, i) =>
+                        dureza.porcentaje[i] > 0.4 ? (
+                          <button
+                            key={t.n}
+                            aria-pressed={durezaFoco === t.n}
+                            onClick={() => setDurezaFoco(durezaFoco === t.n ? null : t.n)}
+                            style={durezaFoco === t.n
+                              ? { background: t.color, borderColor: t.color,
+                                  color: t.n === 6 ? '#E8EAED' : '#0E1116' }
+                              : null}
+                          >
+                            <i style={{ background: t.color }} />{t.nombre} · {num(dureza.porcentaje[i], 0)} %
+                          </button>
+                        ) : null
+                      )}
+                    </div>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 14,
+                      fontFamily: 'var(--sans)', fontSize: 13.5, textTransform: 'none',
+                      letterSpacing: 0, color: 'var(--ink2)', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={mono} onChange={(e) => setMono(e.target.checked)} />
+                      Ver el perfil en un solo color
+                    </label>
+
+                    <p className="hint" style={{ marginTop: 10, marginBottom: 0 }}>
+                      La pendiente se promedia cada 120 metros. Punto a punto, el ruido del
+                      altímetro produce rampas del 30 % en pleno llano.
+                    </p>
+                  </>
+                )}
 
                 {modo === 'zonas' && tieneFC && (
                   <>
@@ -167,7 +221,7 @@ export default function Entrenamientos({ salidas, cfg, zonas, cache, pedirStream
                   </>
                 )}
 
-                {!tieneFC && (
+                {!tieneFC && modo !== 'dureza' && (
                   <div className="callout warn" style={{ marginBottom: 0 }}>
                     Esta salida se registró sin pulsómetro, así que no hay zonas que pintar.
                     Si la grabaste con el móvil en lugar del Garmin, ahí está la razón.
@@ -304,9 +358,47 @@ export default function Entrenamientos({ salidas, cfg, zonas, cache, pedirStream
               </div>
             </>
           )}
+
+          {/* ---------- valoracion del entrenador ---------- */}
+          {streams && (
+            <Valoracion
+              salida={salida} streams={streams} reparto={reparto} dureza={dureza}
+              puertos={puertos} cfg={cfg} zonas={zonas} umbral={umbral}
+            />
+          )}
         </>
       )}
     </div>
+  );
+}
+
+/* Cierre de cada salida: que ha sido esto y que dice de tu entrenamiento. */
+function Valoracion({ salida, streams, reparto, dureza, puertos, cfg, zonas, umbral }) {
+  const v = useMemo(
+    () => valorarEntrenamiento({ salida, streams, reparto, dureza, puertos, cfg, zonas, umbral }),
+    [salida, streams, reparto, dureza, puertos, cfg, zonas, umbral]
+  );
+
+  return (
+    <>
+      <h2>Valoración del entrenador</h2>
+      <div className={`consejo ${v.tono}`}>
+        <span className="tag" style={{ marginLeft: 0, background: 'transparent', padding: 0 }}>
+          Qué ha sido esta salida
+        </span>
+        <p className="tit">{v.titulo}</p>
+        <p>{v.resumen}</p>
+
+        {v.notas.length > 0 && (
+          <ul style={{ margin: '18px 0 0', paddingLeft: 18, color: 'var(--ink2)',
+            fontSize: 14, lineHeight: 1.65 }}>
+            {v.notas.map((n, i) => (
+              <li key={i} style={{ marginBottom: 7 }}>{n}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </>
   );
 }
 

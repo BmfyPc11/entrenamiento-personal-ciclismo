@@ -6,6 +6,7 @@ import Zonas from './Zonas';
 import Objetivos from './Objetivos';
 import Semana from './Semana';
 import Consejo from './Consejo';
+import { calcularObjetivos, BarrasObjetivo, OBJETIVOS_INICIALES } from './objetivosLib';
 import { Linea, Barras, Carga } from './Graficos';
 import {
   PERFILES_BICI, detectarPuertos, serieCarga, umbralEstimado,
@@ -37,6 +38,8 @@ export default function Dashboard({ atleta }) {
   const [pestana, setPestana] = useState('resumen');
   const [cfg, setCfg] = useState(CFG_INICIAL);
   const [excluidas, setExcluidas] = useState(new Set());
+  const [rango, setRango] = useState({ desde: '', hasta: '' });
+  const [objetivos, setObjetivos] = useState({ ...OBJETIVOS_INICIALES });
   const [refrescando, setRefrescando] = useState(false);
 
   /* --- preferencias guardadas en el navegador --- */
@@ -95,33 +98,25 @@ export default function Dashboard({ atleta }) {
     return j.streams;
   }, []);
 
-  const activas = useMemo(
-    () => (salidas || []).filter((s) => !excluidas.has(s.id)),
-    [salidas, excluidas]
-  );
-
   /*
-    Precarga de las ultimas salidas con pulsometro. Sin esto, el apartado
-    de zonas y el umbral estimado arrancan vacios hasta que el usuario abre
-    salidas a mano. Se limita a cinco para no gastar el cupo de Strava.
+    Dos filtros encadenados. El de fechas acota el periodo que se quiere
+    analizar; el manual descarta salidas concretas que no representan tu
+    rendimiento (rutas acompañando a alguien, errores de registro).
   */
-  useEffect(() => {
-    if (!activas.length) return;
-    const pendientes = [...activas]
-      .reverse()
-      .filter((s) => s.fcMedia && !cache[s.id])
-      .slice(0, 5);
-    if (!pendientes.length) return;
-    let vivo = true;
-    (async () => {
-      for (const s of pendientes) {
-        if (!vivo) return;
-        try { await pedirStreams(s.id); } catch { /* sin detalle, seguimos */ }
-      }
-    })();
-    return () => { vivo = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activas.length]);
+  const enRango = useMemo(() => {
+    if (!rango.desde && !rango.hasta) return salidas;
+    return salidas.filter((s) => {
+      const d = s.fecha.slice(0, 10);
+      if (rango.desde && d < rango.desde) return false;
+      if (rango.hasta && d > rango.hasta) return false;
+      return true;
+    });
+  }, [salidas, rango]);
+
+  const activas = useMemo(
+    () => enRango.filter((s) => !excluidas.has(s.id)),
+    [enRango, excluidas]
+  );
 
   const umbral = useMemo(() => {
     const todos = Object.entries(cache).flatMap(([id, st]) =>
@@ -172,13 +167,7 @@ export default function Dashboard({ atleta }) {
   return (
     <div className="wrap">
       <div className="top">
-        <div>
-          <p className="eyebrow">
-            Cuaderno de ruta · {activas.length} salidas
-            {activas.length > 0 && ` · desde ${fechaCorta(activas[0].fecha)}`}
-          </p>
-          <h1>Analiza tu<br /><em>rendimiento</em></h1>
-        </div>
+        <h1>Analiza tu<br /><em>rendimiento</em></h1>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <div className="usuario">
             {atleta?.foto
@@ -201,7 +190,43 @@ export default function Dashboard({ atleta }) {
 
       {error && <div className="callout warn">{error}</div>}
 
-      <h3 style={{ marginTop: 10 }}>Últimos siete días</h3>
+      {/* --- los tres bloques fijos: constantes, semana y consejo --- */}
+      <div className="panel">
+        <h3 style={{ marginBottom: 14 }}>Tus constantes</h3>
+        <div className="fields">
+          <div>
+            <label htmlFor="peso">Peso ciclista (kg)</label>
+            <input id="peso" type="number" min="35" max="150" step="0.5" value={cfg.peso}
+              onChange={(e) => setCfg({ ...cfg, peso: +e.target.value || 75 })} />
+          </div>
+          <div>
+            <label htmlFor="bici">Peso bici + equipo (kg)</label>
+            <input id="bici" type="number" min="5" max="30" step="0.5" value={cfg.bici}
+              onChange={(e) => setCfg({ ...cfg, bici: +e.target.value || 11 })} />
+          </div>
+          <div>
+            <label htmlFor="fcmax">FC máxima (ppm)</label>
+            <input id="fcmax" type="number" min="140" max="220" value={cfg.fcmax}
+              onChange={(e) => setCfg({ ...cfg, fcmax: +e.target.value || 185 })} />
+          </div>
+          <div>
+            <label htmlFor="tipo">Bici y posición</label>
+            <select id="tipo" value={cfg.perfil}
+              onChange={(e) => {
+                const p = PERFILES_BICI.find((x) => x.id === e.target.value);
+                setCfg({ ...cfg, perfil: p.id, cda: p.cda, crr: p.crr });
+              }}>
+              {PERFILES_BICI.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            </select>
+          </div>
+        </div>
+        <p className="hint" style={{ margin: '14px 0 0' }}>
+          Estos valores alimentan todos los cálculos. Las zonas de frecuencia cardíaca se
+          configuran en su propia pestaña.
+        </p>
+      </div>
+
+      <h3 style={{ margin: '26px 0 14px' }}>Últimos siete días</h3>
       <Semana dias={dias} />
 
       <div style={{ marginTop: 22 }}>
@@ -217,47 +242,13 @@ export default function Dashboard({ atleta }) {
       </nav>
 
       {/* ---------- constantes ---------- */}
-      <div className="panel">
-        <h3 style={{ marginBottom: 14 }}>Tus constantes</h3>
-        <div className="fields">
-          <div>
-            <label htmlFor="peso">Peso ciclista (kg)</label>
-            <input id="peso" type="number" min="40" max="140" step="0.5" value={cfg.peso}
-              onChange={(e) => setCfg({ ...cfg, peso: +e.target.value || 75 })} />
-          </div>
-          <div>
-            <label htmlFor="bici">Peso bici + equipo (kg)</label>
-            <input id="bici" type="number" min="5" max="25" step="0.5" value={cfg.bici}
-              onChange={(e) => setCfg({ ...cfg, bici: +e.target.value || 11 })} />
-          </div>
-          <div>
-            <label htmlFor="fcmax">FC máxima (ppm)</label>
-            <input id="fcmax" type="number" min="140" max="215" value={cfg.fcmax}
-              onChange={(e) => setCfg({ ...cfg, fcmax: +e.target.value || 185 })} />
-          </div>
-          <div>
-            <label htmlFor="tipo">Bici y posición</label>
-            <select id="tipo" value={cfg.perfil}
-              onChange={(e) => {
-                const p = PERFILES_BICI.find((x) => x.id === e.target.value);
-                setCfg({ ...cfg, perfil: p.id, cda: p.cda, crr: p.crr });
-              }}>
-              {PERFILES_BICI.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-            </select>
-          </div>
-        </div>
-        <p className="hint" style={{ margin: '14px 0 0' }}>
-          Estos valores alimentan todos los cálculos. Cámbialos y el panel se recalcula al momento.
-          Las zonas de frecuencia cardíaca se configuran en su propia pestaña.
-        </p>
-      </div>
-
       {pestana === 'resumen' && (
         <Resumen salidas={activas} cfg={cfg} umbral={umbral} masaTotal={masaTotal}
-          excluidas={excluidas} setExcluidas={setExcluidas} todas={salidas} />
+          excluidas={excluidas} setExcluidas={setExcluidas} enRango={enRango}
+          rango={rango} setRango={setRango} cache={cache} objetivos={objetivos} />
       )}
       {pestana === 'entrenamientos' && (
-        <Entrenamientos salidas={salidas} cfg={cfg} zonas={zonas} cache={cache}
+        <Entrenamientos salidas={salidas} cfg={cfg} zonas={zonas} umbral={umbral} cache={cache}
           pedirStreams={pedirStreams} />
       )}
       {pestana === 'zonas' && (
@@ -267,7 +258,8 @@ export default function Dashboard({ atleta }) {
       {pestana === 'subida' && <Subida salidas={activas} cfg={cfg} cache={cache} umbral={umbral} masaTotal={masaTotal} />}
       {pestana === 'carga' && <CargaTab salidas={activas} cfg={cfg} umbral={umbral} zonas={zonas} global={global} />}
       {pestana === 'objetivos' && (
-        <Objetivos salidas={activas} cfg={cfg} cache={cache} excluidas={excluidas} masaTotal={masaTotal} />
+        <Objetivos salidas={activas} cfg={cfg} cache={cache} excluidas={excluidas}
+          masaTotal={masaTotal} objetivos={objetivos} setObjetivos={setObjetivos} />
       )}
       {pestana === 'proyeccion' && <Proyeccion salidas={activas} cfg={cfg} umbral={umbral} masaTotal={masaTotal} />}
 
@@ -294,91 +286,156 @@ function Dato({ k, v, u, d, cl }) {
   );
 }
 
-function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas, todas }) {
-  if (!salidas.length) return <p className="hint">No hay salidas seleccionadas.</p>;
+function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
+  enRango, rango, setRango, cache, objetivos }) {
+
+  const obj = calcularObjetivos({ salidas, cache, excluidas, cfg, masaTotal, obj: objetivos });
+
+  /* Limites reales del historial, para acotar los selectores de fecha */
+  const limites = useMemo(() => {
+    if (!enRango.length && !salidas.length) return null;
+    const todas = enRango.length ? enRango : salidas;
+    return { min: todas[0].fecha.slice(0, 10), max: todas[todas.length - 1].fecha.slice(0, 10) };
+  }, [enRango, salidas]);
+
+  const atajo = (dias) => {
+    const hoy = new Date();
+    const desde = new Date(hoy.getTime() - dias * 864e5);
+    setRango({ desde: desde.toISOString().slice(0, 10), hasta: hoy.toISOString().slice(0, 10) });
+  };
 
   const suma = (f) => salidas.reduce((a, s) => a + f(s), 0);
   const llanas = salidas.filter(esLlana);
   const mejorLlano = llanas.length ? Math.max(...llanas.map(kmh)) : 0;
   const sinFC = salidas.filter((s) => !s.fcMedia).length;
-  const wPara30 = vatios(30 / 3.6, 0, masaTotal, cfg.cda, cfg.crr);
-  const wCarretera = vatios(30 / 3.6, 0, masaTotal, 0.3, 0.005);
 
   return (
     <>
-      <h2>Dónde estás hoy</h2>
-      <div className="grid">
-        <Dato k="Distancia total" v={num(suma(km), 0)} u="km" d={`${salidas.length} salidas`} />
-        <Dato k="Desnivel acumulado" v={num(suma((s) => s.desnivel), 0)} u="m" />
-        <Dato k="Horas sobre la bici" v={num(suma((s) => s.tiempoMovimiento) / 3600, 1)} u="h"
-          d="tiempo en movimiento" />
-        <Dato k="Salida media" v={num(suma(km) / salidas.length, 1)} u="km" />
-        <Dato k="Mejor registro en llano" v={mejorLlano ? num(mejorLlano, 1) : '—'} u="km/h"
-          d={mejorLlano ? 'terreno realmente llano' : 'sin salidas llanas'} />
-        <Dato k="Umbral estimado" v={umbral} u="W" d={`${num(umbral / cfg.peso, 2)} W/kg`} />
-      </div>
+      <h2>Periodo que se analiza</h2>
+      <p className="hint">
+        Elige el intervalo de fechas y todos los cálculos del panel se limitarán a él. Dentro del
+        intervalo puedes además descartar salidas concretas que no sean representativas.
+      </p>
 
-      <div className="callout warn">
-        <strong>Mantener 30 km/h con tu configuración actual exige unos {num(wPara30, 0)} W
-        sostenidos.</strong> Con una bici de carretera y posición baja, esos mismos 30 km/h bajan a{' '}
-        {num(wCarretera, 0)} W: {num(wPara30 - wCarretera, 0)} W de diferencia sin ganar un solo
-        vatio de forma. En llano, la aerodinámica pesa más que el motor.
-      </div>
-
-      {sinFC > 0 && (
-        <div className="callout">
-          <strong>{sinFC} de tus {salidas.length} salidas no tienen frecuencia cardíaca.</strong> Sin
-          ese dato, su intensidad en el calendario es una estimación a partir del desnivel y la
-          velocidad. Graba siempre con el Garmin y en unos meses este panel valdrá el doble.
+      <div className="panel">
+        <div className="fields">
+          <div>
+            <label htmlFor="fd">Desde</label>
+            <input id="fd" type="date" value={rango.desde} min={limites?.min} max={limites?.max}
+              onChange={(e) => setRango({ ...rango, desde: e.target.value })} />
+          </div>
+          <div>
+            <label htmlFor="fh">Hasta</label>
+            <input id="fh" type="date" value={rango.hasta} min={limites?.min} max={limites?.max}
+              onChange={(e) => setRango({ ...rango, hasta: e.target.value })} />
+          </div>
         </div>
+        <div className="chips" style={{ marginTop: 14 }}>
+          <button onClick={() => atajo(30)}>Último mes</button>
+          <button onClick={() => atajo(90)}>Últimos 3 meses</button>
+          <button onClick={() => atajo(365)}>Último año</button>
+          <button onClick={() => setRango({ desde: '', hasta: '' })}>Todo el historial</button>
+        </div>
+        <p className="hint" style={{ margin: '14px 0 0' }}>
+          {enRango.length === 0
+            ? 'No hay ninguna salida en ese intervalo.'
+            : `${salidas.length} de ${enRango.length} salidas del intervalo entran en el análisis.`}
+        </p>
+      </div>
+
+      {salidas.length === 0 ? (
+        <div className="callout warn">
+          Sin salidas en el periodo seleccionado no hay nada que calcular. Amplía el intervalo.
+        </div>
+      ) : (
+        <>
+          <h2>Dónde estás hoy</h2>
+          <div className="grid">
+            <Dato k="Distancia total" v={num(suma(km), 0)} u="km" d={`${salidas.length} salidas`} />
+            <Dato k="Desnivel acumulado" v={num(suma((s) => s.desnivel), 0)} u="m" />
+            <Dato k="Horas sobre la bici" v={num(suma((s) => s.tiempoMovimiento) / 3600, 1)} u="h"
+              d="tiempo en movimiento" />
+            <Dato k="Salida media" v={num(suma(km) / salidas.length, 1)} u="km" />
+            <Dato k="Mejor registro en llano" v={mejorLlano ? num(mejorLlano, 1) : '—'} u="km/h"
+              d={mejorLlano ? 'terreno realmente llano' : 'sin salidas llanas'} />
+            <Dato k="Umbral estimado" v={umbral} u="W" d={`${num(umbral / cfg.peso, 2)} W/kg`} />
+          </div>
+
+          <h2>Progreso hacia tus objetivos</h2>
+          <p className="hint">
+            Medidos contra tu mejor registro del periodo. Puedes cambiar las metas en la pestaña
+            Objetivos.
+          </p>
+          <BarrasObjetivo lista={obj.lista} />
+
+          {obj.sinAnalizar && (
+            <div className="callout">
+              Los dos objetivos de subida se calculan sobre las salidas que abras en{' '}
+              <strong>Entrenamientos</strong>, porque necesitan el detalle del recorrido. Abre unas
+              cuantas y estas barras se afinarán.
+            </div>
+          )}
+
+          {sinFC > 0 && (
+            <div className="callout">
+              <strong>{sinFC} de tus {salidas.length} salidas no tienen frecuencia cardíaca.</strong>{' '}
+              Sin ese dato, su intensidad en el calendario es una estimación a partir del desnivel y
+              la velocidad. Graba siempre con el Garmin y en unos meses este panel valdrá el doble.
+            </div>
+          )}
+        </>
       )}
 
-      <h2>Qué salidas entran en el análisis</h2>
+      <h2>Salidas del intervalo</h2>
       <p className="hint">
         Desmarca las que no sean representativas (paradas largas, ruta acompañando a alguien, error
         de registro) y desaparecerán de todos los cálculos.
       </p>
-      <div className="scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Salida</th><th>Fecha</th><th>Dist.</th><th>Desn.</th>
-              <th>m/km</th><th>Vel.</th><th>VAM</th><th>FC</th><th>W est.</th><th>Incluir</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...todas].reverse().map((s) => {
-              const dentro = !excluidas.has(s.id);
-              return (
-                <tr key={s.id} style={{ opacity: dentro ? 1 : 0.35 }}>
-                  <td>
-                    {s.nombre}
-                    <span className={`tag ${esLlana(s) ? 'lla' : metrosPorKm(s) > 12 ? 'col' : ''}`}>
-                      {esLlana(s) ? 'llano' : metrosPorKm(s) > 12 ? 'puerto' : 'mixto'}
-                    </span>
-                  </td>
-                  <td>{fechaCorta(s.fecha)}</td>
-                  <td>{num(km(s), 1)}</td>
-                  <td>+{num(s.desnivel, 0)}</td>
-                  <td>{num(metrosPorKm(s), 1)}</td>
-                  <td>{num(kmh(s), 1)}</td>
-                  <td>{num(vamSalida(s), 0)}</td>
-                  <td>{s.fcMedia ? num(s.fcMedia, 0) : '—'}</td>
-                  <td>{num(vatiosSalida(s, cfg), 0)}</td>
-                  <td>
-                    <input type="checkbox" checked={dentro}
-                      onChange={() => {
-                        const n = new Set(excluidas);
-                        dentro ? n.add(s.id) : n.delete(s.id);
-                        setExcluidas(n);
-                      }} />
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {enRango.length === 0 ? (
+        <div className="callout">No hay salidas en el intervalo elegido.</div>
+      ) : (
+        <div className="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Salida</th><th>Fecha</th><th>Dist.</th><th>Desn.</th>
+                <th>m/km</th><th>Vel.</th><th>VAM</th><th>FC</th><th>W est.</th><th>Incluir</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...enRango].reverse().map((s) => {
+                const dentro = !excluidas.has(s.id);
+                return (
+                  <tr key={s.id} style={{ opacity: dentro ? 1 : 0.35 }}>
+                    <td>
+                      {s.nombre}
+                      <span className={`tag ${esLlana(s) ? 'lla' : metrosPorKm(s) > 12 ? 'col' : ''}`}>
+                        {esLlana(s) ? 'llano' : metrosPorKm(s) > 12 ? 'puerto' : 'mixto'}
+                      </span>
+                    </td>
+                    <td>{fechaCorta(s.fecha)}</td>
+                    <td>{num(km(s), 1)}</td>
+                    <td>+{num(s.desnivel, 0)}</td>
+                    <td>{num(metrosPorKm(s), 1)}</td>
+                    <td>{num(kmh(s), 1)}</td>
+                    <td>{num(vamSalida(s), 0)}</td>
+                    <td>{s.fcMedia ? num(s.fcMedia, 0) : '—'}</td>
+                    <td>{num(vatiosSalida(s, cfg), 0)}</td>
+                    <td>
+                      <input type="checkbox" checked={dentro}
+                        onChange={() => {
+                          const n = new Set(excluidas);
+                          dentro ? n.add(s.id) : n.delete(s.id);
+                          setExcluidas(n);
+                        }} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 }

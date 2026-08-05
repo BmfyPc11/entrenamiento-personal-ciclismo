@@ -19,8 +19,8 @@ body{color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6;
   padding:44px 0 28px;flex-wrap:wrap}
 .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
   color:var(--ink3);margin:0 0 12px}
-h1{font-size:clamp(32px,5vw,46px);line-height:1.04;letter-spacing:-.025em;margin:0;
-  font-weight:500;text-transform:uppercase}
+h1{font-size:clamp(32px,5vw,46px);line-height:1.04;letter-spacing:-.03em;margin:0;
+  font-weight:700;text-transform:uppercase}
 h1 em{font-style:normal;color:var(--red)}
 
 .usuario{display:flex;align-items:center;gap:11px;background:var(--card);
@@ -190,3 +190,9 @@ footer strong{color:var(--ink2);font-weight:500}
   .top{padding-top:28px}
 }
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+input[type=date]{width:100%;font-family:var(--mono);font-size:14px;padding:10px 11px;
+  border:1px solid var(--line2);border-radius:8px;background:var(--bg2);color:var(--ink);
+  color-scheme:dark}
+input[type=date]:hover{border-color:#4A5563}
+.top{align-items:center}

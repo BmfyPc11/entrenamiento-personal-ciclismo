@@ -1,14 +1,15 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { zonaDeFC, num } from '@/lib/metrics';
+import { zonaDeFC, tramoDureza, TRAMOS_DUREZA, num } from '@/lib/metrics';
 
 /*
   Perfil de altimetria.
-  - modo "relieve": relleno sepia clasico
+  - modo "relieve": relleno neutro clasico, con los puertos subrayados
+  - modo "dureza":  cada tramo se pinta segun su pendiente
   - modo "zonas":   cada tramo se pinta con el color de la zona de FC en la que ibas
   - zonaFoco:       si hay una zona seleccionada, el resto se atenua
-  - puertos:        se subrayan sobre la linea
+  - mono:           en modo dureza, pinta todo del mismo color
 */
 export default function Perfil({
   streams,
@@ -16,6 +17,8 @@ export default function Perfil({
   zonas,
   modo = 'relieve',
   zonaFoco = null,
+  durezaFoco = null,
+  mono = false,
   altura = 260,
   puertoFoco = null,
 }) {
@@ -76,6 +79,27 @@ export default function Perfil({
 
   /* --- construccion de los tramos --- */
   const tramos = [];
+
+  /*
+    En modo dureza no se calcula la pendiente punto a punto: el ruido del
+    altimetro entre dos muestras contiguas produce pendientes del 30 % en
+    pleno llano. Se promedia sobre ventanas de unos 120 metros, que es la
+    escala a la que una rampa empieza a notarse en las piernas.
+  */
+  if (modo === 'dureza') {
+    const VENTANA = 0.12; // km
+    let i = 0;
+    while (i < datos.d.length - 1) {
+      let j = i;
+      while (j < datos.d.length - 1 && datos.d[j] - datos.d[i] < VENTANA) j++;
+      const dist = (datos.d[j] - datos.d[i]) * 1000;
+      if (dist <= 0) { i = j + 1; continue; }
+      const pend = ((datos.a[j] - datos.a[i]) / dist) * 100;
+      tramos.push({ ini: i, fin: j, dureza: tramoDureza(pend).n, pendiente: pend });
+      i = j;
+    }
+  }
+
   if (modo === 'zonas' && datos.fc) {
     let ini = 0;
     let zAct = datos.fc[0] ? zonaDeFC(datos.fc[0], zonas).n : null;
@@ -145,7 +169,21 @@ export default function Perfil({
           </g>
         ))}
 
-        {modo === 'zonas' && datos.fc && zonas ? (
+        {modo === 'dureza' ? (
+          <>
+            {tramos.map((t, i) => {
+              const c = TRAMOS_DUREZA[t.dureza - 1];
+              const atenuado = durezaFoco && t.dureza !== durezaFoco;
+              return (
+                <path key={i} d={areaPath(t.ini, t.fin)}
+                  fill={mono ? '#C8CFD8' : c.color}
+                  opacity={atenuado ? 0.12 : mono ? 0.5 : 0.85} />
+              );
+            })}
+            <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#E8EAED"
+              strokeWidth="1.2" strokeLinejoin="round" opacity={mono ? 0.9 : 0.45} />
+          </>
+        ) : modo === 'zonas' && datos.fc && zonas ? (
           <>
             {tramos.map((t, i) => {
               const z = zonas.find((x) => x.n === t.zona);
@@ -168,7 +206,7 @@ export default function Perfil({
         )}
 
         {/* puertos subrayados */}
-        {modo !== 'zonas' &&
+        {modo === 'relieve' &&
           puertos.map((p, i) => {
             const a = mapear(p.inicio), b = mapear(p.fin);
             if (b <= a) return null;
