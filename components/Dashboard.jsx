@@ -383,58 +383,58 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
               la velocidad. Graba siempre con el Garmin y en unos meses este panel valdrá el doble.
             </div>
           )}
-        </>
-      )}
 
-      <h2>Salidas del intervalo</h2>
-      <p className="hint">
-        Desmarca las que no sean representativas (paradas largas, ruta acompañando a alguien, error
-        de registro) y desaparecerán de todos los cálculos.
-      </p>
-      {enRango.length === 0 ? (
-        <div className="callout">No hay salidas en el intervalo elegido.</div>
-      ) : (
-        <div className="scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Salida</th><th>Fecha</th><th>Dist.</th><th>Desn.</th>
-                <th>m/km</th><th>Vel.</th><th>VAM</th><th>FC</th><th>W est.</th><th>Incluir</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...enRango].reverse().map((s) => {
-                const dentro = !excluidas.has(s.id);
-                return (
-                  <tr key={s.id} style={{ opacity: dentro ? 1 : 0.35 }}>
-                    <td>
-                      {s.nombre}
-                      <span className={`tag ${esLlana(s) ? 'lla' : metrosPorKm(s) > 12 ? 'col' : ''}`}>
-                        {esLlana(s) ? 'llano' : metrosPorKm(s) > 12 ? 'puerto' : 'mixto'}
-                      </span>
-                    </td>
-                    <td>{fechaCorta(s.fecha)}</td>
-                    <td>{num(km(s), 1)}</td>
-                    <td>+{num(s.desnivel, 0)}</td>
-                    <td>{num(metrosPorKm(s), 1)}</td>
-                    <td>{num(kmh(s), 1)}</td>
-                    <td>{num(vamSalida(s), 0)}</td>
-                    <td>{s.fcMedia ? num(s.fcMedia, 0) : '—'}</td>
-                    <td>{num(vatiosSalida(s, cfg), 0)}</td>
-                    <td>
-                      <input type="checkbox" checked={dentro}
-                        onChange={() => {
-                          const n = new Set(excluidas);
-                          dentro ? n.add(s.id) : n.delete(s.id);
-                          setExcluidas(n);
-                        }} />
-                    </td>
+          <h2>Salidas del intervalo</h2>
+          <p className="hint">
+            Desmarca las que no sean representativas (paradas largas, ruta acompañando a alguien, error
+            de registro) y desaparecerán de todos los cálculos.
+          </p>
+          {enRango.length === 0 ? (
+            <div className="callout">No hay salidas en el intervalo elegido.</div>
+          ) : (
+            <div className="scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Salida</th><th>Fecha</th><th>Dist.</th><th>Desn.</th>
+                    <th>m/km</th><th>Vel.</th><th>VAM</th><th>FC</th><th>W est.</th><th>Incluir</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {[...enRango].reverse().map((s) => {
+                    const dentro = !excluidas.has(s.id);
+                    return (
+                      <tr key={s.id} style={{ opacity: dentro ? 1 : 0.35 }}>
+                        <td>
+                          {s.nombre}
+                          <span className={`tag ${esLlana(s) ? 'lla' : metrosPorKm(s) > 12 ? 'col' : ''}`}>
+                            {esLlana(s) ? 'llano' : metrosPorKm(s) > 12 ? 'puerto' : 'mixto'}
+                          </span>
+                        </td>
+                        <td>{fechaCorta(s.fecha)}</td>
+                        <td>{num(km(s), 1)}</td>
+                        <td>+{num(s.desnivel, 0)}</td>
+                        <td>{num(metrosPorKm(s), 1)}</td>
+                        <td>{num(kmh(s), 1)}</td>
+                        <td>{num(vamSalida(s), 0)}</td>
+                        <td>{s.fcMedia ? num(s.fcMedia, 0) : '—'}</td>
+                        <td>{num(vatiosSalida(s, cfg), 0)}</td>
+                        <td>
+                          <input type="checkbox" checked={dentro}
+                            onChange={() => {
+                              const n = new Set(excluidas);
+                              dentro ? n.add(s.id) : n.delete(s.id);
+                              setExcluidas(n);
+                            }} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </>
   );
