@@ -104,6 +104,7 @@ export default function Dashboard({ atleta }) {
     rendimiento (rutas acompañando a alguien, errores de registro).
   */
   const enRango = useMemo(() => {
+    if (!salidas) return [];
     if (!rango.desde && !rango.hasta) return salidas;
     return salidas.filter((s) => {
       const d = s.fecha.slice(0, 10);
