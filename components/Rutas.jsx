@@ -1,164 +1,357 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { CATALOGO, evaluarRuta, rutasPropias } from '@/lib/rutas';
-import { referenciasCiclista } from '@/lib/gpx';
-import { num } from '@/lib/metrics';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Perfil from './Perfil';
+import PerfilPuerto from './PerfilPuerto';
+import { parseGPX, referenciasCiclista, analizarRuta } from '@/lib/gpx';
+import {
+  distanciaEquivalente, nivelDificultad, TRAMOS_DUREZA, num,
+} from '@/lib/metrics';
 
-const COLOR_ESTADO = {
-  'a tu alcance': 'var(--z2)',
-  'siguiente paso': 'var(--z3)',
-  'exigente': 'var(--z4)',
-  'todavía no': 'var(--z5)',
-  'sin datos': 'var(--ink3)',
-};
+export default function Rutas({ salidas, cache, excluidas, cfg, zonas }) {
+  const [rutas, setRutas] = useState(null);
+  const [error, setError] = useState(null);
+  const [cargando, setCargando] = useState(false);
 
-export default function Rutas({ salidas, cache, excluidas, cfg }) {
-  const [kmMin, setKmMin] = useState(0);
-  const [kmMax, setKmMax] = useState(120);
-  const [dMin, setDMin] = useState(0);
-  const [dMax, setDMax] = useState(1500);
-  const [tipo, setTipo] = useState('todos');
-  const [soloAlcance, setSoloAlcance] = useState(false);
-  const [incluirPropias, setIncluirPropias] = useState(true);
+  const [abierta, setAbierta] = useState(null);
+  const [detalle, setDetalle] = useState({});   // id → datos del GPX ya parseado
+  const [cargandoGpx, setCargandoGpx] = useState(false);
+
+  const [orden, setOrden] = useState('dificultad');
+  const [filtros, setFiltros] = useState(false);
+  const [kmMin, setKmMin] = useState('');
+  const [kmMax, setKmMax] = useState('');
+  const [dMin, setDMin] = useState('');
+  const [dMax, setDMax] = useState('');
 
   const ref = useMemo(
     () => referenciasCiclista(salidas, cache, excluidas),
     [salidas, cache, excluidas]
   );
 
-  const todas = useMemo(() => {
-    const base = [...CATALOGO];
-    if (incluirPropias) base.push(...rutasPropias(salidas, excluidas));
-    return base
-      .map((r) => ({ ...r, ev: evaluarRuta(r, ref) }))
-      .sort((a, b) => a.ev.orden - b.ev.orden || a.desnivel - b.desnivel);
-  }, [ref, salidas, excluidas, incluirPropias]);
+  const cargar = useCallback(async () => {
+    setCargando(true); setError(null);
+    try {
+      const r = await fetch('/api/rutas', { cache: 'no-store' });
+      const j = await r.json();
+      if (!r.ok) {
+        setError(j.error === 'sin_permiso_rutas' ? 'permiso' : 'Strava no devolvió tus rutas.');
+        setRutas([]);
+      } else {
+        /* Solo rutas de bici: las de correr no pintan nada en este panel. */
+        setRutas(j.rutas.filter((x) => x.tipo === 'ride'));
+      }
+    } catch {
+      setError('No se ha podido conectar.');
+      setRutas([]);
+    }
+    setCargando(false);
+  }, []);
 
-  const filtradas = todas.filter((r) =>
-    r.km >= kmMin && r.km <= kmMax &&
-    r.desnivel >= dMin && r.desnivel <= dMax &&
-    (tipo === 'todos' || r.tipo === tipo) &&
-    (!soloAlcance || r.ev.orden <= 1)
-  );
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const abrir = async (r) => {
+    if (abierta === r.id) { setAbierta(null); return; }
+    setAbierta(r.id);
+    if (detalle[r.id]) return;
+    setCargandoGpx(true);
+    try {
+      const res = await fetch(`/api/rutas/gpx?id=${r.id}`, { cache: 'no-store' });
+      const j = await res.json();
+      if (j.gpx) setDetalle((d) => ({ ...d, [r.id]: parseGPX(j.gpx) }));
+      else setDetalle((d) => ({ ...d, [r.id]: { error: 'No se pudo descargar el trazado.' } }));
+    } catch (e) {
+      setDetalle((d) => ({ ...d, [r.id]: { error: e.message || 'Error al leer el trazado.' } }));
+    }
+    setCargandoGpx(false);
+  };
+
+  const lista = useMemo(() => {
+    if (!rutas) return [];
+    const num_ = (v) => (v === '' ? null : +v);
+    const a = num_(kmMin), b = num_(kmMax), c = num_(dMin), d = num_(dMax);
+
+    return rutas
+      .map((r) => {
+        const km = r.metros / 1000;
+        return { ...r, km, eq: distanciaEquivalente(km, r.desnivel),
+          niv: nivelDificultad(km, r.desnivel) };
+      })
+      .filter((r) =>
+        (a === null || r.km >= a) && (b === null || r.km <= b) &&
+        (c === null || r.desnivel >= c) && (d === null || r.desnivel <= d))
+      .sort((x, y) => {
+        if (orden === 'distancia') return y.km - x.km;
+        if (orden === 'desnivel') return y.desnivel - x.desnivel;
+        if (orden === 'nombre') return x.nombre.localeCompare(y.nombre);
+        return y.eq - x.eq;
+      });
+  }, [rutas, orden, kmMin, kmMax, dMin, dMax]);
 
   return (
     <>
-      <h2>Rutas para tu zona</h2>
+      <h2>Tus rutas guardadas</h2>
       <p className="hint">
-        Cada ruta se compara con tu mejor registro para decirte si está a tu alcance hoy. El
-        criterio es el mismo que en el analizador: manda la exigencia peor parada, no el promedio.
+        Las rutas que tienes creadas o guardadas en Strava. Pulsa cualquiera para ver su perfil y
+        el análisis de si está a tu alcance ahora mismo.
       </p>
 
-      <div className="panel">
-        <h3 style={{ marginBottom: 14 }}>Filtros</h3>
-        <div className="fields">
-          <div>
-            <label htmlFor="r1">Distancia mínima (km)</label>
-            <input id="r1" type="number" min="0" max="300" step="5" value={kmMin}
-              onChange={(e) => setKmMin(+e.target.value || 0)} />
-          </div>
-          <div>
-            <label htmlFor="r2">Distancia máxima (km)</label>
-            <input id="r2" type="number" min="0" max="300" step="5" value={kmMax}
-              onChange={(e) => setKmMax(+e.target.value || 300)} />
-          </div>
-          <div>
-            <label htmlFor="r3">Desnivel mínimo (m)</label>
-            <input id="r3" type="number" min="0" max="4000" step="50" value={dMin}
-              onChange={(e) => setDMin(+e.target.value || 0)} />
-          </div>
-          <div>
-            <label htmlFor="r4">Desnivel máximo (m)</label>
-            <input id="r4" type="number" min="0" max="4000" step="50" value={dMax}
-              onChange={(e) => setDMax(+e.target.value || 4000)} />
-          </div>
-          <div>
-            <label htmlFor="r5">Tipo de terreno</label>
-            <select id="r5" value={tipo} onChange={(e) => setTipo(e.target.value)}>
-              <option value="todos">Todos</option>
-              <option value="carretera">Carretera</option>
-              <option value="gravel">Gravel</option>
-              <option value="mixto">Mixto</option>
-            </select>
-          </div>
+      {error === 'permiso' ? (
+        <div className="callout warn">
+          <strong>Falta el permiso de lectura de rutas.</strong> Tu cuenta se conectó antes de que
+          el panel pidiera acceso a las rutas guardadas. Sal y vuelve a conectar con Strava: en la
+          pantalla de autorización aparecerá el permiso nuevo y ya podrás verlas aquí.
         </div>
+      ) : error ? (
+        <div className="callout warn">{error}</div>
+      ) : null}
 
-        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 16 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13.5,
-            color: 'var(--ink2)', cursor: 'pointer' }}>
-            <input type="checkbox" checked={soloAlcance}
-              onChange={(e) => setSoloAlcance(e.target.checked)} />
-            Solo las que están a mi alcance
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13.5,
-            color: 'var(--ink2)', cursor: 'pointer' }}>
-            <input type="checkbox" checked={incluirPropias}
-              onChange={(e) => setIncluirPropias(e.target.checked)} />
-            Incluir rutas que ya he hecho
-          </label>
-        </div>
+      {cargando && <p className="hint">Cargando tus rutas de Strava…</p>}
 
-        <div className="chips" style={{ marginTop: 16 }}>
-          <button onClick={() => { setKmMin(0); setKmMax(50); setDMin(0); setDMax(400); }}>
-            Salida corta
-          </button>
-          <button onClick={() => { setKmMin(40); setKmMax(60); setDMin(250); setDMax(700); }}>
-            Media jornada
-          </button>
-          <button onClick={() => { setKmMin(55); setKmMax(120); setDMin(600); setDMax(1500); }}>
-            Salida larga
-          </button>
-          <button onClick={() => { setKmMin(0); setKmMax(120); setDMin(0); setDMax(1500);
-            setTipo('todos'); setSoloAlcance(false); }}>
-            Quitar filtros
-          </button>
-        </div>
-
-        <p className="hint" style={{ margin: '14px 0 0' }}>
-          {filtradas.length} de {todas.length} rutas cumplen los filtros.
-        </p>
-      </div>
-
-      {filtradas.length === 0 ? (
+      {rutas && rutas.length === 0 && !error && (
         <div className="callout">
-          Ninguna ruta encaja con esos filtros. Prueba a ampliar los rangos.
+          No tienes ninguna ruta de bici guardada en Strava. Las que crees allí aparecerán aquí
+          automáticamente.
         </div>
-      ) : (
-        filtradas.map((r) => (
-          <div className="panel" key={r.id} style={{ marginTop: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between',
-              alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-              <h3 style={{ margin: 0 }}>{r.nombre}</h3>
-              <span style={{ fontFamily: 'var(--mono)', fontSize: 11.5,
-                textTransform: 'uppercase', letterSpacing: '.06em',
-                color: COLOR_ESTADO[r.ev.estado] }}>
-                {r.ev.estado}
-                {r.ev.rel ? ` · ×${num(r.ev.rel, 2)}` : ''}
-              </span>
-            </div>
-
-            <p style={{ fontFamily: 'var(--mono)', fontSize: 12.5, color: 'var(--ink2)',
-              margin: '8px 0 12px' }}>
-              {r.zona} · {num(r.km, 1)} km · +{num(r.desnivel, 0)} m ·{' '}
-              {num(r.desnivel / r.km, 1)} m/km · {r.tipo}
-              {r.puerto && ` · ${r.puerto.nombre}: ${num(r.puerto.km, 1)} km al ${num(r.puerto.pct, 1)} %`}
-              {r.puerto?.max && ` (máx ${r.puerto.max} %)`}
-            </p>
-
-            <p style={{ margin: 0, color: 'var(--ink2)', fontSize: 14.5, lineHeight: 1.65 }}>
-              {r.nota}
-            </p>
-          </div>
-        ))
       )}
 
-      <div className="callout">
-        <strong>De dónde salen estos datos.</strong> Las diez rutas del catálogo son las que
-        planificaste y analizamos juntos: los kilómetros y el desnivel vienen de tus propios
-        trazados. Las marcadas como «ya la has hecho» se generan de tu historial de Strava. No hay
-        ninguna ruta inventada ni traída de una base de datos externa sin verificar.
+      {rutas && rutas.length > 0 && (
+        <>
+          <div className="chips" style={{ marginBottom: 6 }}>
+            {[['dificultad', 'Dificultad'], ['distancia', 'Distancia'],
+              ['desnivel', 'Desnivel'], ['nombre', 'Nombre']].map(([id, n]) => (
+              <button key={id} aria-pressed={orden === id} onClick={() => setOrden(id)}
+                style={orden === id ? { background: 'var(--ink)', borderColor: 'var(--ink)' } : null}>
+                {n}
+              </button>
+            ))}
+            <button onClick={() => setFiltros(!filtros)}
+              style={filtros ? { background: 'var(--ink2)', borderColor: 'var(--ink2)' } : null}>
+              {filtros ? 'Ocultar filtros' : 'Filtrar'}
+            </button>
+          </div>
+
+          {filtros && (
+            <div className="panel" style={{ marginBottom: 14 }}>
+              <div className="fields">
+                <div>
+                  <label htmlFor="f1">Distancia mínima (km)</label>
+                  <input id="f1" type="number" min="0" step="5" value={kmMin}
+                    placeholder="sin límite" onChange={(e) => setKmMin(e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor="f2">Distancia máxima (km)</label>
+                  <input id="f2" type="number" min="0" step="5" value={kmMax}
+                    placeholder="sin límite" onChange={(e) => setKmMax(e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor="f3">Desnivel mínimo (m)</label>
+                  <input id="f3" type="number" min="0" step="50" value={dMin}
+                    placeholder="sin límite" onChange={(e) => setDMin(e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor="f4">Desnivel máximo (m)</label>
+                  <input id="f4" type="number" min="0" step="50" value={dMax}
+                    placeholder="sin límite" onChange={(e) => setDMax(e.target.value)} />
+                </div>
+              </div>
+              <div className="chips" style={{ marginTop: 14 }}>
+                <button onClick={() => { setKmMin(''); setKmMax(''); setDMin(''); setDMax(''); }}>
+                  Quitar filtros
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ruta</th><th>Dist.</th><th>Desn.</th><th>m/km</th>
+                  <th>Km equiv.</th><th>Dificultad</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lista.map((r) => (
+                  <tr key={r.id} onClick={() => abrir(r)}
+                    style={{ cursor: 'pointer',
+                      background: abierta === r.id ? 'var(--card2)' : undefined }}>
+                    <td>
+                      <span style={{ color: 'var(--ink3)', fontFamily: 'var(--mono)',
+                        fontSize: 11, marginRight: 7 }}>
+                        {abierta === r.id ? '▾' : '▸'}
+                      </span>
+                      {r.nombre}
+                    </td>
+                    <td>{num(r.km, 1)}</td>
+                    <td>+{num(r.desnivel, 0)}</td>
+                    <td>{num(r.desnivel / r.km, 1)}</td>
+                    <td>{num(r.eq, 1)}</td>
+                    <td style={{ color: r.niv.color }}>{r.niv.nombre}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="hint" style={{ marginTop: 10 }}>
+            Los kilómetros equivalentes suman al recorrido el coste del desnivel: cada 100 m de
+            subida cuentan como un kilómetro más, con un recargo cuando ese desnivel va muy
+            concentrado. Por eso una llana larga puede pesar más que una corta con una subida.
+          </p>
+
+          {abierta && <DetalleRuta datos={detalle[abierta]} cargando={cargandoGpx}
+            ref_={ref} cfg={cfg} zonas={zonas} />}
+        </>
+      )}
+    </>
+  );
+}
+
+/* Perfil, veredicto y consejos de una ruta concreta. */
+function DetalleRuta({ datos, cargando, ref_, cfg, zonas }) {
+  const [modo, setModo] = useState('dureza');
+  const [durezaFoco, setDurezaFoco] = useState(null);
+  const [mono, setMono] = useState(false);
+  const [puerto, setPuerto] = useState(null);
+
+  const an = useMemo(
+    () => (datos && !datos.error ? analizarRuta(datos, ref_, cfg) : null),
+    [datos, ref_, cfg]
+  );
+
+  if (cargando && !datos) return <p className="hint">Descargando el trazado de la ruta…</p>;
+  if (!datos) return null;
+  if (datos.error) return <div className="callout warn">{datos.error}</div>;
+  if (!an) return null;
+
+  return (
+    <>
+      <h2>Perfil de la ruta</h2>
+      <div className="panel">
+        <Perfil streams={datos.streams} zonas={zonas} modo={modo}
+          durezaFoco={durezaFoco} mono={mono} altura={250} />
+
+        <div className="chips" style={{ marginTop: 14 }}>
+          <button aria-pressed={modo === 'relieve'}
+            onClick={() => { setModo('relieve'); setDurezaFoco(null); }}
+            style={modo === 'relieve' ? { background: 'var(--ink)', borderColor: 'var(--ink)' } : null}>
+            Información
+          </button>
+          <button aria-pressed={modo === 'dureza'} onClick={() => setModo('dureza')}
+            style={modo === 'dureza' ? { background: 'var(--ink)', borderColor: 'var(--ink)' } : null}>
+            Perfil y dureza
+          </button>
+        </div>
+
+        {modo === 'dureza' && an.dureza && (
+          <>
+            <div className="chips" style={{ marginTop: 8 }}>
+              <button aria-pressed={durezaFoco === null} onClick={() => setDurezaFoco(null)}
+                style={durezaFoco === null ? { background: 'var(--ink2)', borderColor: 'var(--ink2)' } : null}>
+                Todo
+              </button>
+              {TRAMOS_DUREZA.map((t, i) =>
+                an.dureza.porcentaje[i] > 0.4 ? (
+                  <button key={t.n} aria-pressed={durezaFoco === t.n}
+                    onClick={() => setDurezaFoco(durezaFoco === t.n ? null : t.n)}
+                    style={durezaFoco === t.n
+                      ? { background: t.color, borderColor: t.color,
+                          color: t.n === 6 ? '#E8EAED' : '#0E1116' }
+                      : null}>
+                    <i style={{ background: t.color }} />{t.nombre} · {num(an.dureza.porcentaje[i], 0)} %
+                  </button>
+                ) : null
+              )}
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 14,
+              fontSize: 13.5, color: 'var(--ink2)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={mono} onChange={(e) => setMono(e.target.checked)} />
+              Ver el perfil en un solo color
+            </label>
+          </>
+        )}
       </div>
+
+      <h2>¿Está a tu alcance?</h2>
+      <div className={`consejo ${an.nivel}`}>
+        <p className="tit">{an.titulo}</p>
+        <p>{an.texto}</p>
+      </div>
+
+      {an.rel.length > 0 && (
+        <div className="scroll" style={{ marginTop: 14 }}>
+          <table>
+            <thead>
+              <tr><th>Exigencia</th><th>Esta ruta</th><th>Tu mejor registro</th><th>Relación</th></tr>
+            </thead>
+            <tbody>
+              {an.rel.map((r, i) => (
+                <tr key={i}>
+                  <td>{r.k}</td><td>{r.ruta}</td><td>{r.tuyo}</td>
+                  <td style={r.r === an.peor
+                    ? { background: '#E0C020', color: '#0E1116', fontWeight: 600 } : null}>
+                    ×{num(r.r, 2)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {an.puertos.length > 0 && (
+        <>
+          <h2>Las subidas, una a una</h2>
+          <div className="scroll">
+            <table>
+              <thead>
+                <tr><th>Subida</th><th>Km</th><th>Long.</th><th>Desn.</th><th>Pend.</th><th>Máx.</th></tr>
+              </thead>
+              <tbody>
+                {an.puertos.map((p, i) => (
+                  <tr key={i} onClick={() => setPuerto(puerto === i ? null : i)}
+                    style={{ cursor: 'pointer',
+                      background: puerto === i ? 'var(--card2)' : undefined }}>
+                    <td>
+                      <span style={{ color: 'var(--ink3)', fontFamily: 'var(--mono)',
+                        fontSize: 11, marginRight: 7 }}>
+                        {puerto === i ? '▾' : '▸'}
+                      </span>
+                      Subida {i + 1}
+                    </td>
+                    <td>{num(p.kmInicio, 1)}–{num(p.kmFin, 1)}</td>
+                    <td>{num(p.metros / 1000, 2)} km</td>
+                    <td>+{num(p.desnivel, 0)} m</td>
+                    <td><strong>{num(p.pendiente, 1)} %</strong></td>
+                    <td>{num(p.pendienteMax, 1)} %</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {puerto !== null && an.puertos[puerto] && (
+            <PerfilPuerto streams={datos.streams} puerto={an.puertos[puerto]}
+              indice={puerto} cfg={cfg} zonas={zonas} />
+          )}
+        </>
+      )}
+
+      {an.avisos.length > 0 && (
+        <>
+          <h2>A tener en cuenta</h2>
+          <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink2)',
+            fontSize: 14.5, lineHeight: 1.7 }}>
+            {an.avisos.map((a, i) => <li key={i} style={{ marginBottom: 9 }}>{a}</li>)}
+          </ul>
+        </>
+      )}
+
+      <h2>Cómo afrontarla</h2>
+      <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink2)',
+        fontSize: 14.5, lineHeight: 1.7 }}>
+        {an.consejos.map((c, i) => <li key={i} style={{ marginBottom: 9 }}>{c}</li>)}
+      </ul>
     </>
   );
 }

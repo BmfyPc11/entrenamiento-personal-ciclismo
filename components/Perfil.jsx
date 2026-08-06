@@ -180,17 +180,27 @@ export default function Perfil({
 
         {modo === 'dureza' ? (
           <>
-            {tramos.map((t, i) => {
-              const c = TRAMOS_DUREZA[t.dureza - 1];
-              const atenuado = durezaFoco && t.dureza !== durezaFoco;
-              return (
-                <path key={i} d={areaPath(t.ini, Math.min(t.fin + 1, datos.d.length - 1))}
-                  fill={mono ? '#C8CFD8' : c.color}
-                  stroke={mono ? '#C8CFD8' : c.color} strokeWidth="0.6"
-                  shapeRendering="crispEdges"
-                  opacity={atenuado ? 0.12 : mono ? 0.5 : 0.85} />
-              );
-            })}
+            {/*
+              En monocromo se dibuja UN solo path para todo el recorrido.
+              Pintar los tramos por separado con opacidad parcial hacia que
+              las zonas donde dos tramos se solapan sumasen opacidad y
+              apareciesen franjas verticales mas claras: de ahi los dos
+              tonos que se veian en vez de uno.
+            */}
+            {mono ? (
+              <path d={areaPath(0, datos.d.length - 1)} fill="#C8CFD8" opacity="0.55" />
+            ) : (
+              tramos.map((t, i) => {
+                const c = TRAMOS_DUREZA[t.dureza - 1];
+                const atenuado = durezaFoco && t.dureza !== durezaFoco;
+                return (
+                  <path key={i} d={areaPath(t.ini, Math.min(t.fin + 1, datos.d.length - 1))}
+                    fill={c.color} stroke={c.color} strokeWidth="0.6"
+                    shapeRendering="crispEdges"
+                    opacity={atenuado ? 0.12 : 1} />
+                );
+              })
+            )}
             <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#E8EAED"
               strokeWidth="1.2" strokeLinejoin="round" opacity={mono ? 0.9 : 0.45} />
           </>

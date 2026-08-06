@@ -224,7 +224,7 @@ export default function AnalizadorGPX({ salidas, cache, excluidas, cfg, zonas })
               </p>
               {abierto !== null && an.puertos[abierto] && (
                 <PerfilPuerto streams={datos.streams} puerto={an.puertos[abierto]}
-                  indice={abierto} cfg={cfg} />
+                  indice={abierto} cfg={cfg} zonas={zonas} />
               )}
             </>
           )}

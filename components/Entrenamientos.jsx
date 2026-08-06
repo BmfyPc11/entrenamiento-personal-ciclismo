@@ -186,11 +186,6 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
                       <input type="checkbox" checked={mono} onChange={(e) => setMono(e.target.checked)} />
                       Ver el perfil en un solo color
                     </label>
-
-                    <p className="hint" style={{ marginTop: 10, marginBottom: 0 }}>
-                      La pendiente se promedia cada 120 metros. Punto a punto, el ruido del
-                      altímetro produce rampas del 30 % en pleno llano.
-                    </p>
                   </>
                 )}
 
@@ -320,7 +315,7 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
 
           {puertoAbierto !== null && puertos[puertoAbierto] && streams && (
             <PerfilPuerto streams={streams} puerto={puertos[puertoAbierto]}
-              indice={puertoAbierto} cfg={cfg} />
+              indice={puertoAbierto} cfg={cfg} zonas={zonas} />
           )}
 
           {puertos.length > 0 && (() => {

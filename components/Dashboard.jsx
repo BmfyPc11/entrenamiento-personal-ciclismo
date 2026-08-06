@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Entrenamientos from './Entrenamientos';
-import Zonas from './Zonas';
+import Datos from './Datos';
 import Objetivos from './Objetivos';
+import Ascensiones from './Ascensiones';
+import Evolucion from './Evolucion';
 import Rutas from './Rutas';
 import AnalizadorGPX from './AnalizadorGPX';
 import Semana from './Semana';
@@ -19,10 +21,9 @@ import {
 
 const PESTANAS = [
   ['resumen', 'Resumen'],
+  ['datos', 'Tus datos'],
   ['entrenamientos', 'Entrenamientos'],
-  ['zonas', 'Zonas'],
-  ['llano', 'Llano'],
-  ['subida', 'Subida'],
+  ['ascensiones', 'Mis ascensiones'],
   ['carga', 'Carga y forma'],
   ['objetivos', 'Objetivos'],
   ['rutas', 'Rutas'],
@@ -31,7 +32,7 @@ const PESTANAS = [
 
 const CFG_INICIAL = {
   peso: 75, bici: 11, fcmax: 185, cda: 0.36, crr: 0.008, perfil: 'gravel_alto',
-  modeloZonas: 'fcmax', zonasPropias: null,
+  modeloZonas: 'clasico', zonasPropias: null,
 };
 
 export default function Dashboard({ atleta }) {
@@ -196,48 +197,7 @@ export default function Dashboard({ atleta }) {
 
       {error && <div className="callout warn">{error}</div>}
 
-      {/* --- los tres bloques fijos: constantes, semana y consejo --- */}
-      <div className="panel">
-        <h3 style={{ marginBottom: 14 }}>Tus constantes</h3>
-        <div className="fields">
-          <div>
-            <label htmlFor="peso">Peso ciclista (kg)</label>
-            <input id="peso" type="number" min="35" max="150" step="0.5" value={cfg.peso}
-              onChange={(e) => setCfg({ ...cfg, peso: +e.target.value || 75 })} />
-          </div>
-          <div>
-            <label htmlFor="bici">Peso bici + equipo (kg)</label>
-            <input id="bici" type="number" min="5" max="30" step="0.5" value={cfg.bici}
-              onChange={(e) => setCfg({ ...cfg, bici: +e.target.value || 11 })} />
-          </div>
-          <div>
-            <label htmlFor="fcmax">FC máxima (ppm)</label>
-            <input id="fcmax" type="number" min="140" max="220" value={cfg.fcmax}
-              onChange={(e) => setCfg({ ...cfg, fcmax: +e.target.value || 185 })} />
-          </div>
-          <div>
-            <label htmlFor="tipo">Bici y posición</label>
-            <select id="tipo" value={cfg.perfil}
-              onChange={(e) => {
-                const p = PERFILES_BICI.find((x) => x.id === e.target.value);
-                setCfg({ ...cfg, perfil: p.id, cda: p.cda, crr: p.crr });
-              }}>
-              {PERFILES_BICI.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-            </select>
-          </div>
-        </div>
-        <p className="hint" style={{ margin: '14px 0 0' }}>
-          Estos valores alimentan todos los cálculos. Las zonas de frecuencia cardíaca se
-          configuran en su propia pestaña.
-        </p>
-      </div>
-
-      <h3 style={{ margin: '26px 0 14px' }}>Últimos siete días</h3>
-      <Semana dias={dias} />
-
-      <div style={{ marginTop: 22 }}>
-        <Consejo consejo={consejo} />
-      </div>
+      <Consejo consejo={consejo} />
 
       <nav role="tablist">
         {PESTANAS.map(([id, txt]) => (
@@ -257,14 +217,21 @@ export default function Dashboard({ atleta }) {
         <Entrenamientos salidas={salidas} cfg={cfg} zonas={zonas} umbral={umbral} cache={cache}
           pedirStreams={pedirStreams} />
       )}
-      {pestana === 'zonas' && (
-        <Zonas cfg={cfg} setCfg={setCfg} zonas={zonas} reparto={global} />
+      {pestana === 'datos' && (
+        <Datos cfg={cfg} setCfg={setCfg} zonas={zonas} reparto={global} />
       )}
-      {pestana === 'llano' && <Llano salidas={activas} cfg={cfg} masaTotal={masaTotal} />}
-      {pestana === 'subida' && <Subida salidas={activas} cfg={cfg} cache={cache} umbral={umbral} masaTotal={masaTotal} />}
-      {pestana === 'carga' && <CargaTab salidas={activas} cfg={cfg} umbral={umbral} zonas={zonas} global={global} />}
+      {pestana === 'ascensiones' && (
+        <Ascensiones salidas={activas} cache={cache} excluidas={excluidas}
+          cfg={cfg} zonas={zonas} pedirStreams={pedirStreams} />
+      )}
+      {pestana === 'carga' && (
+        <>
+          <Evolucion salidas={activas} excluidas={excluidas} />
+          <CargaTab salidas={activas} cfg={cfg} umbral={umbral} zonas={zonas} global={global} />
+        </>
+      )}
       {pestana === 'rutas' && (
-        <Rutas salidas={activas} cache={cache} excluidas={excluidas} cfg={cfg} />
+        <Rutas salidas={activas} cache={cache} excluidas={excluidas} cfg={cfg} zonas={zonas} />
       )}
 
       {pestana === 'analizador' && (
@@ -301,7 +268,7 @@ function Dato({ k, v, u, d, cl }) {
 }
 
 function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
-  enRango, rango, setRango, cache, objetivos }) {
+  enRango, rango, setRango, cache, objetivos, dias }) {
 
   const obj = calcularObjetivos({ salidas, cache, excluidas, cfg, masaTotal, obj: objetivos });
 
@@ -319,9 +286,14 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
     mkm: salidas.length ? Math.max(...salidas.map(metrosPorKm)) : 0,
     vel: salidas.length ? Math.max(...salidas.map(kmh)) : 0,
     vam: salidas.length ? Math.max(...salidas.map(vamSalida)) : 0,
-    fc: salidas.length ? Math.max(...salidas.filter((s) => s.fcMedia).map((s) => s.fcMedia)) : 0,
     w: salidas.length ? Math.max(...salidas.map((s) => vatiosSalida(s, cfg))) : 0,
   }), [salidas, cfg]);
+  /*
+    La frecuencia cardiaca queda deliberadamente fuera de los maximos. Las
+    demas columnas miden rendimiento y su mayor valor es un logro; la FC
+    mide cuanto te costo, y la mas alta del historial no es una marca que
+    celebrar sino, si acaso, un dia en que fuiste mas al limite.
+  */
 
   const atajo = (dias) => {
     const hoy = new Date();
@@ -336,6 +308,9 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
 
   return (
     <>
+      <h2>Últimos siete días</h2>
+      <Semana dias={dias} />
+
       <h2>Periodo que se analiza</h2>
       <p className="hint">
         Elige el intervalo de fechas y todos los cálculos del panel se limitarán a él. Dentro del
@@ -422,7 +397,7 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
                 <thead>
                   <tr>
                     <th>Salida</th><th>Fecha</th><th>Dist.</th><th>Desn.</th>
-                    <th>m/km</th><th>Vel.</th><th>VAM</th><th>FC</th><th>W est.</th><th>Incluir</th>
+                    <th>m/km</th><th>Vel.</th><th>VAM</th><th>W est.</th><th>FC</th><th>Incluir</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -452,8 +427,8 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
                         <td style={Math.abs(mkmVal - maximos.mkm) < 0.01 ? bgMax : null}>{num(mkmVal, 1)}</td>
                         <td style={Math.abs(velVal - maximos.vel) < 0.01 ? bgMax : null}>{num(velVal, 1)}</td>
                         <td style={Math.abs(vamVal - maximos.vam) < 0.01 ? bgMax : null}>{num(vamVal, 0)}</td>
-                        <td style={fcVal && Math.abs(fcVal - maximos.fc) < 0.01 ? bgMax : null}>{fcVal ? num(fcVal, 0) : '—'}</td>
                         <td style={Math.abs(wVal - maximos.w) < 0.01 ? bgMax : null}>{num(wVal, 0)}</td>
+                        <td>{fcVal ? num(fcVal, 0) : '—'}</td>
                         <td>
                           <input type="checkbox" checked={dentro}
                             onChange={() => {
@@ -471,163 +446,6 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
           )}
         </>
       )}
-    </>
-  );
-}
-
-function Llano({ salidas, cfg, masaTotal }) {
-  const llanas = salidas.filter(esLlana);
-  const mejor = llanas.length ? Math.max(...llanas.map(kmh)) : 20;
-  const wMejor = vatios(mejor / 3.6, 0, masaTotal, cfg.cda, cfg.crr);
-
-  return (
-    <>
-      <h2>Velocidad en llano</h2>
-      <p className="hint">
-        Solo salidas con menos de 5 m de desnivel por kilómetro: terreno realmente llano, donde el
-        objetivo de 30 km/h tiene sentido.
-      </p>
-      <div className="chart">
-        <Linea
-          puntos={llanas.map((s) => ({ y: kmh(s), etiqueta: fechaCorta(s.fecha) }))}
-          objetivo={30} unidad="km/h" minY={10} maxY={32}
-        />
-      </div>
-
-      <h2>Qué potencia exige cada velocidad</h2>
-      <p className="hint">Calculado con física real de ciclismo para tu peso y tu configuración.</p>
-      <div className="scroll">
-        <table>
-          <thead>
-            <tr><th>Velocidad en llano</th><th>Potencia</th><th>W/kg</th><th>Frente a hoy</th></tr>
-          </thead>
-          <tbody>
-            {[18, 20, 22, 24, 26, 28, 30].map((v) => {
-              const w = vatios(v / 3.6, 0, masaTotal, cfg.cda, cfg.crr);
-              const esTuyo = Math.abs(v - mejor) < 1;
-              return (
-                <tr key={v} style={esTuyo ? { background: 'var(--card2)' } : null}>
-                  <td>{v} km/h {esTuyo && <span className="tag">tu nivel</span>}</td>
-                  <td>{num(w, 0)} W</td>
-                  <td>{num(w / cfg.peso, 2)}</td>
-                  <td style={{ color: w > wMejor ? 'var(--orange)' : 'var(--green)' }}>
-                    {w > wMejor ? '+' : ''}{num(w - wMejor, 0)} W
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <div className="callout">
-        <strong>Lee la última columna.</strong> Subir de {num(mejor, 0)} a 30 km/h no es un 40 % más de
-        esfuerzo: es {num((vatios(30 / 3.6, 0, masaTotal, cfg.cda, cfg.crr) / wMejor) * 100 - 100, 0)} % más
-        de potencia. La resistencia del aire crece con el cubo de la velocidad, así que cada km/h extra
-        cuesta más que el anterior.
-      </div>
-    </>
-  );
-}
-
-function Subida({ salidas, cfg, cache, umbral, masaTotal }) {
-  const [calc, setCalc] = useState({ km: 5, pct: 6.5, vam: 565 });
-
-  const puertos = Object.values(cache).flatMap((st) =>
-    detectarPuertos(st, { minMetros: 1000, minDesnivel: 80, minPend: 4 })
-  ).sort((a, b) => b.desnivel - a.desnivel).slice(0, 12);
-
-  const desnivel = calc.km * 1000 * (calc.pct / 100);
-  const seg = (desnivel / calc.vam) * 3600;
-  const v = (calc.km * 1000) / seg;
-  const w = vatios(v, calc.pct / 100, masaTotal, cfg.cda, cfg.crr);
-  const pctUmbral = (w / umbral) * 100;
-
-  const veredicto =
-    pctUmbral < 80 ? ['Cómodo. Ritmo de fondo, lo aguantas sin problema.', 'var(--green)']
-      : pctUmbral < 95 ? ['Exigente pero sostenible. Este es tu terreno de progreso.', 'var(--amber)']
-      : pctUmbral < 108 ? ['Al límite. Solo si el puerto es el objetivo del día.', 'var(--orange)']
-      : ['Fuera de alcance hoy. Necesitas más base antes de intentarlo.', 'var(--red)'];
-
-  return (
-    <>
-      <h2>Tus mejores ascensos</h2>
-      <p className="hint">
-        Detectados sobre el perfil de las salidas que has abierto. Cuantas más veas en la pestaña
-        Entrenamientos, más completa será esta tabla.
-      </p>
-      {puertos.length === 0 ? (
-        <div className="callout">
-          Todavía no hay ascensos analizados. Abre alguna salida con desnivel en la pestaña
-          <strong> Entrenamientos</strong> y volverán a aparecer aquí.
-        </div>
-      ) : (
-        <div className="scroll">
-          <table>
-            <thead>
-              <tr><th>Ascenso</th><th>Long.</th><th>Desn.</th><th>Pend.</th><th>Máx.</th>
-                <th>Tiempo</th><th>VAM</th><th>FC</th><th>W est.</th><th>W/kg</th></tr>
-            </thead>
-            <tbody>
-              {puertos.map((p, i) => {
-                const w = vatiosPuerto(p, cfg);
-                return (
-                  <tr key={i}>
-                    <td>Ascenso {i + 1}</td>
-                    <td>{num(p.metros / 1000, 2)} km</td>
-                    <td>+{num(p.desnivel, 0)} m</td>
-                    <td><strong>{num(p.pendiente, 1)} %</strong></td>
-                    <td>{num(p.pendienteMax, 1)} %</td>
-                    <td>{duracion(p.segundos)}</td>
-                    <td>{p.vam ? num(p.vam, 0) : '—'}</td>
-                    <td>{p.fcMedia ?? '—'}</td>
-                    <td>{num(w, 0)}</td>
-                    <td>{num(w / cfg.peso, 2)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <h2>VAM por salida</h2>
-      <p className="hint">
-        Metros verticales por hora sobre el total de la salida. No es el VAM puro de subida, pero al
-        comparar sesiones del mismo tipo muestra la tendencia.
-      </p>
-      <div className="chart">
-        <Barras
-          datos={salidas.map((s) => ({ y: vamSalida(s), etiqueta: fechaCorta(s.fecha).slice(0, 6) }))}
-          resaltar={(d) => d.y > 200}
-        />
-      </div>
-
-      <h2>Calculadora de ascensos</h2>
-      <p className="hint">Introduce cualquier puerto y te digo el tiempo y la potencia que exige.</p>
-      <div className="panel">
-        <div className="fields">
-          <div><label htmlFor="ck">Longitud (km)</label>
-            <input id="ck" type="number" min="0.3" max="30" step="0.1" value={calc.km}
-              onChange={(e) => setCalc({ ...calc, km: +e.target.value || 5 })} /></div>
-          <div><label htmlFor="cp">Pendiente media (%)</label>
-            <input id="cp" type="number" min="1" max="20" step="0.1" value={calc.pct}
-              onChange={(e) => setCalc({ ...calc, pct: +e.target.value || 6 })} /></div>
-          <div><label htmlFor="cv">Tu VAM objetivo (m/h)</label>
-            <input id="cv" type="number" min="200" max="1800" step="5" value={calc.vam}
-              onChange={(e) => setCalc({ ...calc, vam: +e.target.value || 550 })} /></div>
-        </div>
-      </div>
-      <div className="grid">
-        <Dato k="Desnivel" v={num(desnivel, 0)} u="m" d={`a ${num(calc.pct, 1)} % de media`} />
-        <Dato k="Tiempo estimado" v={duracion(seg)} d={`a ${calc.vam} m/h`} />
-        <Dato k="Velocidad" v={num(v * 3.6, 1)} u="km/h" d="media de ascenso" />
-        <Dato k="Potencia necesaria" v={num(w, 0)} u="W" d={`${num(w / cfg.peso, 2)} W/kg`} />
-        <div className="stat" style={{ borderLeft: `3px solid ${veredicto[1]}` }}>
-          <div className="k">Exigencia</div>
-          <div className="v" style={{ color: veredicto[1] }}>{num(pctUmbral, 0)} <small>% del umbral</small></div>
-          <div className="d">{veredicto[0]}</div>
-        </div>
-      </div>
     </>
   );
 }

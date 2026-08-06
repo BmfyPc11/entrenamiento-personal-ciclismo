@@ -58,7 +58,8 @@ h2{font-size:19px;font-weight:500;margin:36px 0 4px;letter-spacing:-.01em}
 h2:first-child{margin-top:4px}
 h3{font-family:var(--mono);font-size:11px;letter-spacing:.15em;text-transform:uppercase;
   color:var(--ink3);margin:0 0 16px;font-weight:400}
-.hint{color:var(--ink2);font-size:14px;margin:0 0 18px;max-width:74ch}
+.hint{color:var(--ink2);font-size:14px;line-height:1.62;margin:0 0 18px;
+  max-width:108ch;text-wrap:pretty}
 
 /* ---------- tarjetas ---------- */
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:22px}
@@ -96,7 +97,8 @@ h3{font-family:var(--mono);font-size:11px;letter-spacing:.15em;text-transform:up
 .consejo .tag{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;
   color:var(--ink3);display:block;margin-bottom:9px}
 .consejo .tit{font-size:19px;font-weight:500;margin:0 0 9px;letter-spacing:-.01em}
-.consejo p{margin:0;color:var(--ink2);font-size:14.5px;line-height:1.65;max-width:76ch}
+.consejo p{margin:0;color:var(--ink2);font-size:14.5px;line-height:1.68;
+  max-width:104ch;text-wrap:pretty}
 
 /* ---------- formularios ---------- */
 .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px}
@@ -202,3 +204,40 @@ input[type=date]:hover{border-color:#4A5563}
   padding:9px 18px;border:1px solid var(--line2);border-radius:8px;
   background:var(--bg2);color:var(--ink);transition:border-color .15s,background .15s}
 .btn-file:hover span{border-color:var(--ink3);background:var(--card2)}
+
+
+/* --- pulido general de la v3.1 --- */
+
+/*
+  El limite de linea existe por legibilidad: mas de unos 110 caracteres
+  cansa la vista al volver al margen izquierdo. Pero el valor anterior
+  (74) cortaba a media frase dejando medio panel vacio y parecia un fallo
+  de maquetacion mas que una decision. 108 mantiene la lectura comoda y
+  ocupa el ancho de forma natural.
+*/
+p, li { text-wrap: pretty }
+
+.callout{line-height:1.62;max-width:108ch;text-wrap:pretty}
+
+h2{margin:34px 0 12px}
+h2:first-child{margin-top:0}
+h3{letter-spacing:.01em}
+
+.panel{padding:20px 22px}
+.panel + .panel{margin-top:14px}
+
+.grid{gap:12px}
+.dato{padding:14px 16px}
+.dato .d{line-height:1.5;margin-top:5px}
+
+table th{padding:11px 12px;white-space:nowrap}
+table td{padding:12px}
+.scroll{border-radius:10px}
+
+.chips button{transition:background .14s,border-color .14s,color .14s}
+
+.fields{gap:14px}
+label{margin-bottom:7px;display:block}
+
+.consejo{padding:18px 20px}
+.consejo .tit{margin-bottom:8px}
