@@ -8,6 +8,8 @@ import { COLORES_ZONA, NOMBRES_ZONA, num, duracion } from '@/lib/metrics';
   mantener: manana la rejilla se ha desplazado sola un dia.
 */
 export default function Semana({ dias }) {
+  /* Sin datos no se dibuja nada, en vez de reventar el panel entero. */
+  if (!dias || !dias.length) return null;
   return (
     <div className="semana">
       {dias.map((d) => {

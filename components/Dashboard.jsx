@@ -211,7 +211,8 @@ export default function Dashboard({ atleta }) {
       {pestana === 'resumen' && (
         <Resumen salidas={activas} cfg={cfg} umbral={umbral} masaTotal={masaTotal}
           excluidas={excluidas} setExcluidas={setExcluidas} enRango={enRango}
-          rango={rango} setRango={setRango} cache={cache} objetivos={objetivos} />
+          rango={rango} setRango={setRango} cache={cache} objetivos={objetivos}
+          dias={dias} />
       )}
       {pestana === 'entrenamientos' && (
         <Entrenamientos salidas={salidas} cfg={cfg} zonas={zonas} umbral={umbral} cache={cache}
