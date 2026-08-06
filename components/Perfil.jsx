@@ -82,12 +82,12 @@ export default function Perfil({
 
   /*
     En modo dureza no se calcula la pendiente punto a punto: el ruido del
-    altimetro entre dos muestras contiguas produce pendientes del 30 % en
-    pleno llano. Se promedia sobre ventanas de unos 120 metros, que es la
-    escala a la que una rampa empieza a notarse en las piernas.
+    altimetro entre dos muestras contiguas produce pendientes absurdas en
+    pleno llano. Se promedia sobre ventanas cortas para captar el detalle
+    de cada rampa sin heredar ese ruido.
   */
   if (modo === 'dureza') {
-    const VENTANA = 0.12; // km
+    const VENTANA = 0.02; // km
     let i = 0;
     while (i < datos.d.length - 1) {
       let j = i;
@@ -95,7 +95,16 @@ export default function Perfil({
       const dist = (datos.d[j] - datos.d[i]) * 1000;
       if (dist <= 0) { i = j + 1; continue; }
       const pend = ((datos.a[j] - datos.a[i]) / dist) * 100;
-      tramos.push({ ini: i, fin: j, dureza: tramoDureza(pend).n, pendiente: pend });
+      const n = tramoDureza(pend).n;
+      const ult = tramos[tramos.length - 1];
+      /*
+        Si el tramo cae en la misma franja que el anterior se extiende en vez
+        de crear uno nuevo. Con ventanas de 20 m habria cientos de paths
+        contiguos y cada frontera entre dos <path> deja una costura oscura
+        de antialiasing: justo las rayas verticales que sobraban.
+      */
+      if (ult && ult.dureza === n) ult.fin = j;
+      else tramos.push({ ini: i, fin: j, dureza: n, pendiente: pend });
       i = j;
     }
   }
@@ -175,8 +184,10 @@ export default function Perfil({
               const c = TRAMOS_DUREZA[t.dureza - 1];
               const atenuado = durezaFoco && t.dureza !== durezaFoco;
               return (
-                <path key={i} d={areaPath(t.ini, t.fin)}
+                <path key={i} d={areaPath(t.ini, Math.min(t.fin + 1, datos.d.length - 1))}
                   fill={mono ? '#C8CFD8' : c.color}
+                  stroke={mono ? '#C8CFD8' : c.color} strokeWidth="0.6"
+                  shapeRendering="crispEdges"
                   opacity={atenuado ? 0.12 : mono ? 0.5 : 0.85} />
               );
             })}

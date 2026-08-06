@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Entrenamientos from './Entrenamientos';
 import Zonas from './Zonas';
 import Objetivos from './Objetivos';
+import Rutas from './Rutas';
+import AnalizadorGPX from './AnalizadorGPX';
 import Semana from './Semana';
 import Consejo from './Consejo';
 import { calcularObjetivos, BarrasObjetivo, OBJETIVOS_INICIALES } from './objetivosLib';
@@ -11,7 +13,7 @@ import { Linea, Barras, Carga } from './Graficos';
 import {
   PERFILES_BICI, detectarPuertos, serieCarga, umbralEstimado,
   vatios, vatiosSalida, vatiosPuerto, repartoZonas, repartoGlobal,
-  calcularZonas, ultimosDias, consejoEntrenador,
+  calcularZonas, ultimosDias, consejoEntrenador, normalizarAltitud,
   num, duracion, fechaCorta, kmh, km, metrosPorKm, vamSalida, esLlana,
 } from '@/lib/metrics';
 
@@ -23,7 +25,8 @@ const PESTANAS = [
   ['subida', 'Subida'],
   ['carga', 'Carga y forma'],
   ['objetivos', 'Objetivos'],
-  ['proyeccion', 'Proyección'],
+  ['rutas', 'Rutas'],
+  ['analizador', 'Analizar GPX'],
 ];
 
 const CFG_INICIAL = {
@@ -94,8 +97,10 @@ export default function Dashboard({ atleta }) {
     if (!r.ok) throw new Error(r.status === 502 ? 'Strava no devolvió el detalle' : 'Error de conexión');
     const j = await r.json();
     if (j.error) throw new Error(j.error);
-    setCache((c) => ({ ...c, [id]: j.streams }));
-    return j.streams;
+    /* Se corrige aqui para que todo el panel vea siempre la serie saneada. */
+    const st = normalizarAltitud(j.streams);
+    setCache((c) => ({ ...c, [id]: st }));
+    return st;
   }, []);
 
   /*
@@ -258,11 +263,19 @@ export default function Dashboard({ atleta }) {
       {pestana === 'llano' && <Llano salidas={activas} cfg={cfg} masaTotal={masaTotal} />}
       {pestana === 'subida' && <Subida salidas={activas} cfg={cfg} cache={cache} umbral={umbral} masaTotal={masaTotal} />}
       {pestana === 'carga' && <CargaTab salidas={activas} cfg={cfg} umbral={umbral} zonas={zonas} global={global} />}
+      {pestana === 'rutas' && (
+        <Rutas salidas={activas} cache={cache} excluidas={excluidas} cfg={cfg} />
+      )}
+
+      {pestana === 'analizador' && (
+        <AnalizadorGPX salidas={activas} cache={cache} excluidas={excluidas}
+          cfg={cfg} zonas={zonas} />
+      )}
+
       {pestana === 'objetivos' && (
         <Objetivos salidas={activas} cfg={cfg} cache={cache} excluidas={excluidas}
           masaTotal={masaTotal} objetivos={objetivos} setObjetivos={setObjetivos} />
       )}
-      {pestana === 'proyeccion' && <Proyeccion salidas={activas} cfg={cfg} umbral={umbral} masaTotal={masaTotal} />}
 
       <footer>
         <strong>Origen de los datos:</strong> tu cuenta de Strava, leída en directo. Solo se analizan
@@ -298,6 +311,17 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
     const todas = enRango.length ? enRango : salidas;
     return { min: todas[0].fecha.slice(0, 10), max: todas[todas.length - 1].fecha.slice(0, 10) };
   }, [enRango, salidas]);
+
+  /* Máximos de cada columna para resaltar */
+  const maximos = useMemo(() => ({
+    dist: salidas.length ? Math.max(...salidas.map(km)) : 0,
+    desn: salidas.length ? Math.max(...salidas.map((s) => s.desnivel)) : 0,
+    mkm: salidas.length ? Math.max(...salidas.map(metrosPorKm)) : 0,
+    vel: salidas.length ? Math.max(...salidas.map(kmh)) : 0,
+    vam: salidas.length ? Math.max(...salidas.map(vamSalida)) : 0,
+    fc: salidas.length ? Math.max(...salidas.filter((s) => s.fcMedia).map((s) => s.fcMedia)) : 0,
+    w: salidas.length ? Math.max(...salidas.map((s) => vatiosSalida(s, cfg))) : 0,
+  }), [salidas, cfg]);
 
   const atajo = (dias) => {
     const hoy = new Date();
@@ -404,6 +428,16 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
                 <tbody>
                   {[...enRango].reverse().map((s) => {
                     const dentro = !excluidas.has(s.id);
+                    const distVal = km(s);
+                    const desnVal = s.desnivel;
+                    const mkmVal = metrosPorKm(s);
+                    const velVal = kmh(s);
+                    const vamVal = vamSalida(s);
+                    const fcVal = s.fcMedia;
+                    const wVal = vatiosSalida(s, cfg);
+
+                    const bgMax = { background: '#E0C020', color: '#0E1116', fontWeight: 600 };
+
                     return (
                       <tr key={s.id} style={{ opacity: dentro ? 1 : 0.35 }}>
                         <td>
@@ -413,13 +447,13 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
                           </span>
                         </td>
                         <td>{fechaCorta(s.fecha)}</td>
-                        <td>{num(km(s), 1)}</td>
-                        <td>+{num(s.desnivel, 0)}</td>
-                        <td>{num(metrosPorKm(s), 1)}</td>
-                        <td>{num(kmh(s), 1)}</td>
-                        <td>{num(vamSalida(s), 0)}</td>
-                        <td>{s.fcMedia ? num(s.fcMedia, 0) : '—'}</td>
-                        <td>{num(vatiosSalida(s, cfg), 0)}</td>
+                        <td style={Math.abs(distVal - maximos.dist) < 0.01 ? bgMax : null}>{num(distVal, 1)}</td>
+                        <td style={desnVal === maximos.desn ? bgMax : null}>+{num(desnVal, 0)}</td>
+                        <td style={Math.abs(mkmVal - maximos.mkm) < 0.01 ? bgMax : null}>{num(mkmVal, 1)}</td>
+                        <td style={Math.abs(velVal - maximos.vel) < 0.01 ? bgMax : null}>{num(velVal, 1)}</td>
+                        <td style={Math.abs(vamVal - maximos.vam) < 0.01 ? bgMax : null}>{num(vamVal, 0)}</td>
+                        <td style={fcVal && Math.abs(fcVal - maximos.fc) < 0.01 ? bgMax : null}>{fcVal ? num(fcVal, 0) : '—'}</td>
+                        <td style={Math.abs(wVal - maximos.w) < 0.01 ? bgMax : null}>{num(wVal, 0)}</td>
                         <td>
                           <input type="checkbox" checked={dentro}
                             onChange={() => {
@@ -691,75 +725,6 @@ function CargaTab({ salidas, cfg, umbral, zonas, global: rep }) {
           )}
         </>
       )}
-    </>
-  );
-}
-
-function Proyeccion({ salidas, cfg, umbral, masaTotal }) {
-  const llanas = salidas.filter(esLlana);
-  const wGravel = vatios(30 / 3.6, 0, masaTotal, cfg.cda, cfg.crr);
-  const wCarretera = vatios(30 / 3.6, 0, masaTotal, 0.30, 0.005);
-
-  let mensaje;
-  if (llanas.length >= 3) {
-    const t0 = new Date(llanas[0].fecha).getTime();
-    const pts = llanas.map((s) => ({ x: (new Date(s.fecha).getTime() - t0) / 864e5, y: kmh(s) }));
-    const n = pts.length;
-    const sx = pts.reduce((a, p) => a + p.x, 0), sy = pts.reduce((a, p) => a + p.y, 0);
-    const sxy = pts.reduce((a, p) => a + p.x * p.y, 0), sxx = pts.reduce((a, p) => a + p.x * p.x, 0);
-    const b = (n * sxy - sx * sy) / (n * sxx - sx * sx || 1);
-    const a = (sy - b * sx) / n;
-    const dias = b > 0 ? (30 - a) / b : null;
-    if (dias && dias > 0 && dias < 3000) {
-      const fecha = new Date(t0 + dias * 864e5);
-      mensaje = (
-        <>
-          <strong>Al ritmo actual llegarías a 30 km/h hacia{' '}
-            {fecha.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}.</strong>{' '}
-          Ahora la parte honesta: esa recta no existe en ciclismo. Los primeros meses siempre suben
-          rápido porque partes de cero, y la curva se aplana justo cuando te acercas al objetivo.
-          Cuenta con bastante más tiempo del que dice la proyección.
-        </>
-      );
-    } else {
-      mensaje = <>Las salidas en llano no muestran todavía una tendencia clara al alza. Necesitas repetir un mismo recorrido llano varias veces para que la comparación signifique algo.</>;
-    }
-  } else {
-    mensaje = <>Aún no hay suficientes salidas en llano puro para trazar una tendencia fiable. Necesitas al menos tres o cuatro, idealmente en el mismo recorrido.</>;
-  }
-
-  return (
-    <>
-      <h2>Tu curva hacia los 30 km/h</h2>
-      <div className="chart">
-        <Linea puntos={llanas.map((s) => ({ y: kmh(s), etiqueta: fechaCorta(s.fecha) }))}
-          objetivo={30} unidad="km/h" minY={10} maxY={32} />
-      </div>
-      <div className="callout">{mensaje}</div>
-      <div className="callout warn">
-        <strong>El atajo real está en el material:</strong> los mismos 30 km/h piden {num(wGravel, 0)} W
-        con tu configuración actual y {num(wCarretera, 0)} W con una bici de carretera en posición baja.
-        Ese cambio te adelanta el objetivo más que un año de entrenamiento.
-      </div>
-
-      <h2>Test de FTP: qué esperar</h2>
-      <p className="hint">
-        Cuando hagas el test de 20 minutos, aquí tienes el rango en el que deberían caer tus números
-        según lo que ya has demostrado sobre la bici.
-      </p>
-      <div className="grid">
-        <Dato k="Umbral estimado" v={umbral} u="W" d="desde tus mejores ascensos" />
-        <Dato k="Relación peso-potencia" v={num(umbral / cfg.peso, 2)} u="W/kg" />
-        <Dato k="Rango esperable" v={`${Math.round(umbral * 0.9)}–${Math.round(umbral * 1.25)}`} u="W"
-          d="si tus subidas no fueron a tope" />
-        <Dato k="Zona 2 objetivo" v={`${Math.round(umbral * 0.56)}–${Math.round(umbral * 0.75)}`} u="W"
-          d={`${Math.round(cfg.fcmax * 0.6)}–${Math.round(cfg.fcmax * 0.7)} ppm`} />
-      </div>
-      <div className="callout warn">
-        <strong>Ojo:</strong> todas las potencias son estimaciones físicas, no medidas. Sirven para
-        comparar sesiones entre sí, pero el test de FTP es lo que convertirá estas zonas en algo con lo
-        que entrenar de verdad.
-      </div>
     </>
   );
 }

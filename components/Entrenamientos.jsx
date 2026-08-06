@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Perfil from './Perfil';
+import PerfilPuerto from './PerfilPuerto';
 import {
   detectarPuertos, repartoZonas, repartoDureza, valorarEntrenamiento,
   TRAMOS_DUREZA, vatiosPuerto, vatiosSalida,
@@ -20,6 +21,7 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
   const [durezaFoco, setDurezaFoco] = useState(null);
   const [mono, setMono] = useState(false);
   const [puertoFoco, setPuertoFoco] = useState(null);
+  const [puertoAbierto, setPuertoAbierto] = useState(null);
   const [criterio, setCriterio] = useState({ minMetros: 500, minDesnivel: 30, minPend: 3 });
   const [cargando, setCargando] = useState(false);
   const [fallo, setFallo] = useState(null);
@@ -38,7 +40,7 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
     return () => { vivo = false; };
   }, [sel, cache, pedirStreams]);
 
-  useEffect(() => { setPuertoFoco(null); setZonaFoco(null); }, [sel]);
+  useEffect(() => { setPuertoFoco(null); setZonaFoco(null); setPuertoAbierto(null); }, [sel]);
 
   const puertos = useMemo(
     () => (streams ? detectarPuertos(streams, criterio) : []),
@@ -282,8 +284,17 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
                     <tr key={i}
                       onMouseEnter={() => setPuertoFoco(i)}
                       onMouseLeave={() => setPuertoFoco(null)}
-                      style={{ cursor: 'pointer', background: puertoFoco === i ? 'var(--card2)' : undefined }}>
-                      <td>Subida {i + 1}</td>
+                      onClick={() => setPuertoAbierto(puertoAbierto === i ? null : i)}
+                      style={{ cursor: 'pointer',
+                        background: puertoAbierto === i ? 'var(--card2)'
+                          : puertoFoco === i ? 'var(--card2)' : undefined }}>
+                      <td>
+                        <span style={{ color: 'var(--ink3)', fontFamily: 'var(--mono)',
+                          fontSize: 11, marginRight: 7 }}>
+                          {puertoAbierto === i ? '▾' : '▸'}
+                        </span>
+                        Subida {i + 1}
+                      </td>
                       <td>{num(p.kmInicio, 1)}–{num(p.kmFin, 1)}</td>
                       <td>{num(p.metros / 1000, 2)} km</td>
                       <td>+{num(p.desnivel, 0)} m</td>
@@ -299,6 +310,17 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
                 </tbody>
               </table>
             </div>
+          )}
+
+          {puertos.length > 0 && (
+            <p className="hint" style={{ marginTop: 10 }}>
+              Pulsa cualquier subida para desplegar su perfil detallado.
+            </p>
+          )}
+
+          {puertoAbierto !== null && puertos[puertoAbierto] && streams && (
+            <PerfilPuerto streams={streams} puerto={puertos[puertoAbierto]}
+              indice={puertoAbierto} cfg={cfg} />
           )}
 
           {puertos.length > 0 && (() => {
