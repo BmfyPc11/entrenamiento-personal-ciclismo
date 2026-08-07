@@ -8,6 +8,33 @@ import {
   distanciaEquivalente, nivelDificultad, TRAMOS_DUREZA, num,
 } from '@/lib/metrics';
 
+/*
+  Traduce el codigo de error del servidor a algo accionable.
+
+  Hasta la v3.3 cualquier fallo aqui decia "No se pudo descargar el
+  trazado" y nada mas. Eso escondio durante versiones un 401 constante por
+  un token mal leido: el mensaje era el mismo tanto si Strava estaba
+  saturada como si el panel mandaba una cabecera rota, y no habia forma de
+  distinguirlos sin mirar el codigo.
+*/
+function motivoGpx(codigo) {
+  switch (codigo) {
+    case 'sin_sesion':
+      return 'Tu sesión de Strava ha caducado. Vuelve a conectar desde arriba.';
+    case 'limite_alcanzado':
+      return 'Strava ha alcanzado su límite de peticiones (100 cada 15 minutos). Espera un cuarto de hora y vuelve a intentarlo.';
+    case 'gpx_vacio':
+      return 'Strava devolvió un trazado vacío para esta ruta. Suele pasar con rutas creadas a mano sin datos de altitud.';
+    case 'strava_404':
+      return 'Strava ya no encuentra esta ruta. ¿La has borrado o hecho privada?';
+    case 'strava_401':
+    case 'strava_403':
+      return 'Strava ha rechazado el permiso para leer esta ruta. Sal y vuelve a conectar la cuenta.';
+    default:
+      return `No se pudo descargar el trazado${codigo ? ` (${codigo})` : ''}.`;
+  }
+}
+
 export default function Rutas({ salidas, cache, excluidas, cfg, zonas }) {
   const [rutas, setRutas] = useState(null);
   const [error, setError] = useState(null);
@@ -59,7 +86,7 @@ export default function Rutas({ salidas, cache, excluidas, cfg, zonas }) {
       const res = await fetch(`/api/rutas/gpx?id=${r.id}`, { cache: 'no-store' });
       const j = await res.json();
       if (j.gpx) setDetalle((d) => ({ ...d, [r.id]: parseGPX(j.gpx) }));
-      else setDetalle((d) => ({ ...d, [r.id]: { error: 'No se pudo descargar el trazado.' } }));
+      else setDetalle((d) => ({ ...d, [r.id]: { error: motivoGpx(j.error) } }));
     } catch (e) {
       setDetalle((d) => ({ ...d, [r.id]: { error: e.message || 'Error al leer el trazado.' } }));
     }
