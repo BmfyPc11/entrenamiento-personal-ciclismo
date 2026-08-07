@@ -58,7 +58,7 @@
 En `package.json`, dentro de `"scripts"`, añadir:
 
 ```json
-"test": "node --test tests/"
+"test": "node --test"
 ```
 
 - [ ] **Step 2: Escribir las pruebas que fallan**
