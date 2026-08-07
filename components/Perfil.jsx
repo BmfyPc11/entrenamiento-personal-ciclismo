@@ -121,13 +121,33 @@ export default function Perfil({
   const T = T0 + banda;
 
   /*
-    Escala vertical con un margen holgado pero sin exagerar. Ajustarla al
-    desnivel exacto hace que cualquier repecho llene la pantalla y
-    parezca un puerto; un 20 % de aire basta para quitar ese dramatismo
-    sin aplastar el relieve.
+    Escala vertical: dos reglas, y manda la que pida mas aire.
+
+    La primera es el 20 % de margen sobre la cota maxima, que es lo que
+    quita dramatismo a las salidas con puerto.
+
+    La segunda es un suelo de rango proporcional a la distancia, y sin
+    ella una salida llana se dibuja fatal: con 137 m de desnivel en 41 km,
+    ajustar el eje a la cota real convierte el temblor del altimetro en
+    una sierra que ocupa toda la pantalla. Una salida del delta tiene que
+    verse plana, porque es plana.
+
+    Al quedarse con el maximo de las dos, cada terreno cae donde debe sin
+    tener que clasificarlo: en montana manda el 20 % y en llano manda el
+    suelo, que es justo el comportamiento de siempre.
   */
-  const techo = redondearTecho(Math.max(maxA, 1) * 1.2);
-  const base = minA >= 0 ? 0 : Math.floor(minA / 50) * 50;
+  const rangoMinimo = Math.max(120, Math.min(400, maxD * 6));
+
+  /* La base baja a cero en cuanto la salida ronda el nivel del mar. Solo
+     sube cuando el recorrido entero transcurre alto, que si no el
+     relieve quedaria aplastado contra el techo. */
+  const base = minA < 0
+    ? Math.floor(minA / 25) * 25
+    : Math.max(0, Math.floor((minA - rangoMinimo * 0.15) / 25) * 25);
+
+  const techo = redondearTecho(
+    base + Math.max((Math.max(maxA, 1) - base) * 1.2, rangoMinimo)
+  );
 
   const Y = (v) => H - B - ((v - base) / (techo - base)) * (H - T - B);
 
