@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { emparejarSegmento, elegirCima } from '../lib/nombres.js';
+import {
+  emparejarSegmento, elegirCima, buscarNombre, guardarNombre,
+} from '../lib/nombres.js';
 
 const ef = (nombre, inicio, fin, categoria = 0) => ({ nombre, inicio, fin, categoria });
 
@@ -100,4 +102,60 @@ test('un nodo sin altitud solo vale por la regla de cercania', () => {
 test('sin altitud de referencia se cae a la regla de cercania', () => {
   assert.equal(elegirCima([cand('Cerca', 100, 300)], null).nombre, 'Cerca');
   assert.equal(elegirCima([cand('Lejos', 900, 300)], null), null);
+});
+
+/* ---------- cache de nombres por proximidad ---------- */
+
+const MONTJUIC = [41.3639, 2.1655];
+
+test('sin entradas no encuentra nada', () => {
+  assert.equal(buscarNombre([], MONTJUIC), null);
+  assert.equal(buscarNombre(null, MONTJUIC), null);
+});
+
+test('encuentra una cima dentro del radio', () => {
+  const e = guardarNombre([], MONTJUIC, 'Montjuïc', 'strava');
+  // unos 90 m mas al norte
+  const r = buscarNombre(e, [41.3647, 2.1655]);
+  assert.equal(r.nombre, 'Montjuïc');
+  assert.equal(r.fuente, 'strava');
+});
+
+test('no encuentra una cima fuera del radio', () => {
+  const e = guardarNombre([], MONTJUIC, 'Montjuïc', 'strava');
+  // unos 2 km al norte
+  assert.equal(buscarNombre(e, [41.3820, 2.1655]), null);
+});
+
+test('el nombre manual gana al automatico en el mismo sitio', () => {
+  let e = guardarNombre([], MONTJUIC, 'Sants-Montjuïc', 'osm');
+  e = guardarNombre(e, [41.3641, 2.1657], 'Montjuïc per Miramar', 'manual');
+  const r = buscarNombre(e, MONTJUIC);
+  assert.equal(r.nombre, 'Montjuïc per Miramar');
+  assert.equal(r.fuente, 'manual');
+});
+
+test('guardar dos veces el mismo sitio y fuente no duplica', () => {
+  let e = guardarNombre([], MONTJUIC, 'Montjuïc', 'strava');
+  e = guardarNombre(e, [41.3640, 2.1656], 'Montjuïc', 'strava');
+  assert.equal(e.length, 1);
+});
+
+test('guardar no muta el array original', () => {
+  const original = [];
+  const e = guardarNombre(original, MONTJUIC, 'Montjuïc', 'strava');
+  assert.equal(original.length, 0);
+  assert.equal(e.length, 1);
+});
+
+test('se cachea tambien el negativo para no repetir la consulta', () => {
+  const e = guardarNombre([], MONTJUIC, null, 'osm');
+  const r = buscarNombre(e, MONTJUIC);
+  assert.notEqual(r, null);
+  assert.equal(r.nombre, null);
+});
+
+test('sin coordenadas no se busca ni se guarda', () => {
+  assert.equal(buscarNombre([{ lat: 1, lon: 1, nombre: 'X', fuente: 'osm' }], null), null);
+  assert.equal(guardarNombre([], null, 'X', 'osm').length, 0);
 });
