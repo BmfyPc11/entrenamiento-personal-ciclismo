@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { emparejarSegmento } from '../lib/nombres.js';
+import { emparejarSegmento, elegirCima } from '../lib/nombres.js';
 
 const ef = (nombre, inicio, fin, categoria = 0) => ({ nombre, inicio, fin, categoria });
 
@@ -50,4 +50,54 @@ test('a igual categoria gana el de mayor solapamiento', () => {
 test('un effort sin nombre no cuenta', () => {
   const r = emparejarSegmento({ inicio: 100, fin: 200 }, [ef('', 100, 200)]);
   assert.equal(r, null);
+});
+
+/* ---------- elegir la cima entre los nodos de OSM ---------- */
+
+const cand = (nombre, distancia, altitud) => ({ nombre, distancia, altitud });
+
+test('sin candidatos no hay cima', () => {
+  assert.equal(elegirCima([], 400), null);
+  assert.equal(elegirCima(null, 400), null);
+});
+
+test('gana la altitud que cuadra aunque este mas lejos', () => {
+  // el caso Sant Pere Martir: el pico cercano no cuadra en altura
+  const r = elegirCima([
+    cand('Turó del Temple', 360, 262),
+    cand('Sant Pere Màrtir', 709, 389),
+  ], 385);
+  assert.equal(r.nombre, 'Sant Pere Màrtir');
+});
+
+test('entre dos que cuadran en altitud gana el mas cercano', () => {
+  const r = elegirCima([
+    cand('Lejos', 800, 400),
+    cand('Cerca', 120, 395),
+  ], 398);
+  assert.equal(r.nombre, 'Cerca');
+});
+
+test('sin altitud que cuadre vale el mas cercano dentro de 300 m', () => {
+  const r = elegirCima([cand('Vecino', 250, 120)], 400);
+  assert.equal(r.nombre, 'Vecino');
+});
+
+test('sin altitud que cuadre y lejos de 300 m no hay nombre', () => {
+  assert.equal(elegirCima([cand('Vecino', 450, 120)], 400), null);
+});
+
+test('los nodos sin nombre se descartan', () => {
+  assert.equal(elegirCima([cand('', 50, 400)], 400), null);
+  assert.equal(elegirCima([cand(null, 50, 400)], 400), null);
+});
+
+test('un nodo sin altitud solo vale por la regla de cercania', () => {
+  assert.equal(elegirCima([cand('Sin ele', 200, null)], 400).nombre, 'Sin ele');
+  assert.equal(elegirCima([cand('Sin ele', 500, null)], 400), null);
+});
+
+test('sin altitud de referencia se cae a la regla de cercania', () => {
+  assert.equal(elegirCima([cand('Cerca', 100, 300)], null).nombre, 'Cerca');
+  assert.equal(elegirCima([cand('Lejos', 900, 300)], null), null);
 });
