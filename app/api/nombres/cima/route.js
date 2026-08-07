@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { elegirCima } from '@/lib/nombres';
+import { elegirCima, normalizarNombre } from '@/lib/nombres';
 import { distanciaGeo } from '@/lib/metrics';
 
 export const dynamic = 'force-dynamic';
@@ -61,5 +61,5 @@ export async function GET(req) {
   }));
 
   const elegida = elegirCima(candidatos, alt);
-  return NextResponse.json({ nombre: elegida ? elegida.nombre : null });
+  return NextResponse.json({ nombre: elegida ? normalizarNombre(elegida.nombre) : null });
 }

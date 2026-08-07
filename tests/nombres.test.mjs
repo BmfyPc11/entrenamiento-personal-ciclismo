@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  emparejarSegmento, elegirCima, buscarNombre, guardarNombre,
+  emparejarSegmento, elegirCima, buscarNombre, guardarNombre, normalizarNombre,
 } from '../lib/nombres.js';
 
 const ef = (nombre, inicio, fin, categoria = 0) => ({ nombre, inicio, fin, categoria });
@@ -176,4 +176,55 @@ test('se cachea tambien el negativo para no repetir la consulta', () => {
 test('sin coordenadas no se busca ni se guarda', () => {
   assert.equal(buscarNombre([{ lat: 1, lon: 1, nombre: 'X', fuente: 'osm' }], null), null);
   assert.equal(guardarNombre([], null, 'X', 'osm').length, 0);
+});
+
+/* ---------- presentacion del nombre ---------- */
+
+test('todo en minusculas se capitaliza con criterio', () => {
+  assert.equal(normalizarNombre('montjuïc per miramar'), 'Montjuïc per Miramar');
+  assert.equal(normalizarNombre('alt del rat penat'), 'Alt del Rat Penat');
+  assert.equal(normalizarNombre('sant pere màrtir'), 'Sant Pere Màrtir');
+});
+
+test('todo en mayusculas se recasa', () => {
+  assert.equal(normalizarNombre('MONTJUIC PER MIRAMAR'), 'Montjuic per Miramar');
+  assert.equal(normalizarNombre('SUBIDA A VALLVIDRERA'), 'Subida a Vallvidrera');
+});
+
+test('los apostrofos se resuelven bien', () => {
+  assert.equal(normalizarNombre('creu d\'olorda'), 'Creu d\'Olorda');
+  assert.equal(normalizarNombre('CREU D\'OLORDA'), 'Creu d\'Olorda');
+  // si abre el nombre, el prefijo va en mayuscula
+  assert.equal(normalizarNombre('d\'olorda per la creu'), 'D\'Olorda per la Creu');
+});
+
+/*
+  Lo mas importante: un nombre ya bien escrito no se toca. Sin un
+  diccionario de toponimos no hay forma de saber que "Miramar" es un
+  nombre propio, asi que reformatear lo que ya esta bien solo puede
+  empeorarlo.
+*/
+test('un nombre ya bien escrito se respeta', () => {
+  assert.equal(normalizarNombre('Montjuïc per Miramar'), 'Montjuïc per Miramar');
+  assert.equal(normalizarNombre('Alt del Rat Penat'), 'Alt del Rat Penat');
+  assert.equal(normalizarNombre('Coll de la Creu d\'Ordal'), 'Coll de la Creu d\'Ordal');
+});
+
+test('a un nombre mixto solo se le sube la primera letra', () => {
+  assert.equal(normalizarNombre('subida a Montjuïc'), 'Subida a Montjuïc');
+});
+
+test('los acronimos cortos en mayusculas se conservan', () => {
+  assert.equal(normalizarNombre('KOM BCN'), 'KOM BCN');
+});
+
+test('se limpian los espacios sobrantes', () => {
+  assert.equal(normalizarNombre('  montjuïc   per  miramar '), 'Montjuïc per Miramar');
+});
+
+test('lo que no es texto util se devuelve tal cual', () => {
+  assert.equal(normalizarNombre(''), null);
+  assert.equal(normalizarNombre('   '), null);
+  assert.equal(normalizarNombre(null), null);
+  assert.equal(normalizarNombre(undefined), undefined);
 });
