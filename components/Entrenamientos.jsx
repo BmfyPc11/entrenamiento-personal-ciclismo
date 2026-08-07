@@ -8,6 +8,9 @@ import {
   TRAMOS_DUREZA, vatiosPuerto, vatiosSalida,
   num, duracion, fechaLarga, kmh, km, metrosPorKm,
 } from '@/lib/metrics';
+import {
+  emparejarSegmento, buscarNombre, guardarNombre, leerCache, escribirCache,
+} from '@/lib/nombres';
 
 export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, pedirStreams }) {
   const ordenadas = useMemo(
@@ -54,6 +57,68 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
   const dureza = useMemo(() => (streams ? repartoDureza(streams) : null), [streams]);
 
   const tieneFC = !!(streams && streams.fc);
+
+  /* ---------- nombres reales de las subidas ---------- */
+
+  const [cacheNombres, setCacheNombres] = useState(() => leerCache());
+  const [segmentos, setSegmentos] = useState({});   // id de salida -> efforts
+
+  /*
+    Los segmentos se piden solo de la salida abierta. El detalle de
+    actividad cuesta una peticion, y el limite de Strava son 100 cada
+    quince minutos: traerlos de todas las salidas al entrar dejaria el
+    panel sin cuota para lo demas.
+  */
+  useEffect(() => {
+    if (!sel || segmentos[sel] !== undefined) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/nombres/segmentos?id=${sel}`, { cache: 'no-store' });
+        const j = await r.json();
+        if (!cancelado) setSegmentos((s) => ({ ...s, [sel]: j.segmentos || [] }));
+      } catch {
+        if (!cancelado) setSegmentos((s) => ({ ...s, [sel]: [] }));
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [sel, segmentos]);
+
+  /*
+    Precedencia: lo que hayas escrito tu, luego el segmento de Strava, y
+    si nada de eso hay, el numero de siempre.
+  */
+  const nombresPuertos = useMemo(() => {
+    const efforts = sel ? segmentos[sel] : null;
+    return puertos.map((p, i) => {
+      const cima = streams?.latlng ? streams.latlng[p.fin] : null;
+      const guardado = buscarNombre(cacheNombres, cima);
+      if (guardado?.fuente === 'manual' && guardado.nombre) return guardado.nombre;
+      const deStrava = efforts ? emparejarSegmento(p, efforts) : null;
+      return deStrava || guardado?.nombre || `Subida ${i + 1}`;
+    });
+  }, [puertos, segmentos, sel, streams, cacheNombres]);
+
+  /* Se guardan para que el resto de pestanas los aprovechen sin volver
+     a gastar peticiones. */
+  useEffect(() => {
+    const efforts = sel ? segmentos[sel] : null;
+    if (!efforts || !efforts.length || !streams?.latlng) return;
+
+    let nueva = cacheNombres, cambio = false;
+    puertos.forEach((p) => {
+      const cima = streams.latlng[p.fin];
+      if (!cima) return;
+      const n = emparejarSegmento(p, efforts);
+      if (!n) return;
+      const ya = buscarNombre(nueva, cima);
+      if (ya?.fuente === 'strava' && ya.nombre === n) return;
+      nueva = guardarNombre(nueva, cima, n, 'strava');
+      cambio = true;
+    });
+
+    if (cambio) { setCacheNombres(nueva); escribirCache(nueva); }
+  }, [segmentos, sel, puertos, streams, cacheNombres]);
 
   if (!ordenadas.length) return <p className="hint">No hay salidas en bicicleta para mostrar.</p>;
 
@@ -288,7 +353,7 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
                           fontSize: 11, marginRight: 7 }}>
                           {puertoAbierto === i ? '▾' : '▸'}
                         </span>
-                        Subida {i + 1}
+                        {nombresPuertos[i]}
                       </td>
                       <td>{num(p.kmInicio, 1)}–{num(p.kmFin, 1)}</td>
                       <td>{num(p.metros / 1000, 2)} km</td>
@@ -315,7 +380,8 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
 
           {puertoAbierto !== null && puertos[puertoAbierto] && streams && (
             <PerfilPuerto streams={streams} puerto={puertos[puertoAbierto]}
-              indice={puertoAbierto} cfg={cfg} zonas={zonas} />
+              indice={puertoAbierto} cfg={cfg} zonas={zonas}
+              nombre={nombresPuertos[puertoAbierto]} />
           )}
 
           {puertos.length > 0 && (() => {
