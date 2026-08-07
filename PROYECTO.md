@@ -34,14 +34,9 @@ Especificación cerrada, lista para implementar:
 - Sustituye por completo a `components/Evolucion.jsx` actual (que analiza
   la salida entera, no por tramos, y por eso mezcla terrenos distintos)
 
-### Pendiente: Edición manual de nombres de ascensiones
-- Botón "Renombrar" o campo editable en la tabla de "Mis ascensiones"
-- Persistencia en localStorage por ahora (futuro: servidor para sincronizar
-  entre dispositivos)
-
-### Pendiente: Arreglar renombrado automático por Nominatim
-- Ahora mismo la petición se hace desde el cliente y falla por CORS
-- Solución: mover a un endpoint `/api/nombres?lat=&lon=` server-side en Next.js
+### Pendiente: sincronizar los nombres manuales entre dispositivos
+Los nombres que escribes a mano viven en localStorage, así que son de este
+navegador. Para que viajen hace falta guardarlos en servidor.
 
 ## Herramientas y setup
 - Stack: Next.js, Vercel, GitHub, Strava OAuth API (scope `read_all`)
@@ -54,7 +49,8 @@ Especificación cerrada, lista para implementar:
 ```bash
 npm install
 npm run dev        # desarrollo local
-npm run build      # compilación de verificación
+npm test           # pruebas (node --test, sin dependencias)
+npm run build      # compilación de verificación (con el dev PARADO)
 git add . && git commit -m "vX.X" && git push
 ```
 
@@ -82,6 +78,24 @@ git add . && git commit -m "vX.X" && git push
 - Hardware: Garmin (FC + altímetro barométrico)
 
 ## Aprendizajes clave (para no repetir errores)
+- Nominatim responde direcciones, no relieve: preguntado por cimas reales de
+  la zona acierta 1 de 4 (devuelve el distrito o el municipio). Para nombrar
+  puertos sirven los segmentos de Strava y los nodos de cima de OSM vía
+  Overpass, no la geocodificación inversa
+- Los segmentos de Strava son malos para medir un puerto pero son la mejor
+  fuente para nombrarlo: es como lo llama un ciclista. Hay que exigir que el
+  segmento sea la misma subida (intersección sobre unión) y no que la roce,
+  o un sprint de 200 m se queda con el nombre de un puerto de 4 km
+- Los identificadores de Strava son enteros de 64 bits y JSON.parse los
+  redondea. Hay que entrecomillarlos en el texto antes de parsear, o dos
+  rutas distintas acaban con el mismo id
+- Overpass es un servicio de voluntarios y falla a menudo (2 de cada 6
+  consultas en las pruebas). Todo lo que dependa de él tiene que degradar
+  a "Subida N" sin romperse, y cachear también los resultados negativos
+- Nunca ejecutar `npm run build` con `next dev` levantado: el build machaca
+  `.next` y el servidor de desarrollo queda apuntando a chunks que ya no
+  existen ("Cannot find module './948.js'"). Para verificar en caliente,
+  `npm test`, que no toca `.next`
 - Los segmentos de Strava son poco fiables para analizar puertos: usar
   siempre streams propios (distancia/altitud), no datos de terceros
 - A resoluciones finas (50m) el ruido del altímetro es real y hay que

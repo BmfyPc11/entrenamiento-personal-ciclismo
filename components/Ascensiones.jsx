@@ -4,42 +4,21 @@ import { useEffect, useMemo, useState } from 'react';
 import PerfilPuerto from './PerfilPuerto';
 import {
   agruparAscensiones, distanciaEquivalente, nivelDificultadPuerto,
-  vatiosPuerto, num, duracion, fechaCorta,
+  vatiosPuerto, num, duracion, fechaCorta, distanciaGeo, categoriaPuerto,
 } from '@/lib/metrics';
-
-/*
-  Consulta a Nominatim (OpenStreetMap) el nombre del lugar donde corona
-  cada ascension.
-
-  Se hace de una en una y con pausa de un segundo porque es la condicion
-  de uso del servicio publico. Con pocas ascensiones el retardo es
-  imperceptible; si algun dia son decenas, conviene revisar esto.
-*/
-async function nombrarCima(lat, lon) {
-  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2` +
-    `&lat=${lat}&lon=${lon}&zoom=15&addressdetails=1&accept-language=ca,es`;
-  const r = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!r.ok) throw new Error('nominatim');
-  const j = await r.json();
-  const a = j.address || {};
-
-  /*
-    Se prefieren los topónimos de relieve y lugar sobre el nombre de la
-    calle: "Sant Pere Màrtir" dice mucho más que "Carretera de Vallvidrera".
-    Si solo hay via, se descarta y se deja el nombre generico, porque un
-    nombre de calle como titulo de una ascension confunde mas que ayuda.
-  */
-  return a.peak || a.natural || a.hamlet || a.isolated_dwelling ||
-    a.neighbourhood || a.suburb || a.village || a.town || a.city_district ||
-    a.municipality || null;
-}
+import {
+  buscarNombre, guardarNombre, leerCache, escribirCache,
+} from '@/lib/nombres';
 
 export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, pedirStreams }) {
   const [abierta, setAbierta] = useState(null);
-  const [nombres, setNombres] = useState({});
   const [buscando, setBuscando] = useState(false);
+  const [progreso, setProgreso] = useState({ hechas: 0, total: 0 });
   const [cargando, setCargando] = useState(false);
   const [orden, setOrden] = useState('dificultad');
+  const [cacheNombres, setCacheNombres] = useState(() => leerCache());
+  const [editando, setEditando] = useState(null);
+  const [borrador, setBorrador] = useState('');
 
   const grupos = useMemo(
     () => agruparAscensiones(salidas, cache, excluidas),
@@ -68,31 +47,76 @@ export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, ped
     setCargando(false);
   };
 
-  /* Nombres reales de las cimas, uno por segundo. */
-  useEffect(() => {
-    const pendientes = grupos.filter((g) => g.cima && nombres[g.id] === undefined);
-    if (!pendientes.length || buscando) return;
+  /*
+    Altitud de la cima del grupo.
 
-    let cancelado = false;
-    (async () => {
-      setBuscando(true);
-      for (const g of pendientes) {
-        if (cancelado) break;
-        try {
-          const n = await nombrarCima(g.cima[0], g.cima[1]);
-          if (!cancelado) setNombres((v) => ({ ...v, [g.id]: n || null }));
-        } catch {
-          if (!cancelado) setNombres((v) => ({ ...v, [g.id]: null }));
-        }
-        await new Promise((r) => setTimeout(r, 1100));
+    agruparAscensiones guarda las coordenadas de la cima pero no su
+    altura, asi que se recupera aqui: cada grupo apunta con streamsId y
+    puertoRef a la salida y al puerto de referencia. Sin este dato la
+    eleccion de cima pierde su mejor criterio de desempate y se queda en
+    "el nodo mas cercano", que es justo lo que da nombres equivocados.
+  */
+  const altitudCima = (g) => {
+    const st = cache?.[g.streamsId];
+    const i = g.puertoRef?.fin;
+    const a = st?.altitud;
+    return a && i != null && a[i] != null ? Math.round(a[i]) : null;
+  };
+
+  const sinNombre = grupos.filter(
+    (g) => g.cima && buscarNombre(cacheNombres, g.cima) === null
+  );
+
+  /*
+    Nunca automatico. Overpass es un servicio de voluntarios y en las
+    pruebas fallo dos de cada seis consultas: dispararlas solo por entrar
+    en la pestana seria abusar, y ademas daria una lista a medias sin que
+    se entienda por que.
+  */
+  const buscarNombres = async () => {
+    setBuscando(true);
+    setProgreso({ hechas: 0, total: sinNombre.length });
+
+    let nueva = cacheNombres;
+    for (let i = 0; i < sinNombre.length; i++) {
+      const g = sinNombre[i];
+      try {
+        const a = altitudCima(g);
+        const alt = a != null ? `&alt=${a}` : '';
+        const r = await fetch(
+          `/api/nombres/cima?lat=${g.cima[0]}&lon=${g.cima[1]}${alt}`,
+          { cache: 'no-store' }
+        );
+        const j = await r.json();
+        /* Se guarda tambien cuando no hay nombre: asi no se vuelve a
+           preguntar por una cima que OSM no conoce. */
+        nueva = guardarNombre(nueva, g.cima, j.nombre || null, 'osm');
+      } catch {
+        nueva = guardarNombre(nueva, g.cima, null, 'osm');
       }
-      if (!cancelado) setBuscando(false);
-    })();
+      setCacheNombres(nueva);
+      escribirCache(nueva);
+      setProgreso({ hechas: i + 1, total: sinNombre.length });
+      await new Promise((r) => setTimeout(r, 1100));
+    }
+    setBuscando(false);
+  };
 
-    return () => { cancelado = true; };
-  }, [grupos, nombres, buscando]);
+  const nombreDe = (g, i) =>
+    buscarNombre(cacheNombres, g.cima)?.nombre || `Ascenso ${i + 1}`;
 
-  const nombreDe = (g, i) => nombres[g.id] || `Ascenso ${i + 1}`;
+  /* Guardar vacio equivale a volver al nombre automatico. */
+  const guardarManual = (g) => {
+    const limpio = borrador.trim();
+    const nueva = limpio
+      ? guardarNombre(cacheNombres, g.cima, limpio, 'manual')
+      : cacheNombres.filter(
+          (e) => !(e.fuente === 'manual' && distanciaGeo([e.lat, e.lon], g.cima) < 250)
+        );
+    setCacheNombres(nueva);
+    escribirCache(nueva);
+    setEditando(null);
+  };
 
   return (
     <>
@@ -110,6 +134,22 @@ export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, ped
           <div style={{ marginTop: 12 }}>
             <button onClick={analizarTodas} disabled={cargando}>
               {cargando ? 'Analizando…' : `Analizar las ${sinAnalizar.length} pendientes`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {sinNombre.length > 0 && (
+        <div className="callout">
+          <strong>{sinNombre.length} subidas sin nombre.</strong> Se consultan las cimas en
+          OpenStreetMap, de una en una y con pausa, porque es un servicio gratuito mantenido
+          por voluntarios. Las que no tengan topónimo se quedan como «Ascenso N», y siempre
+          puedes ponerles nombre tú pulsando sobre él.
+          <div style={{ marginTop: 12 }}>
+            <button onClick={buscarNombres} disabled={buscando}>
+              {buscando
+                ? `Buscando… ${progreso.hechas} de ${progreso.total}`
+                : `Buscar los ${sinNombre.length} nombres`}
             </button>
           </div>
         </div>
@@ -151,7 +191,46 @@ export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, ped
                           fontSize: 11, marginRight: 7 }}>
                           {abierta === g.id ? '▾' : '▸'}
                         </span>
-                        {nombreDe(g, i)}
+                        {editando === g.id ? (
+                          <input
+                            autoFocus
+                            value={borrador}
+                            onChange={(e) => setBorrador(e.target.value)}
+                            onBlur={() => guardarManual(g)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') guardarManual(g);
+                              if (e.key === 'Escape') setEditando(null);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            placeholder="Vacío para volver al automático"
+                            style={{ width: '100%', maxWidth: 260 }}
+                          />
+                        ) : (
+                          <span
+                            onClick={(e) => {
+                              /* La fila entera despliega el detalle: sin
+                                 esto, editar el nombre lo abriria a la vez. */
+                              e.stopPropagation();
+                              if (!g.cima) return;
+                              setEditando(g.id);
+                              setBorrador(buscarNombre(cacheNombres, g.cima)?.nombre || '');
+                            }}
+                            title={g.cima ? 'Pulsa para renombrar' : 'Sin coordenadas: no se puede nombrar'}
+                            style={{ cursor: g.cima ? 'text' : 'default',
+                              borderBottom: g.cima ? '1px dotted var(--line2)' : undefined }}>
+                            {nombreDe(g, i)}
+                          </span>
+                        )}
+                        {(() => {
+                          const c = categoriaPuerto(g.metros, g.pendiente);
+                          return (
+                            <span title={`Coeficiente ${num(c.coef, 0)}`}
+                              style={{ color: c.color, fontFamily: 'var(--mono)',
+                                fontSize: 11.5, marginLeft: 7 }}>
+                              ({c.nombre})
+                            </span>
+                          );
+                        })()}
                         {g.sinCoordenadas && (
                           <span className="tag" title="Sin coordenadas: agrupada por forma">
                             sin GPS
@@ -172,12 +251,10 @@ export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, ped
             </table>
           </div>
 
-          {buscando && (
-            <p className="hint" style={{ marginTop: 10 }}>
-              Identificando los nombres de las cimas en OpenStreetMap, de una en una para respetar
-              su límite de uso. Las que no tengan topónimo se quedan como «Ascenso N».
-            </p>
-          )}
+          <p className="hint" style={{ marginTop: 10 }}>
+            Pulsa sobre el nombre de cualquier subida para escribir el tuyo. El que pongas
+            manda sobre el automático y se conserva aunque se vuelvan a buscar los nombres.
+          </p>
 
           {abierta && (() => {
             const g = ordenadas.find((x) => x.id === abierta);

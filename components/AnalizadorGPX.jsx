@@ -1,10 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Perfil from './Perfil';
 import PerfilPuerto from './PerfilPuerto';
 import { parseGPX, referenciasCiclista, analizarRuta } from '@/lib/gpx';
-import { TRAMOS_DUREZA, num } from '@/lib/metrics';
+import { TRAMOS_DUREZA, num, categoriaPuerto } from '@/lib/metrics';
+import {
+  buscarNombre, guardarNombre, leerCache, escribirCache,
+} from '@/lib/nombres';
 
 export default function AnalizadorGPX({ salidas, cache, excluidas, cfg, zonas }) {
   const [datos, setDatos] = useState(null);
@@ -24,6 +27,48 @@ export default function AnalizadorGPX({ salidas, cache, excluidas, cfg, zonas })
     () => (datos ? analizarRuta(datos, ref, cfg) : null),
     [datos, ref, cfg]
   );
+
+  const [cacheNombres, setCacheNombres] = useState(() => leerCache());
+
+  /*
+    Un GPX subido no se ha rodado con Strava, asi que no hay segmentos
+    que consultar: la unica fuente es la cima de OSM. De una en una y
+    con pausa, porque Overpass lo mantienen voluntarios.
+  */
+  useEffect(() => {
+    if (!an?.puertos?.length || !datos?.puntos) return;
+    let cancelado = false;
+
+    (async () => {
+      let nueva = cacheNombres;
+      for (const p of an.puertos) {
+        if (cancelado) break;
+        const pt = datos.puntos[p.fin];
+        if (!pt) continue;
+        const cima = [pt.lat, pt.lon];
+        if (buscarNombre(nueva, cima)) continue;
+        try {
+          const r = await fetch(
+            `/api/nombres/cima?lat=${pt.lat}&lon=${pt.lon}&alt=${Math.round(pt.ele)}`,
+            { cache: 'no-store' });
+          const j = await r.json();
+          nueva = guardarNombre(nueva, cima, j.nombre || null, 'osm');
+        } catch {
+          nueva = guardarNombre(nueva, cima, null, 'osm');
+        }
+        if (!cancelado) { setCacheNombres(nueva); escribirCache(nueva); }
+        await new Promise((r) => setTimeout(r, 1100));
+      }
+    })();
+
+    return () => { cancelado = true; };
+  }, [an, datos, cacheNombres]);
+
+  const nombrePuerto = (p, i) => {
+    const pt = datos?.puntos?.[p.fin];
+    const n = pt ? buscarNombre(cacheNombres, [pt.lat, pt.lon])?.nombre : null;
+    return n || `Subida ${i + 1}`;
+  };
 
   const leer = (file) => {
     if (!file) return;
@@ -207,7 +252,17 @@ export default function AnalizadorGPX({ salidas, cache, excluidas, cfg, zonas })
                             fontSize: 11, marginRight: 7 }}>
                             {abierto === i ? '▾' : '▸'}
                           </span>
-                          Subida {i + 1}
+                          {nombrePuerto(p, i)}
+                          {(() => {
+                            const c = categoriaPuerto(p.metros, p.pendiente);
+                            return (
+                              <span title={`Coeficiente ${num(c.coef, 0)}`}
+                                style={{ color: c.color, fontFamily: 'var(--mono)',
+                                  fontSize: 11.5, marginLeft: 7 }}>
+                                ({c.nombre})
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td>{num(p.kmInicio, 1)}–{num(p.kmFin, 1)}</td>
                         <td>{num(p.metros / 1000, 2)} km</td>
@@ -224,7 +279,8 @@ export default function AnalizadorGPX({ salidas, cache, excluidas, cfg, zonas })
               </p>
               {abierto !== null && an.puertos[abierto] && (
                 <PerfilPuerto streams={datos.streams} puerto={an.puertos[abierto]}
-                  indice={abierto} cfg={cfg} zonas={zonas} />
+                  indice={abierto} cfg={cfg} zonas={zonas}
+                  nombre={nombrePuerto(an.puertos[abierto], abierto)} />
               )}
             </>
           )}

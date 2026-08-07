@@ -228,3 +228,53 @@ test('lo que no es texto util se devuelve tal cual', () => {
   assert.equal(normalizarNombre(null), null);
   assert.equal(normalizarNombre(undefined), undefined);
 });
+
+/* ---------- correcciones de forma ---------- */
+
+test('el guion entre dos lugares queda con aire y en mayuscula', () => {
+  assert.equal(normalizarNombre('Sant Boi-Montjuic'), 'Sant Boi - Montjuic');
+  assert.equal(normalizarNombre('sant boi-montjuic'), 'Sant Boi - Montjuic');
+  assert.equal(normalizarNombre('MONTJUIC-TIBIDABO'), 'Montjuic - Tibidabo');
+});
+
+test('tras el separador se capitaliza aunque sea un articulo', () => {
+  assert.equal(normalizarNombre('barcelona-el prat'), 'Barcelona - El Prat');
+});
+
+/*
+  El riesgo de separar por guion: "Vila-real" es un toponimo unico, no
+  un recorrido. Se distingue porque tras el guion no viene mayuscula y
+  ningun lado tiene espacios.
+*/
+test('una palabra compuesta no se parte', () => {
+  assert.equal(normalizarNombre('vila-real'), 'Vila-real');
+  assert.equal(normalizarNombre('Vila-real'), 'Vila-real');
+});
+
+test('el guion ya bien espaciado se respeta', () => {
+  assert.equal(normalizarNombre('Sant Boi - Montjuic'), 'Sant Boi - Montjuic');
+  assert.equal(normalizarNombre('Sant Boi  -  Montjuic'), 'Sant Boi - Montjuic');
+});
+
+test('los guiones largos y repetidos se normalizan', () => {
+  assert.equal(normalizarNombre('Sant Boi — Montjuic'), 'Sant Boi - Montjuic');
+  assert.equal(normalizarNombre('Sant Boi--Montjuic'), 'Sant Boi - Montjuic');
+});
+
+test('se quitan los adornos de los extremos', () => {
+  assert.equal(normalizarNombre('*** Montjuic ***'), 'Montjuic');
+  assert.equal(normalizarNombre('"Montjuic"'), 'Montjuic');
+  assert.equal(normalizarNombre('🔥 montjuic 🔥'), 'Montjuic');
+});
+
+test('los signos repetidos se reducen a uno', () => {
+  assert.equal(normalizarNombre('SUBIDA FINAL!!!'), 'Subida Final!');
+});
+
+test('la puntuacion recupera su espaciado', () => {
+  assert.equal(normalizarNombre('Montjuic ,por Miramar'), 'Montjuic, por Miramar');
+});
+
+test('los parentesis pierden el aire interior', () => {
+  assert.equal(normalizarNombre('Montjuic ( por Miramar )'), 'Montjuic (por Miramar)');
+});
