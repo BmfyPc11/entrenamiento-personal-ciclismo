@@ -1,88 +1,118 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { evolucionPorTerreno, num, fechaCorta } from '@/lib/metrics';
+import { evolucionPorZonaTerreno, num, fechaCorta } from '@/lib/metrics';
 
 /*
-  Evolucion de velocidad y pulsaciones dentro de cada tipo de terreno.
+  Evolucion de velocidad por zona de pulso dentro de cada terreno.
 
-  La comparacion solo tiene sentido entre salidas parecidas: 20 km/h en el
-  delta y 20 km/h subiendo Montjuic no son el mismo esfuerzo, y mezclarlos
-  en una linea unica produce un dibujo que no significa nada. Por eso las
-  salidas se agrupan primero por desnivel por kilometro.
+  La comparacion solo significa algo entre esfuerzos equivalentes. Hasta la
+  v3.2 el agrupamiento era por salida entera, y eso mezclaba dentro de una
+  misma linea el llaneo del delta con la subida a Montjuic. Ahora cada
+  salida se trocea en tramos y cada tramo cuenta en su propio terreno y en
+  su propia zona: lo que se compara es homogeneo.
 */
-export default function Evolucion({ salidas, excluidas }) {
-  const grupos = useMemo(() => evolucionPorTerreno(salidas, excluidas), [salidas, excluidas]);
+export default function Evolucion({ salidas, cache, zonas, excluidas, fondo }) {
+  const terrenos = useMemo(
+    () => evolucionPorZonaTerreno(salidas, cache, zonas, excluidas),
+    [salidas, cache, zonas, excluidas]
+  );
+
   const [sel, setSel] = useState(null);
+  const activo = (sel && terrenos.find((t) => t.id === sel))
+    || terrenos.find((t) => t.total > 0)
+    || terrenos[0];
 
-  const conDatos = grupos.filter((g) => g.conFC >= 2);
-  const activo = sel
-    ? grupos.find((g) => g.id === sel)
-    : (conDatos[0] || grupos[0]);
-
-  if (!grupos.length) {
-    return (
-      <>
-        <h2>Evolución por tipo de terreno</h2>
-        <div className="callout">Sin salidas en el periodo no hay evolución que medir.</div>
-      </>
-    );
-  }
+  const hayDatos = terrenos.some((t) => t.total > 0);
 
   return (
     <>
-      <h2>Evolución por tipo de terreno</h2>
+      <h2>Evolución por zona y terreno</h2>
       <p className="hint">
-        Cada terreno se mide por separado, porque la misma velocidad significa cosas distintas en
-        llano y en montaña. El dato que importa es la eficiencia: metros recorridos por cada
-        latido. Si sube, avanzas más con el mismo esfuerzo del corazón.
+        Cada salida se trocea en tramos de 100 m. Cada tramo cuenta en el terreno que le
+        corresponde por su propia pendiente y en la zona de pulso en la que ibas en ese
+        momento. Así lo que compara la gráfica son esfuerzos equivalentes: lo que rindes
+        hoy en una zona y un terreno frente a lo que rendías antes en esa misma
+        combinación.
       </p>
 
-      <div className="chips" style={{ marginBottom: 14 }}>
-        {grupos.map((g) => (
-          <button key={g.id} aria-pressed={activo?.id === g.id} onClick={() => setSel(g.id)}
-            style={activo?.id === g.id
-              ? { background: g.color, borderColor: g.color, color: '#0E1116' } : null}>
-            <i style={{ background: g.color }} />
-            {g.nombre} · {g.puntos.length}
-          </button>
-        ))}
-      </div>
-
-      {activo && <Grupo g={activo} />}
-
-      {conDatos.length === 0 && (
+      {!hayDatos ? (
         <div className="callout">
-          <strong>Todavía no hay dos salidas con pulsómetro en un mismo terreno.</strong> La
-          comparación de eficiencia necesita al menos dos para trazar una tendencia. Según vayas
-          grabando con el Garmin, esta pestaña se vuelve mucho más útil.
+          {fondo?.activo
+            ? <>Analizando salidas… <strong>{fondo.hechas} de {fondo.total}</strong>. La
+              gráfica aparece en cuanto haya detalle suficiente.</>
+            : <>Todavía no hay ninguna salida con pulsómetro analizada. Esta vista necesita
+              el detalle completo (altitud y pulso segundo a segundo), no solo los totales
+              de cada salida.</>}
         </div>
+      ) : (
+        <>
+          <div className="chips" style={{ marginBottom: 14 }}>
+            {terrenos.map((t) => (
+              <button key={t.id} aria-pressed={activo?.id === t.id} onClick={() => setSel(t.id)}
+                style={activo?.id === t.id
+                  ? { background: t.color, borderColor: t.color, color: '#0E1116' } : null}>
+                <i style={{ background: t.color }} />
+                {t.nombre} · {t.total}
+              </button>
+            ))}
+          </div>
+
+          {activo && <Terreno t={activo} />}
+
+          {fondo?.activo && (
+            <div className="callout">
+              Todavía se están trayendo salidas de Strava ({fondo.hechas} de {fondo.total}).
+              La gráfica se completará sola.
+            </div>
+          )}
+        </>
       )}
     </>
   );
 }
 
-function Grupo({ g }) {
-  const pts = g.puntos;
-  const conFC = pts.filter((p) => p.fc);
+function Terreno({ t }) {
+  /* Solo se traza linea con dos puntos o mas: con uno no hay tendencia que dibujar. */
+  const conLinea = t.zonas.filter((z) => z.puntos.length >= 2);
+  const escasas = t.zonas.filter((z) => z.puntos.length < 2);
+  const todos = t.zonas.flatMap((z) => z.puntos.map((p) => ({ ...p, zona: z })));
+
+  if (!todos.length) {
+    return (
+      <div className="callout">
+        En {t.nombre.toLowerCase()} todavía no hay ningún tramo acumulado. Si no sueles
+        pasar por este terreno, es lo esperable.
+      </div>
+    );
+  }
 
   const W = 760, H = 260;
-  const mIzq = 46, mDer = 46, mSup = 22, mInf = 38;
+  const mIzq = 46, mDer = 22, mSup = 22, mInf = 38;
   const ancho = W - mIzq - mDer, alto = H - mSup - mInf;
 
-  const vMin = Math.min(...pts.map((p) => p.velocidad)) * 0.92;
-  const vMax = Math.max(...pts.map((p) => p.velocidad)) * 1.08;
-  const fMin = conFC.length ? Math.min(...conFC.map((p) => p.fc)) - 8 : 0;
-  const fMax = conFC.length ? Math.max(...conFC.map((p) => p.fc)) + 8 : 1;
+  /*
+    El eje X va por fecha real, no por indice. Cada zona tiene un numero
+    distinto de puntos, y con indices las series quedarian desalineadas
+    entre si: el tercer punto de Z2 y el tercero de Z4 se pintarian en la
+    misma vertical aunque fueran de meses distintos.
+  */
+  const fechas = todos.map((p) => new Date(p.fecha).getTime());
+  const tMin = Math.min(...fechas), tMax = Math.max(...fechas);
+  const vels = todos.map((p) => p.velocidad);
+  const vMin = Math.min(...vels) * 0.92, vMax = Math.max(...vels) * 1.08;
 
-  const x = (i, n) => mIzq + (n <= 1 ? ancho / 2 : (i / (n - 1)) * ancho);
-  const yV = (v) => mSup + alto - ((v - vMin) / (vMax - vMin)) * alto;
-  const yF = (f) => mSup + alto - ((f - fMin) / (fMax - fMin)) * alto;
+  const x = (f) => (tMax === tMin
+    ? mIzq + ancho / 2
+    : mIzq + ((new Date(f).getTime() - tMin) / (tMax - tMin)) * ancho);
+  const y = (v) => (vMax === vMin
+    ? mSup + alto / 2
+    : mSup + alto - ((v - vMin) / (vMax - vMin)) * alto);
 
-  const linea = (arr, fy, fv) => arr.map((p, i) =>
-    `${i ? 'L' : 'M'} ${x(i, arr.length)} ${fy(fv(p))}`).join(' ');
-
-  const t = g.tendencia;
+  /* Etiquetas del eje X: extremos y centro, que es lo que cabe sin amasijo. */
+  const marcas = tMax === tMin
+    ? [tMin]
+    : [tMin, (tMin + tMax) / 2, tMax];
 
   return (
     <>
@@ -94,98 +124,68 @@ function Grupo({ g }) {
               stroke="var(--line)" strokeWidth="1" opacity=".5" />
           ))}
 
-          {/* velocidad */}
-          <path d={linea(pts, yV, (p) => p.velocidad)} fill="none"
-            stroke={g.color} strokeWidth="2" strokeLinejoin="round" />
-          {pts.map((p, i) => (
-            <circle key={i} cx={x(i, pts.length)} cy={yV(p.velocidad)} r="3.5"
-              fill={g.color} />
+          {conLinea.map((z) => (
+            <path key={z.n} fill="none" stroke={z.color} strokeWidth="2" strokeLinejoin="round"
+              d={z.puntos.map((p, i) =>
+                `${i ? 'L' : 'M'} ${x(p.fecha)} ${y(p.velocidad)}`).join(' ')} />
           ))}
 
-          {/* pulsaciones */}
-          {conFC.length > 1 && (
-            <>
-              <path d={linea(conFC, yF, (p) => p.fc)} fill="none"
-                stroke="#D14B42" strokeWidth="2" strokeDasharray="5 4" strokeLinejoin="round" />
-              {conFC.map((p, i) => (
-                <circle key={i} cx={x(pts.indexOf(p), pts.length)} cy={yF(p.fc)} r="3.5"
-                  fill="#D14B42" />
-              ))}
-            </>
-          )}
+          {t.zonas.map((z) => z.puntos.map((p, i) => (
+            <circle key={`${z.n}-${i}`} cx={x(p.fecha)} cy={y(p.velocidad)} r="3.5"
+              fill={z.color} />
+          )))}
 
           <text x={mIzq - 8} y={mSup + 4} textAnchor="end" fontFamily="var(--mono)"
-            fontSize="10.5" fill={g.color}>{num(vMax, 0)}</text>
+            fontSize="10.5" fill="var(--ink2)">{num(vMax, 0)}</text>
           <text x={mIzq - 8} y={mSup + alto} textAnchor="end" fontFamily="var(--mono)"
-            fontSize="10.5" fill={g.color}>{num(vMin, 0)}</text>
+            fontSize="10.5" fill="var(--ink2)">{num(vMin, 0)}</text>
           <text x={mIzq - 8} y={mSup - 8} textAnchor="end" fontFamily="var(--mono)"
             fontSize="10" fill="var(--ink3)">km/h</text>
 
-          {conFC.length > 1 && (
-            <>
-              <text x={W - mDer + 8} y={mSup + 4} fontFamily="var(--mono)"
-                fontSize="10.5" fill="#D14B42">{num(fMax, 0)}</text>
-              <text x={W - mDer + 8} y={mSup + alto} fontFamily="var(--mono)"
-                fontSize="10.5" fill="#D14B42">{num(fMin, 0)}</text>
-              <text x={W - mDer + 8} y={mSup - 8} fontFamily="var(--mono)"
-                fontSize="10" fill="var(--ink3)">ppm</text>
-            </>
-          )}
-
-          {pts.map((p, i) =>
-            (pts.length <= 8 || i % Math.ceil(pts.length / 8) === 0) ? (
-              <text key={i} x={x(i, pts.length)} y={H - 14} textAnchor="middle"
-                fontFamily="var(--mono)" fontSize="10" fill="var(--ink3)">
-                {fechaCorta(p.fecha).slice(0, 6)}
-              </text>
-            ) : null
-          )}
+          {marcas.map((m, i) => (
+            <text key={i} x={x(m)} y={H - 14}
+              textAnchor={i === 0 ? 'start' : i === marcas.length - 1 ? 'end' : 'middle'}
+              fontFamily="var(--mono)" fontSize="10" fill="var(--ink3)">
+              {fechaCorta(m).slice(0, 6)}
+            </text>
+          ))}
         </svg>
 
+        {/*
+          Las zonas sin datos siguen en la leyenda, atenuadas. Si
+          desaparecieran sin mas, faltaria la mitad de la historia: que esa
+          combinacion existe y todavia no tienes material en ella.
+        */}
         <div className="chips" style={{ marginTop: 10 }}>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--ink2)',
-            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 9px',
-            border: '1px solid var(--line2)', borderRadius: 6 }}>
-            <i style={{ background: g.color, width: 9, height: 9, borderRadius: 2,
-              display: 'inline-block' }} />Velocidad
-          </span>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--ink2)',
-            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 9px',
-            border: '1px solid var(--line2)', borderRadius: 6 }}>
-            <i style={{ background: '#D14B42', width: 9, height: 9, borderRadius: 2,
-              display: 'inline-block' }} />Pulsaciones
-          </span>
+          {t.zonas.map((z) => {
+            const flojo = z.puntos.length < 2;
+            return (
+              <span key={z.n} style={{
+                fontFamily: 'var(--mono)', fontSize: 11.5,
+                color: flojo ? 'var(--ink3)' : 'var(--ink2)',
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 9px',
+                border: '1px solid var(--line2)', borderRadius: 6,
+                opacity: flojo ? 0.55 : 1,
+              }}>
+                <i style={{ background: z.color, width: 9, height: 9, borderRadius: 2,
+                  display: 'inline-block', opacity: flojo ? 0.5 : 1 }} />
+                Z{z.n} {z.nombre} · {z.puntos.length}
+              </span>
+            );
+          })}
         </div>
       </div>
 
-      {t ? (
-        <div className={`consejo ${t.pctEfic > 3 ? 'ok' : t.pctEfic < -3 ? 'aviso' : 'neutro'}`}>
-          <p className="tit">
-            {t.pctEfic > 3
-              ? `Estás ganando eficiencia en ${g.nombre.toLowerCase()}`
-              : t.pctEfic < -3
-                ? `Has perdido eficiencia en ${g.nombre.toLowerCase()}`
-                : `Sin cambios claros en ${g.nombre.toLowerCase()}`}
-          </p>
-          <p>
-            Entre {fechaCorta(t.desde)} y {fechaCorta(t.hasta)}, tu velocidad{' '}
-            {t.dVel >= 0 ? 'subió' : 'bajó'} {num(Math.abs(t.dVel), 1)} km/h mientras las
-            pulsaciones {t.dFC >= 0 ? 'subieron' : 'bajaron'} {num(Math.abs(t.dFC), 0)} ppm.
-            Eso deja la eficiencia un {num(Math.abs(t.pctEfic), 1)} %{' '}
-            {t.pctEfic >= 0 ? 'por encima' : 'por debajo'}.
-            {t.dVel > 0 && t.dFC < 0
-              ? ' Más rápido y con menos pulso a la vez: es la señal más limpia de que el trabajo aeróbico está funcionando.'
-              : t.pctEfic > 3
-                ? ' El corazón te rinde más por latido que al empezar.'
-                : t.pctEfic < -3
-                  ? ' Puede ser fatiga acumulada, calor, o simplemente que esas salidas no fueran comparables. Un solo dato no basta para preocuparse.'
-                  : ' Con tan pocas salidas comparables aún es pronto para leer una tendencia.'}
-          </p>
-        </div>
-      ) : (
+      {escasas.length > 0 && (
         <div className="callout">
-          En {g.nombre.toLowerCase()} solo hay {g.conFC} salida
-          {g.conFC === 1 ? '' : 's'} con pulsómetro. Hacen falta al menos dos para comparar.
+          En {t.nombre.toLowerCase()} todavía no hay tendencia que trazar en{' '}
+          <strong>
+            {escasas.map((z) => `Z${z.n}`).join(', ').replace(/, ([^,]*)$/, ' ni $1')}
+          </strong>
+          : hacen falta al menos dos salidas con tramos en esa combinación y ahora hay{' '}
+          {escasas.every((z) => z.puntos.length === 0) ? 'cero' : 'una o ninguna'}. Es lo
+          normal al principio — hay quince combinaciones de zona y terreno, y una sola
+          salida solo alimenta unas pocas.
         </div>
       )}
 
@@ -193,22 +193,28 @@ function Grupo({ g }) {
         <table>
           <thead>
             <tr>
-              <th>Salida</th><th>Fecha</th><th>Dist.</th><th>m/km</th>
-              <th>Vel.</th><th>FC</th><th>m por latido</th>
+              <th>Salida</th><th>Fecha</th><th>Zona</th><th>Km</th><th>Vel.</th><th>FC</th>
             </tr>
           </thead>
           <tbody>
-            {[...pts].reverse().map((p) => (
-              <tr key={p.id}>
-                <td>{p.nombre}</td>
-                <td>{fechaCorta(p.fecha)}</td>
-                <td>{num(p.km, 1)}</td>
-                <td>{num(p.mkm, 1)}</td>
-                <td>{num(p.velocidad, 1)}</td>
-                <td>{p.fc ? num(p.fc, 0) : '—'}</td>
-                <td>{p.eficiencia ? num(p.eficiencia, 2) : '—'}</td>
-              </tr>
-            ))}
+            {[...todos]
+              .sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : a.zona.n - b.zona.n))
+              .map((p) => (
+                <tr key={`${p.id}-${p.zona.n}`}>
+                  <td>{p.nombre}</td>
+                  <td>{fechaCorta(p.fecha)}</td>
+                  <td>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <i style={{ background: p.zona.color, width: 9, height: 9,
+                        borderRadius: 2, display: 'inline-block' }} />
+                      Z{p.zona.n}
+                    </span>
+                  </td>
+                  <td>{num(p.km, 1)}</td>
+                  <td>{num(p.velocidad, 1)}</td>
+                  <td>{num(p.fc, 0)}</td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>

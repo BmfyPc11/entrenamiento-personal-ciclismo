@@ -273,7 +273,8 @@ export default function Dashboard({ atleta }) {
       )}
       {pestana === 'carga' && (
         <>
-          <Evolucion salidas={activas} excluidas={excluidas} />
+          <Evolucion salidas={activas} cache={cache} excluidas={excluidas}
+            zonas={zonas} fondo={fondo} />
           <CargaTab salidas={activas} cfg={cfg} umbral={umbral} zonas={zonas} global={global} />
         </>
       )}
