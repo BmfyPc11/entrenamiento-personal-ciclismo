@@ -33,8 +33,8 @@ test('los puertos duros conocidos salen HC', () => {
 test('cada tramo de la escala cae en su categoria', () => {
   assert.equal(categoriaPuerto(1000, 5).nombre, '4ª cat');     // 25
   assert.equal(categoriaPuerto(4000, 5).nombre, '3ª cat');     // 100
-  assert.equal(categoriaPuerto(8000, 5).nombre, '2ª cat');     // 200
-  assert.equal(categoriaPuerto(16000, 5).nombre, '1ª cat');    // 400
+  assert.equal(categoriaPuerto(12000, 5).nombre, '2ª cat');    // 300
+  assert.equal(categoriaPuerto(24000, 5).nombre, '1ª cat');    // 600
   assert.equal(categoriaPuerto(12400, 10.5).nombre, 'HC');     // 1367
 });
 
@@ -42,21 +42,21 @@ test('los limites exactos caen en la categoria baja', () => {
   // 75 es el tope de 4a: 3 km al 5 % da exactamente 75
   assert.equal(categoriaPuerto(3000, 5).coef, 75);
   assert.equal(categoriaPuerto(3000, 5).codigo, '4a');
-  // 150 es el tope de 3a: 6 km al 5 %
-  assert.equal(categoriaPuerto(6000, 5).coef, 150);
-  assert.equal(categoriaPuerto(6000, 5).codigo, '3a');
+  // 200 es el tope de 3a: 8 km al 5 %
+  assert.equal(categoriaPuerto(8000, 5).coef, 200);
+  assert.equal(categoriaPuerto(8000, 5).codigo, '3a');
 });
 
 /*
   El motivo de bajar los umbrales: con la escala de las grandes vueltas
   estas cuatro subidas de una misma salida por Montjuic salian las
-  cuatro como 4a, y la etiqueta no distinguia nada.
+  cuatro como 4a, y una etiqueta que siempre dice lo mismo no informa.
 */
 test('una salida real reparte sus subidas en varias categorias', () => {
   assert.equal(categoriaPuerto(730, 4.3).codigo, '4a');    // 13
   assert.equal(categoriaPuerto(600, 6.5).codigo, '4a');    // 25
   assert.equal(categoriaPuerto(1830, 8.4).codigo, '3a');   // 129
-  assert.equal(categoriaPuerto(3700, 7.2).codigo, '2a');   // 192
+  assert.equal(categoriaPuerto(3700, 7.2).codigo, '3a');   // 192
 });
 
 test('un puerto plano no revienta', () => {
