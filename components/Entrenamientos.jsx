@@ -5,7 +5,7 @@ import Perfil from './Perfil';
 import PerfilPuerto from './PerfilPuerto';
 import {
   detectarPuertos, repartoZonas, repartoDureza, valorarEntrenamiento,
-  TRAMOS_DUREZA, vatiosPuerto, vatiosSalida,
+  TRAMOS_DUREZA, vatiosPuerto, vatiosSalida, categoriaPuerto,
   num, duracion, fechaLarga, kmh, km, metrosPorKm,
 } from '@/lib/metrics';
 import {
@@ -354,6 +354,16 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
                           {puertoAbierto === i ? '▾' : '▸'}
                         </span>
                         {nombresPuertos[i]}
+                        {(() => {
+                          const c = categoriaPuerto(p.metros, p.pendiente);
+                          return (
+                            <span title={`Coeficiente ${num(c.coef, 0)}`}
+                              style={{ color: c.color, fontFamily: 'var(--mono)',
+                                fontSize: 11.5, marginLeft: 7 }}>
+                              ({c.nombre})
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td>{num(p.kmInicio, 1)}–{num(p.kmFin, 1)}</td>
                       <td>{num(p.metros / 1000, 2)} km</td>

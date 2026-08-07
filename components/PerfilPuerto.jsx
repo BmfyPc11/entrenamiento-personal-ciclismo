@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  seccionesPuerto, TRAMOS_DUREZA, zonaDeFC, num, duracion,
+  seccionesPuerto, TRAMOS_DUREZA, zonaDeFC, categoriaPuerto, num, duracion,
 } from '@/lib/metrics';
 
 /*
@@ -22,6 +22,7 @@ export default function PerfilPuerto({ streams, puerto, indice, cfg, zonas, nomb
   const sec = det.secciones;
 
   const hayFC = Boolean(streams.fc) && sec.some((s) => s.fcMedia);
+  const cat = categoriaPuerto(puerto.metros, puerto.pendiente);
 
   /* --- geometria --- */
   const W = 760, H = 240;
@@ -99,10 +100,21 @@ export default function PerfilPuerto({ streams, puerto, indice, cfg, zonas, nomb
     <div className="panel" style={{ marginTop: 4 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between',
         alignItems: 'baseline', flexWrap: 'wrap', gap: 8, marginBottom: 4 }}>
-        <h3 style={{ margin: 0 }}>{nombre || `Subida ${indice + 1}`}</h3>
+        <h3 style={{ margin: 0, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          {nombre || `Subida ${indice + 1}`}
+          {/* La categoria va con el color de su dureza: de un vistazo se
+              ve si el puerto es un tramite o un asunto serio. */}
+          <span style={{ color: cat.color, fontFamily: 'var(--mono)',
+            fontSize: 13, fontWeight: 500,
+            border: `1px solid ${cat.color}`, borderRadius: 5,
+            padding: '1px 7px' }}>
+            {cat.nombre}
+          </span>
+        </h3>
         <span style={{ fontFamily: 'var(--mono)', fontSize: 12.5, color: 'var(--ink2)' }}>
           {num(puerto.metros / 1000, 2)} km · +{num(puerto.desnivel, 0)} m ·{' '}
-          {num(puerto.pendiente, 1)} % · secciones de {det.paso} m
+          {num(puerto.pendiente, 1)} % · coef. {num(cat.coef, 0)} ·{' '}
+          secciones de {det.paso} m
         </span>
       </div>
 
