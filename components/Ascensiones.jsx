@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import PerfilPuerto from './PerfilPuerto';
 import {
-  agruparAscensiones, distanciaEquivalente, nivelDificultad,
+  agruparAscensiones, distanciaEquivalente, nivelDificultadPuerto,
   vatiosPuerto, num, duracion, fechaCorta,
 } from '@/lib/metrics';
 
@@ -141,7 +141,7 @@ export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, ped
               </thead>
               <tbody>
                 {ordenadas.map((g, i) => {
-                  const niv = nivelDificultad(g.metros / 1000, g.desnivel, g.pendienteMax);
+                  const niv = nivelDificultadPuerto(g.metros, g.desnivel, g.pendienteMax);
                   return (
                     <tr key={g.id} onClick={() => setAbierta(abierta === g.id ? null : g.id)}
                       style={{ cursor: 'pointer',

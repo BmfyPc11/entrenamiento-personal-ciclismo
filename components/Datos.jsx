@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { MODELOS_ZONAS, NOMBRES_ZONA, PERFILES_BICI, num, duracion } from '@/lib/metrics';
 
-export default function Datos({ cfg, setCfg, zonas, reparto }) {
+export default function Datos({ cfg, setCfg, zonas, reparto, fondo }) {
   const [vista, setVista] = useState('barras');
 
   const cambiarModelo = (id) => {
@@ -138,9 +138,18 @@ export default function Datos({ cfg, setCfg, zonas, reparto }) {
       <h2>Cómo has repartido tu entrenamiento</h2>
       <p className="hint">
         {hayDatos
-          ? `Acumulado de las ${reparto.analizadas} salidas con pulsómetro que has abierto, ${duracion(reparto.total)} en total. Cada salida que consultes en Entrenamientos se suma aquí.`
-          : 'Abre alguna salida con pulsómetro en la pestaña Entrenamientos y su reparto se irá acumulando aquí.'}
+          ? `Acumulado de las ${reparto.analizadas} salidas con pulsómetro, ${duracion(reparto.total)} en total.`
+          : fondo?.activo
+            ? 'Trayendo el detalle de tus salidas…'
+            : 'Todavía no hay ninguna salida con pulsómetro analizada.'}
       </p>
+
+      {!hayDatos && fondo?.activo && (
+        <div className="callout" style={{ marginBottom: 14 }}>
+          Cargando el detalle de tus salidas ({fondo.hechas} de {fondo.total}). El desglose por
+          zonas aparece en cuanto termine; no hace falta que hagas nada.
+        </div>
+      )}
 
       {hayDatos && (
         <>

@@ -200,7 +200,8 @@ export default function Rutas({ salidas, cache, excluidas, cfg, zonas }) {
             concentrado. Por eso una llana larga puede pesar más que una corta con una subida.
           </p>
 
-          {abierta && <DetalleRuta datos={detalle[abierta]} cargando={cargandoGpx}
+          {abierta && <DetalleRuta ruta={lista.find((x) => x.id === abierta)}
+            datos={detalle[abierta]} cargando={cargandoGpx}
             ref_={ref} cfg={cfg} zonas={zonas} />}
         </>
       )}
@@ -209,8 +210,8 @@ export default function Rutas({ salidas, cache, excluidas, cfg, zonas }) {
 }
 
 /* Perfil, veredicto y consejos de una ruta concreta. */
-function DetalleRuta({ datos, cargando, ref_, cfg, zonas }) {
-  const [modo, setModo] = useState('dureza');
+function DetalleRuta({ ruta, datos, cargando, ref_, cfg, zonas }) {
+  const [modo, setModo] = useState('relieve');
   const [durezaFoco, setDurezaFoco] = useState(null);
   const [mono, setMono] = useState(false);
   const [puerto, setPuerto] = useState(null);
@@ -222,11 +223,37 @@ function DetalleRuta({ datos, cargando, ref_, cfg, zonas }) {
 
   if (cargando && !datos) return <p className="hint">Descargando el trazado de la ruta…</p>;
   if (!datos) return null;
-  if (datos.error) return <div className="callout warn">{datos.error}</div>;
+  if (datos.error) {
+    return (
+      <div className="callout warn">
+        <strong>No se ha podido montar el perfil de esta ruta.</strong> {datos.error}
+        {' '}Si el problema persiste con varias rutas, es más probable que sea un fallo del panel
+        que del archivo en sí — dímelo y lo reviso.
+      </div>
+    );
+  }
   if (!an) return null;
 
   return (
     <>
+      {ruta && (
+        <>
+          <h2 style={{ marginBottom: 2 }}>{ruta.nombre}</h2>
+          <p className="hint" style={{ marginBottom: 18 }}>
+            Ruta guardada en Strava · {ruta.niv.nombre.toLowerCase()}
+          </p>
+
+          <div className="grid">
+            <Dato k="Distancia" v={num(ruta.km, 1)} u="km" />
+            <Dato k="Desnivel" v={`+${num(ruta.desnivel, 0)}`} u="m"
+              d={`${num(ruta.desnivel / ruta.km, 1)} m por km`} />
+            <Dato k="Km equivalentes" v={num(ruta.eq, 1)} u="km"
+              d="desnivel convertido a distancia" />
+            <Dato k="Dificultad" v={ruta.niv.nombre} />
+          </div>
+        </>
+      )}
+
       <h2>Perfil de la ruta</h2>
       <div className="panel">
         <Perfil streams={datos.streams} zonas={zonas} modo={modo}
@@ -353,5 +380,15 @@ function DetalleRuta({ datos, cargando, ref_, cfg, zonas }) {
         {an.consejos.map((c, i) => <li key={i} style={{ marginBottom: 9 }}>{c}</li>)}
       </ul>
     </>
+  );
+}
+
+function Dato({ k, v, u, d }) {
+  return (
+    <div className="stat">
+      <div className="k">{k}</div>
+      <div className="v">{v} {u && <small>{u}</small>}</div>
+      {d && <div className="d">{d}</div>}
+    </div>
   );
 }

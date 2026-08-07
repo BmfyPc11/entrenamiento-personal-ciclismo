@@ -98,11 +98,57 @@ export default function Dashboard({ atleta }) {
     if (!r.ok) throw new Error(r.status === 502 ? 'Strava no devolvió el detalle' : 'Error de conexión');
     const j = await r.json();
     if (j.error) throw new Error(j.error);
+    /*
+      Una respuesta sin series utiles no se guarda en la cache. Si se
+      guardara un hueco, el resto del panel lo tomaria por una salida ya
+      analizada y reventaria al leerla: el reparto por zonas y el detalle
+      de puertos dan por hecho que lo que hay en cache es valido.
+    */
+    if (!j.streams || !j.streams.distancia || !j.streams.distancia.length) {
+      throw new Error('Strava no devolvió las series de esta salida');
+    }
     /* Se corrige aqui para que todo el panel vea siempre la serie saneada. */
     const st = normalizarAltitud(j.streams);
     setCache((c) => ({ ...c, [id]: st }));
     return st;
   }, []);
+
+  /*
+    Carga automatica en segundo plano.
+
+    El reparto por zonas, el umbral estimado y el listado de ascensiones
+    necesitan el detalle completo de cada salida, no solo el resumen que
+    da la lista de actividades. Antes de la v3.1 ese detalle se traia de
+    golpe para todas las salidas; al repartir el trabajo en pestañas
+    quedo sin disparador, y "Tus datos" se quedaba vacio hasta que el
+    usuario abria cada salida a mano en Entrenamientos.
+
+    Este efecto rellena la cache solo, de una en una para no saturar a
+    Strava, nada mas tener la lista de salidas. Si ya estaba en cache
+    (por ejemplo tras un "Actualizar") no la vuelve a pedir.
+  */
+  const [fondo, setFondo] = useState({ activo: false, hechas: 0, total: 0 });
+
+  useEffect(() => {
+    if (!salidas || !salidas.length) return;
+    const pendientes = salidas.filter((s) => !cache[s.id]);
+    if (!pendientes.length) return;
+
+    let cancelado = false;
+    (async () => {
+      setFondo({ activo: true, hechas: 0, total: pendientes.length });
+      for (let i = 0; i < pendientes.length; i++) {
+        if (cancelado) break;
+        try { await pedirStreams(pendientes[i].id); } catch { /* una salida rota no debe frenar el resto */ }
+        if (!cancelado) setFondo({ activo: true, hechas: i + 1, total: pendientes.length });
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      if (!cancelado) setFondo((f) => ({ ...f, activo: false }));
+    })();
+
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [salidas]);
 
   /*
     Dos filtros encadenados. El de fechas acota el periodo que se quiere
@@ -219,7 +265,7 @@ export default function Dashboard({ atleta }) {
           pedirStreams={pedirStreams} />
       )}
       {pestana === 'datos' && (
-        <Datos cfg={cfg} setCfg={setCfg} zonas={zonas} reparto={global} />
+        <Datos cfg={cfg} setCfg={setCfg} zonas={zonas} reparto={global} fondo={fondo} />
       )}
       {pestana === 'ascensiones' && (
         <Ascensiones salidas={activas} cache={cache} excluidas={excluidas}
@@ -499,9 +545,9 @@ function CargaTab({ salidas, cfg, umbral, zonas, global: rep }) {
       <h2>Reparto de intensidad</h2>
       {!rep || rep.total === 0 ? (
         <div className="callout">
-          Abre alguna salida con pulsómetro en <strong>Entrenamientos</strong> para ver aquí el
-          reparto por zonas. El desglose completo, con varias vistas, está en la pestaña{' '}
-          <strong>Zonas</strong>.
+          Todavía no hay ninguna salida con pulsómetro analizada. El detalle se trae solo nada
+          más entrar en el panel; el desglose completo, con varias vistas, está en{' '}
+          <strong>Tus datos</strong>.
         </div>
       ) : (
         <>

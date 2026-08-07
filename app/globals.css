@@ -59,7 +59,7 @@ h2:first-child{margin-top:4px}
 h3{font-family:var(--mono);font-size:11px;letter-spacing:.15em;text-transform:uppercase;
   color:var(--ink3);margin:0 0 16px;font-weight:400}
 .hint{color:var(--ink2);font-size:14px;line-height:1.62;margin:0 0 18px;
-  max-width:108ch;text-wrap:pretty}
+  max-width:108ch}
 
 /* ---------- tarjetas ---------- */
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:22px}
@@ -98,7 +98,7 @@ h3{font-family:var(--mono);font-size:11px;letter-spacing:.15em;text-transform:up
   color:var(--ink3);display:block;margin-bottom:9px}
 .consejo .tit{font-size:19px;font-weight:500;margin:0 0 9px;letter-spacing:-.01em}
 .consejo p{margin:0;color:var(--ink2);font-size:14.5px;line-height:1.68;
-  max-width:104ch;text-wrap:pretty}
+  max-width:104ch}
 
 /* ---------- formularios ---------- */
 .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px}
@@ -214,10 +214,14 @@ input[type=date]:hover{border-color:#4A5563}
   (74) cortaba a media frase dejando medio panel vacio y parecia un fallo
   de maquetacion mas que una decision. 108 mantiene la lectura comoda y
   ocupa el ancho de forma natural.
-*/
-p, li { text-wrap: pretty }
 
-.callout{line-height:1.62;max-width:108ch;text-wrap:pretty}
+  Aqui vivia un "text-wrap: pretty" que se ha retirado en la v3.2. Su
+  algoritmo equilibra el bloque entero sacrificando las lineas de en
+  medio, asi que cortaba antes de agotar el ancho y dejaba un hueco a la
+  derecha que parecia justo el fallo de maquetacion que se queria evitar.
+*/
+
+.callout{line-height:1.62;max-width:108ch}
 
 h2{margin:34px 0 12px}
 h2:first-child{margin-top:0}

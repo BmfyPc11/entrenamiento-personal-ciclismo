@@ -60,6 +60,33 @@ export default function PerfilPuerto({ streams, puerto, indice, cfg, zonas, nomb
     return num(s.pendiente, 1);
   };
 
+  /*
+    Seccion mas empinada del puerto. Con secciones de 50 m no es un dato
+    de adorno: es la rampa que decide si subes sentado o te tienes que
+    levantar, y conviene tenerla senalada sin buscarla.
+  */
+  const iMax = sec.reduce((m, s, i) => (s.pendiente > sec[m].pendiente ? i : m), 0);
+
+  /*
+    Que etiquetas caben.
+
+    A 50 m por seccion un puerto largo pasa de las cien barras, de apenas
+    seis pixeles cada una: escribir un numero encima de todas las dejaria
+    ilegibles unas sobre otras. El salto no se fija en "una de cada dos"
+    sino en pixeles, que es lo que de verdad determina si dos numeros
+    chocan, de modo que un repecho corto las muestra casi todas y un
+    puerto largo solo las que caben.
+  */
+  const anchoSeccion = ancho / sec.length;
+  const SEPARACION = 38;
+  const salto = Math.max(1, Math.ceil(SEPARACION / anchoSeccion));
+
+  const verEtiqueta = (i) => {
+    if (i === iMax) return true;                    // la maxima nunca se oculta
+    if (Math.abs(i - iMax) < salto) return false;   // ni se le pega ninguna al lado
+    return i % salto === 0;
+  };
+
   /* Leyenda: solo las categorias que aparecen de verdad en este puerto. */
   const leyenda = modo === 'zonas'
     ? (zonas || [])
@@ -103,17 +130,32 @@ export default function PerfilPuerto({ streams, puerto, indice, cfg, zonas, nomb
           const d = `M ${x1} ${y(base)} L ${x1} ${y(s.altIni)} L ${x2} ${y(s.altFin)} L ${x2} ${y(base)} Z`;
           const anchoPx = x2 - x1;
           const et = etiquetaDe(s);
+          const esMax = i === iMax;
+          const cima = Math.max(s.altIni, s.altFin);
           return (
             <g key={i} onMouseEnter={() => setFoco(i)} style={{ cursor: 'default' }}>
+              {/*
+                Sin opacidad parcial cuando no hay foco: con secciones de
+                50 m las barras se tocan de cien en cien, y dos bordes
+                semitransparentes superpuestos dejaban una costura oscura
+                en cada frontera. A opacidad plena desaparecen.
+              */}
               <path d={d} fill={c} stroke={c} strokeWidth="0.5"
-                opacity={foco === null ? 0.92 : activo ? 1 : 0.35} />
+                opacity={foco === null ? 1 : activo ? 1 : 0.35} />
               <rect x={x1} y={mSup} width={anchoPx} height={alto} fill="transparent" />
-              {anchoPx > 26 && et !== '' && (
-                <text x={(x1 + x2) / 2} y={y(Math.max(s.altIni, s.altFin)) - 6}
-                  textAnchor="middle" fontFamily="var(--mono)" fontSize="10"
-                  fontWeight="600" fill={activo ? 'var(--ink)' : 'var(--ink2)'}>
+              {verEtiqueta(i) && et !== '' && (
+                <text x={(x1 + x2) / 2} y={y(cima) - (esMax ? 16 : 6)}
+                  textAnchor="middle" fontFamily="var(--mono)" fontSize={esMax ? 11 : 10}
+                  fontWeight={esMax ? '700' : '600'}
+                  fill={esMax || activo ? 'var(--ink)' : 'var(--ink2)'}>
                   {et}
                 </text>
+              )}
+              {/* Punta que senala la seccion mas empinada de la subida. */}
+              {esMax && (
+                <path
+                  d={`M ${(x1 + x2) / 2} ${y(cima) - 4} l -4 -7 l 8 0 Z`}
+                  fill={c} stroke="var(--ink)" strokeWidth="1" strokeLinejoin="round" />
               )}
             </g>
           );
