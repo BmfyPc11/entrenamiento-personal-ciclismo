@@ -11,20 +11,38 @@ test('sin efforts no hay nombre', () => {
   assert.equal(emparejarSegmento({ inicio: 100, fin: 200 }, null), null);
 });
 
-test('solapamiento total devuelve el nombre', () => {
+test('coincidencia exacta devuelve el nombre', () => {
   const r = emparejarSegmento({ inicio: 100, fin: 200 }, [ef('Montjuïc', 100, 200)]);
   assert.equal(r, 'Montjuïc');
 });
 
-test('solapamiento parcial suficiente devuelve el nombre', () => {
-  // subida 100-200, segmento 150-260: solapan 50 sobre un minimo de 100 -> 50 %
-  const r = emparejarSegmento({ inicio: 100, fin: 200 }, [ef('Rat Penat', 150, 260)]);
+test('un segmento que cubre casi toda la subida vale', () => {
+  // subida 100-200, segmento 100-190: 90 de interseccion sobre 100 de union -> 0,9
+  const r = emparejarSegmento({ inicio: 100, fin: 200 }, [ef('Rat Penat', 100, 190)]);
   assert.equal(r, 'Rat Penat');
 });
 
-test('solapamiento insuficiente se descarta', () => {
-  // solapan 20 sobre un minimo de 100 -> 20 %
-  const r = emparejarSegmento({ inicio: 100, fin: 200 }, [ef('Otro', 180, 400)]);
+/*
+  El caso que motivo cambiar el criterio. Con el anterior, que medía el
+  solape contra el tramo mas corto, este sprint cubria el 100 % de si
+  mismo y se quedaba con el nombre de una subida veinte veces mas larga.
+*/
+test('un sprint corto dentro de una subida larga no la nombra', () => {
+  const r = emparejarSegmento({ inicio: 0, fin: 3700 }, [
+    ef('Sprint Paral·lel', 1000, 1200),
+  ]);
+  assert.equal(r, null);
+});
+
+test('un segmento mucho mas largo que la subida no la nombra', () => {
+  // la subida entera cabe dentro, pero el segmento habla de otra cosa
+  const r = emparejarSegmento({ inicio: 100, fin: 200 }, [ef('Vuelta entera', 0, 1000)]);
+  assert.equal(r, null);
+});
+
+test('un segmento que solo roza el final se descarta', () => {
+  // interseccion 50 sobre union 160 -> 0,31
+  const r = emparejarSegmento({ inicio: 100, fin: 200 }, [ef('Otro', 150, 260)]);
   assert.equal(r, null);
 });
 
@@ -33,7 +51,7 @@ test('sin solapamiento se descarta', () => {
   assert.equal(r, null);
 });
 
-test('gana el catalogado como puerto aunque solape menos', () => {
+test('gana el catalogado como puerto aunque se parezca menos', () => {
   const r = emparejarSegmento({ inicio: 100, fin: 200 }, [
     ef('Rampa suelta', 100, 200, 0),
     ef('Sant Pere Màrtir', 120, 200, 3),
@@ -41,12 +59,12 @@ test('gana el catalogado como puerto aunque solape menos', () => {
   assert.equal(r, 'Sant Pere Màrtir');
 });
 
-test('a igual categoria gana el de mayor solapamiento', () => {
+test('a igual categoria gana el que mas se parece', () => {
   const r = emparejarSegmento({ inicio: 100, fin: 200 }, [
-    ef('Corto', 170, 200, 0),
-    ef('Largo', 105, 200, 0),
+    ef('Parcial', 140, 200, 0),
+    ef('Completo', 105, 200, 0),
   ]);
-  assert.equal(r, 'Largo');
+  assert.equal(r, 'Completo');
 });
 
 test('un effort sin nombre no cuenta', () => {
