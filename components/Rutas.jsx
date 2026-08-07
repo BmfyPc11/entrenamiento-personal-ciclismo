@@ -330,7 +330,8 @@ function DetalleRuta({ ruta, datos, cargando, ref_, cfg, zonas }) {
       <h2>Perfil de la ruta</h2>
       <div className="panel">
         <Perfil streams={datos.streams} zonas={zonas} modo={modo}
-          durezaFoco={durezaFoco} mono={mono} altura={250} />
+          puertos={an.puertos} nombres={an.puertos.map(nombrePuerto)}
+          durezaFoco={durezaFoco} mono={mono} altura={330} />
 
         <div className="chips" style={{ marginTop: 14 }}>
           <button aria-pressed={modo === 'relieve'}

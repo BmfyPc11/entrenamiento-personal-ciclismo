@@ -180,13 +180,14 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
               <Perfil
                 streams={streams}
                 puertos={puertos}
+                nombres={nombresPuertos}
                 zonas={zonas}
                 modo={modo}
                 zonaFoco={zonaFoco}
                 durezaFoco={durezaFoco}
                 mono={mono}
                 puertoFoco={puertoFoco}
-                altura={300}
+                altura={340}
               />
             )}
 

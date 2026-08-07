@@ -1,7 +1,29 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { zonaDeFC, tramoDureza, TRAMOS_DUREZA, num } from '@/lib/metrics';
+import {
+  zonaDeFC, tramoDureza, TRAMOS_DUREZA, categoriaPuerto, num,
+} from '@/lib/metrics';
+
+/*
+  Redondea el techo del eje a una cifra que quede bien en la etiqueta.
+  El paso crece con la magnitud: a nadie le dice nada un eje que acabe
+  en 763 m.
+*/
+function redondearTecho(v) {
+  const paso = v > 4000 ? 500 : v > 2000 ? 250 : v > 800 ? 100 : v > 300 ? 50 : 25;
+  return Math.ceil(v / paso) * paso;
+}
+
+/* Posicion de un indice del stream original dentro del array reducido. */
+function mapearIdx(iOriginal, datos) {
+  let mejor = 0;
+  for (let k = 0; k < datos.idx.length; k++) {
+    if (datos.idx[k] <= iOriginal) mejor = k;
+    else break;
+  }
+  return mejor;
+}
 
 /*
   Perfil de altimetria.
@@ -14,6 +36,7 @@ import { zonaDeFC, tramoDureza, TRAMOS_DUREZA, num } from '@/lib/metrics';
 export default function Perfil({
   streams,
   puertos = [],
+  nombres = [],
   zonas,
   modo = 'relieve',
   zonaFoco = null,
@@ -44,31 +67,68 @@ export default function Perfil({
 
   if (!datos) return <p className="hint">Esta salida no tiene perfil de altimetría registrado.</p>;
 
-  const W = 1000, H = altura, L = 44, R = 14, T = 18, B = 30;
+  const W = 1000, L = 44, R = 14, B = 30, T0 = 18;
   const maxA = Math.max(...datos.a);
   const minA = Math.min(...datos.a);
   const maxD = datos.d[datos.d.length - 1];
 
-  /*
-    Escala vertical honesta.
-
-    Si el eje se ajusta siempre al desnivel real, una salida llana con
-    cuarenta metros de ondulacion se dibuja igual de dramatica que un
-    puerto de seiscientos, y el perfil miente. La solucion es fijar un
-    rango minimo proporcional a la distancia: una salida de 40 km se
-    encuadra en al menos 250 m de altura, de modo que lo llano se ve
-    llano y solo lo que sube de verdad ocupa la pantalla.
-  */
-  const rangoReal = maxA - minA;
-  const rangoMinimo = Math.max(120, Math.min(400, maxD * 6));
-  const rango = Math.max(rangoReal, rangoMinimo);
-  const holgura = rango * 0.14;
-  const centro = (maxA + minA) / 2;
-  let base = centro - rango / 2 - holgura * 0.4;
-  let techo = centro + rango / 2 + holgura * 0.6;
-  if (base < 0 && minA >= 0) { techo -= base; base = 0; }
-
   const X = (k) => L + (k / maxD) * (W - L - R);
+
+  /*
+    Las fichas de los puertos se colocan primero, porque de cuantas filas
+    ocupen depende cuanto crece el grafico.
+
+    Al principio esto se resolvia duplicando la escala de altitud: el
+    relieve bajaba a la mitad inferior y arriba quedaba hueco. Pero eso
+    mezclaba dos cosas que no tienen por que ir juntas, y el precio era
+    aplastar el perfil un 38 %. El sitio para las etiquetas es una banda
+    de pixeles; la escala de altitud es otra cosa. Separadas, el relieve
+    conserva su forma y las fichas siguen teniendo su hueco.
+  */
+  const ALTO_FICHA = 44, HUECO_FICHA = 4;
+  const cajas = [];
+  if (modo === 'relieve' && puertos.length) {
+    const filas = [];   // ultimo x ocupado por cada fila
+    puertos
+      .map((p, i) => ({ p, i, k: mapearIdx(p.fin, datos) }))
+      .sort((u, v) => datos.d[u.k] - datos.d[v.k])
+      .forEach(({ p, i, k }) => {
+        const cat = categoriaPuerto(p.metros, p.pendiente);
+        const nombre = nombres[i] || `Subida ${i + 1}`;
+        const anchoCat = cat.nombre.length * 8 + 12;
+        const ancho = Math.max(150,
+          Math.min(6 + anchoCat + 7 + nombre.length * 6.7 + 10, 300));
+        const x = X(datos.d[k]);
+        const xCaja = Math.max(L, Math.min(x - ancho / 2, W - R - ancho));
+
+        /* Primera fila donde la caja no pise a la anterior. */
+        let fila = 0;
+        while (filas[fila] != null && xCaja < filas[fila] + HUECO_FICHA) fila++;
+        filas[fila] = xCaja + ancho;
+
+        cajas.push({ p, i, k, cat, nombre, ancho, anchoCat, x, xCaja, fila });
+      });
+    /* Se ordenan por indice para que el foco y las claves no bailen. */
+    cajas.sort((a, b) => a.i - b.i);
+  }
+
+  const nFilas = cajas.length ? Math.max(...cajas.map((c) => c.fila)) + 1 : 0;
+  const banda = nFilas ? nFilas * (ALTO_FICHA + HUECO_FICHA) + 6 : 0;
+
+  /* El grafico crece justo lo que ocupan las fichas, de modo que el area
+     donde se dibuja el relieve conserva su tamano de siempre. */
+  const H = altura + banda;
+  const T = T0 + banda;
+
+  /*
+    Escala vertical con un margen holgado pero sin exagerar. Ajustarla al
+    desnivel exacto hace que cualquier repecho llene la pantalla y
+    parezca un puerto; un 20 % de aire basta para quitar ese dramatismo
+    sin aplastar el relieve.
+  */
+  const techo = redondearTecho(Math.max(maxA, 1) * 1.2);
+  const base = minA >= 0 ? 0 : Math.floor(minA / 50) * 50;
+
   const Y = (v) => H - B - ((v - base) / (techo - base)) * (H - T - B);
 
   /* --- lineas de altura de referencia --- */
@@ -135,14 +195,7 @@ export default function Perfil({
   };
 
   /* --- posicion de los puertos en el array reducido --- */
-  const mapear = (iOriginal) => {
-    let mejor = 0;
-    for (let k = 0; k < datos.idx.length; k++) {
-      if (datos.idx[k] <= iOriginal) mejor = k;
-      else break;
-    }
-    return mejor;
-  };
+  const mapear = (iOriginal) => mapearIdx(iOriginal, datos);
 
   const onMove = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -153,6 +206,16 @@ export default function Perfil({
     datos.d.forEach((v, i) => { const dd = Math.abs(v - kmPos); if (dd < dif) { dif = dd; mejor = i; } });
     setHover(mejor);
   };
+
+  /* Las cajas ya traen su fila y su ancho; aqui solo se les pone la
+     altura, que necesita la escala vertical ya definida. */
+  const fichas = cajas.map((c) => ({
+    ...c,
+    alto: ALTO_FICHA,
+    yCaja: T0 + c.fila * (ALTO_FICHA + HUECO_FICHA),
+    yCima: Y(datos.a[c.k]),
+    activo: puertoFoco === c.i,
+  }));
 
   return (
     <div>
@@ -226,27 +289,65 @@ export default function Perfil({
           </>
         )}
 
-        {/* puertos subrayados */}
-        {modo === 'relieve' &&
-          puertos.map((p, i) => {
-            const a = mapear(p.inicio), b = mapear(p.fin);
-            if (b <= a) return null;
-            const activo = puertoFoco === i;
-            return (
-              <g key={i}>
-                <path d={lineaPath(a, b)} fill="none"
+        {/* puertos: subrayado de la subida y ficha en la coronacion */}
+        {modo === 'relieve' && (
+          <>
+            {puertos.map((p, i) => {
+              const a = mapear(p.inicio), b = mapear(p.fin);
+              if (b <= a) return null;
+              const activo = puertoFoco === i;
+              return (
+                <path key={`s${i}`} d={lineaPath(a, b)} fill="none"
                   stroke={activo ? '#D14B42' : '#E0A82E'}
                   strokeWidth={activo ? 4.5 : 3.2} strokeLinecap="round" />
-                {(activo || puertos.length <= 4) && (
-                  <text x={X((datos.d[a] + datos.d[b]) / 2)} y={Y(datos.a[b]) - 11}
-                    textAnchor="middle" fill={activo ? '#D14B42' : '#9BA5B4'}
-                    fontSize="11" fontWeight="600" fontFamily="ui-monospace,Menlo,monospace">
-                    {num(p.metros / 1000, 1)} km · {num(p.pendiente, 1)} %
+              );
+            })}
+
+            {fichas.map((f) => {
+              /* Marco y vertical van del color del trazo de la subida, no
+                 del de la categoria: asi la ficha se lee como parte del
+                 mismo dibujo y la vista sigue sola de una a la otra. El
+                 unico color de categoria es el del distintivo. */
+              const trazo = f.activo ? '#D14B42' : '#E0A82E';
+              return (
+              <g key={`f${f.i}`} pointerEvents="none">
+                <line x1={f.x} y1={f.yCaja + f.alto} x2={f.x} y2={f.yCima}
+                  stroke={trazo} strokeWidth={f.activo ? 2 : 1.2}
+                  strokeDasharray="4 3" opacity={f.activo ? 0.95 : 0.65} />
+                <circle cx={f.x} cy={f.yCima} r={f.activo ? 4 : 3}
+                  fill={trazo} />
+
+                <g transform={`translate(${f.xCaja},${f.yCaja})`}>
+                  <rect width={f.ancho} height={f.alto} rx="3"
+                    fill="#161C26" stroke={trazo}
+                    strokeWidth={f.activo ? 1.6 : 1} opacity=".97" />
+
+                  {/* La categoria, en grande: es lo que se busca de un vistazo. */}
+                  <rect x="6" y="6" width={f.anchoCat} height="19" rx="2"
+                    fill={f.cat.color} />
+                  <text x={6 + f.anchoCat / 2} y="19.5" textAnchor="middle"
+                    fill={f.cat.codigo === 'hc' ? '#FFFFFF' : '#0E1116'}
+                    fontSize="12.5" fontWeight="700"
+                    fontFamily="ui-monospace,Menlo,monospace">
+                    {f.cat.nombre}
                   </text>
-                )}
+
+                  <text x={6 + f.anchoCat + 7} y="19.5" fill="#E8EAED"
+                    fontSize="11.5" fontWeight="600"
+                    fontFamily="ui-monospace,Menlo,monospace">
+                    {f.nombre}
+                  </text>
+                  <text x="7" y="35" fill="#9BA5B4" fontSize="10.5"
+                    fontFamily="ui-monospace,Menlo,monospace">
+                    {num(f.p.metros / 1000, 1)} km · {num(f.p.pendiente, 1)} % ·{' '}
+                    +{num(f.p.desnivel, 0)} m
+                  </text>
+                </g>
               </g>
-            );
-          })}
+              );
+            })}
+          </>
+        )}
 
         <line x1={L} y1={H - B} x2={W - R} y2={H - B} stroke="#2A3341" strokeWidth="1" />
         {[0, 0.25, 0.5, 0.75, 1].map((f) => (

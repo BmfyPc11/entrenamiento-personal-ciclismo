@@ -186,7 +186,8 @@ export default function AnalizadorGPX({ salidas, cache, excluidas, cfg, zonas })
           <h2>Perfil de la ruta</h2>
           <div className="panel">
             <Perfil streams={datos.streams} zonas={zonas} modo={modo}
-              durezaFoco={durezaFoco} mono={mono} altura={260} />
+              puertos={an.puertos} nombres={an.puertos.map(nombrePuerto)}
+              durezaFoco={durezaFoco} mono={mono} altura={340} />
 
             <div className="chips" style={{ marginTop: 14 }}>
               <button aria-pressed={modo === 'relieve'}
