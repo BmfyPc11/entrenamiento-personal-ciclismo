@@ -15,6 +15,15 @@ function redondearTecho(v) {
   return Math.ceil(v / paso) * paso;
 }
 
+/*
+  Aire sobre la cota maxima. El normal es generoso a proposito: con el
+  eje pegado al desnivel real, una subida de doscientos metros se dibuja
+  como un puerto alpino y el perfil miente sobre lo que costo. El
+  ampliado es para mirar la forma del terreno de cerca.
+*/
+const AIRE_NORMAL = 4;
+const AIRE_AMPLIADO = 1.2;
+
 /* Posicion de un indice del stream original dentro del array reducido. */
 function mapearIdx(iOriginal, datos) {
   let mejor = 0;
@@ -46,6 +55,7 @@ export default function Perfil({
   puertoFoco = null,
 }) {
   const [hover, setHover] = useState(null);
+  const [zoom, setZoom] = useState(false);
 
   const datos = useMemo(() => {
     const { distancia: d, altitud: a, fc } = streams || {};
@@ -145,9 +155,23 @@ export default function Perfil({
     ? Math.floor(minA / 25) * 25
     : Math.max(0, Math.floor((minA - rangoMinimo * 0.15) / 25) * 25);
 
-  const techo = redondearTecho(
-    base + Math.max((Math.max(maxA, 1) - base) * 1.2, rangoMinimo)
+  /*
+    Dos aires posibles sobre la cota maxima. Por defecto se dibuja con el
+    holgado, que deja los puertos pequenos y da la medida real de lo que
+    es una subida; el ampliado sirve para mirar la forma del terreno de
+    cerca.
+  */
+  const techoCon = (factor) => redondearTecho(
+    base + Math.max((Math.max(maxA, 1) - base) * factor, rangoMinimo)
   );
+  const techo = techoCon(zoom ? AIRE_AMPLIADO : AIRE_NORMAL);
+
+  /*
+    El interruptor solo se ofrece cuando cambia algo. En una salida llana
+    manda el suelo por distancia y los dos factores dan el mismo eje:
+    ensenar ahi un boton que no hace nada solo confunde.
+  */
+  const zoomUtil = techoCon(AIRE_NORMAL) !== techoCon(AIRE_AMPLIADO);
 
   const Y = (v) => H - B - ((v - base) / (techo - base)) * (H - T - B);
 
@@ -400,6 +424,18 @@ export default function Perfil({
           </g>
         )}
       </svg>
+
+      {zoomUtil && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12,
+          fontSize: 13.5, color: 'var(--ink2)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={zoom}
+            onChange={(e) => setZoom(e.target.checked)} />
+          Ampliar el relieve
+          <span style={{ color: 'var(--ink3)', fontSize: 12.5 }}>
+            — el perfil se dibuja con menos aire, para ver la forma del terreno de cerca
+          </span>
+        </label>
+      )}
     </div>
   );
 }
