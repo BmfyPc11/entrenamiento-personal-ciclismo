@@ -365,6 +365,39 @@ tbody tr:hover td{background:var(--bg2)}
 .goal{background:none;border:0;border-radius:0;padding:0 0 var(--e5);
   border-bottom:1px solid var(--line);margin-bottom:var(--e5)}
 
+/* Dos columnas: una estrecha para el formulario y una ancha para lo que
+   se deriva de el. Se apilan en cuanto no caben. */
+.dos-col{display:grid;gap:var(--e5);grid-template-columns:minmax(230px,300px) 1fr;
+  align-items:start}
+.dos-col>section{min-width:0}
+
+/* Tabla y grafico lado a lado. El corte es mas tardio que el de la
+   pagina porque aqui compiten dos bloques anchos dentro de una columna
+   que ya es estrecha. */
+.tabla-grafico{display:grid;gap:var(--e5);grid-template-columns:1fr minmax(190px,250px);
+  align-items:center}
+
+@media(max-width:1080px){
+  .tabla-grafico{grid-template-columns:1fr}
+}
+@media(max-width:900px){
+  .dos-col{grid-template-columns:1fr}
+}
+
+/* Las descripciones de zona salieron de la tabla para que cupiera el
+   grafico al lado. Aqui debajo se leen mejor que apretadas en una celda. */
+.glosario{margin:var(--e5) 0 0;display:grid;gap:var(--e2)}
+.glosario>div{display:grid;grid-template-columns:minmax(140px,190px) 1fr;gap:var(--e3);
+  align-items:baseline;padding-bottom:var(--e2);border-bottom:1px solid var(--line)}
+.glosario>div:last-child{border-bottom:0;padding-bottom:0}
+.glosario dt{font-family:var(--mono);font-size:11.5px;color:var(--ink2);margin:0}
+.glosario dt i{display:inline-block;width:9px;height:9px;border-radius:2px;
+  margin-right:8px;vertical-align:0}
+.glosario dd{margin:0;font-size:13.5px;color:var(--ink2);line-height:1.55}
+@media(max-width:560px){
+  .glosario>div{grid-template-columns:1fr;gap:2px}
+}
+
 .wrap{padding-bottom:var(--e7)}
 .top{padding:var(--e6) 0 var(--e5)}
 h1{font-size:clamp(26px,3.4vw,34px)}

@@ -28,111 +28,140 @@ export default function Datos({ cfg, setCfg, zonas, reparto, fondo }) {
 
   return (
     <>
-      <h2>Tus constantes</h2>
+      <h2>Tus constantes y tus zonas</h2>
       <p className="hint">
-        Estos cuatro valores alimentan todos los cálculos del panel: el peso y la posición
-        determinan la potencia estimada, y la frecuencia cardíaca máxima define dónde caen tus
-        zonas.
+        A la izquierda, los cuatro valores que alimentan todos los cálculos del panel. A la
+        derecha, dónde caen tus zonas de pulso y cuánto tiempo has pasado en cada una.
       </p>
 
-      <div className="panel">
-        <div className="fields">
-          <div>
-            <label htmlFor="peso">Peso ciclista (kg)</label>
-            <input id="peso" type="number" min="35" max="150" step="0.5" value={cfg.peso}
-              onChange={(e) => setCfg({ ...cfg, peso: +e.target.value || 75 })} />
+      <div className="dos-col">
+        <section>
+          <h3>Mis constantes</h3>
+          <div className="panel">
+            <div className="fields" style={{ gridTemplateColumns: '1fr' }}>
+              <div>
+                <label htmlFor="peso">Peso ciclista (kg)</label>
+                <input id="peso" type="number" min="35" max="150" step="0.5" value={cfg.peso}
+                  onChange={(e) => setCfg({ ...cfg, peso: +e.target.value || 75 })} />
+              </div>
+              <div>
+                <label htmlFor="bici">Peso bici + equipo (kg)</label>
+                <input id="bici" type="number" min="5" max="30" step="0.5" value={cfg.bici}
+                  onChange={(e) => setCfg({ ...cfg, bici: +e.target.value || 11 })} />
+              </div>
+              <div>
+                <label htmlFor="fcmaxc">FC máxima (ppm)</label>
+                <input id="fcmaxc" type="number" min="140" max="220" value={cfg.fcmax}
+                  onChange={(e) => setCfg({ ...cfg, fcmax: +e.target.value || 185 })} />
+              </div>
+              <div>
+                <label htmlFor="tipo">Bici y posición</label>
+                <select id="tipo" value={cfg.perfil}
+                  onChange={(e) => {
+                    const p = PERFILES_BICI.find((x) => x.id === e.target.value);
+                    setCfg({ ...cfg, perfil: p.id, cda: p.cda, crr: p.crr });
+                  }}>
+                  {PERFILES_BICI.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </select>
+              </div>
+            </div>
+            <p className="hint" style={{ margin: '14px 0 0', fontSize: 13 }}>
+              El peso y la posición determinan la potencia estimada; la frecuencia cardíaca
+              máxima define dónde caen tus zonas.
+            </p>
           </div>
-          <div>
-            <label htmlFor="bici">Peso bici + equipo (kg)</label>
-            <input id="bici" type="number" min="5" max="30" step="0.5" value={cfg.bici}
-              onChange={(e) => setCfg({ ...cfg, bici: +e.target.value || 11 })} />
-          </div>
-          <div>
-            <label htmlFor="fcmaxc">FC máxima (ppm)</label>
-            <input id="fcmaxc" type="number" min="140" max="220" value={cfg.fcmax}
-              onChange={(e) => setCfg({ ...cfg, fcmax: +e.target.value || 185 })} />
-          </div>
-          <div>
-            <label htmlFor="tipo">Bici y posición</label>
-            <select id="tipo" value={cfg.perfil}
-              onChange={(e) => {
-                const p = PERFILES_BICI.find((x) => x.id === e.target.value);
-                setCfg({ ...cfg, perfil: p.id, cda: p.cda, crr: p.crr });
-              }}>
-              {PERFILES_BICI.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-            </select>
-          </div>
-        </div>
-      </div>
+        </section>
 
-      <h2>Tus zonas de frecuencia cardíaca</h2>
-      <p className="hint">
-        Strava, Garmin y este panel casi nunca coinciden, y no es un error de ninguno: cada uno usa
-        un modelo distinto y, sobre todo, una frecuencia cardíaca máxima distinta. Elige aquí el
-        tuyo y todo el panel pasará a calcular con él.
-      </p>
+        <section>
+          <h3>Tus zonas de frecuencia cardíaca</h3>
 
-      <div className="panel">
-        <div className="fields">
-          <div>
-            <label htmlFor="modelo">Modelo de zonas</label>
-            <select id="modelo" value={cfg.modeloZonas} onChange={(e) => cambiarModelo(e.target.value)}>
-              {Object.entries(MODELOS_ZONAS).map(([id, m]) => (
-                <option key={id} value={id}>{m.nombre}</option>
-              ))}
-              <option value="personalizado">Personalizado</option>
-            </select>
+          <div className="panel" style={{ marginBottom: 'var(--e4)' }}>
+            <div className="fields">
+              <div>
+                <label htmlFor="modelo">Modelo de zonas</label>
+                <select id="modelo" value={cfg.modeloZonas}
+                  onChange={(e) => cambiarModelo(e.target.value)}>
+                  {Object.entries(MODELOS_ZONAS).map(([id, m]) => (
+                    <option key={id} value={id}>{m.nombre}</option>
+                  ))}
+                  <option value="personalizado">Personalizado</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="fcmaxz">FC máxima (ppm)</label>
+                <input id="fcmaxz" type="number" min="140" max="220" value={cfg.fcmax}
+                  disabled={manual}
+                  onChange={(e) => setCfg({ ...cfg, fcmax: +e.target.value || 185 })} />
+              </div>
+            </div>
+            <p className="hint" style={{ margin: '14px 0 0', fontSize: 13 }}>
+              {manual
+                ? 'Estás en modo manual: escribe directamente dónde empieza cada zona.'
+                : modelo?.descripcion}
+            </p>
           </div>
-          <div>
-            <label htmlFor="fcmaxz">FC máxima (ppm)</label>
-            <input id="fcmaxz" type="number" min="140" max="220" value={cfg.fcmax}
-              disabled={manual}
-              onChange={(e) => setCfg({ ...cfg, fcmax: +e.target.value || 185 })} />
-          </div>
-        </div>
-        <p className="hint" style={{ margin: '14px 0 0' }}>
-          {manual
-            ? 'Estás en modo manual: escribe directamente dónde empieza cada zona.'
-            : modelo?.descripcion}
-        </p>
-      </div>
 
-      <h2>Dónde queda cada zona</h2>
-      <div className="scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Zona</th><th>Desde</th><th>Hasta</th><th>% FC máx</th><th>Para qué sirve</th>
-            </tr>
-          </thead>
-          <tbody>
+          {/*
+            La tabla dice donde estan tus zonas; el donut, cuanto tiempo has
+            pasado en cada una. Son cosas distintas -una es definicion y la
+            otra medicion- pero juntas responden de un vistazo a la pregunta
+            que de verdad importa: si estas entrenando donde querias.
+          */}
+          <div className="tabla-grafico">
+            <div className="scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Zona</th><th>Desde</th><th>Hasta</th><th>% FC máx</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {zonas.map((z, i) => (
+                    <tr key={z.n}>
+                      <td>
+                        <span style={{ display: 'inline-block', width: 10, height: 10,
+                          borderRadius: 2, background: z.color, marginRight: 9,
+                          verticalAlign: -1 }} />
+                        Z{z.n} · {z.nombre}
+                      </td>
+                      <td>
+                        {manual ? (
+                          <input type="number" min="30" max="230" value={z.desde}
+                            onChange={(e) => editarLimite(i, +e.target.value)}
+                            style={{ width: 82, padding: '5px 8px', fontSize: 13,
+                              textAlign: 'right' }} />
+                        ) : (
+                          <strong style={{ color: 'var(--ink)' }}>{z.desde} ppm</strong>
+                        )}
+                      </td>
+                      <td>{z.hasta ? `${z.hasta} ppm` : 'máx'}</td>
+                      <td>{z.pct} %</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {hayDatos
+              ? <Pastel zonas={zonas} reparto={reparto} compacto />
+              : (
+                <p className="hint" style={{ fontSize: 13, margin: 0 }}>
+                  {fondo?.activo
+                    ? 'Trayendo el detalle de tus salidas para calcular el reparto…'
+                    : 'Sin salidas con pulsómetro analizadas todavía, no hay reparto que dibujar.'}
+                </p>
+              )}
+          </div>
+
+          <dl className="glosario">
             {zonas.map((z, i) => (
-              <tr key={z.n}>
-                <td>
-                  <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2,
-                    background: z.color, marginRight: 9, verticalAlign: -1 }} />
-                  Z{z.n} · {z.nombre}
-                </td>
-                <td>
-                  {manual ? (
-                    <input type="number" min="30" max="230" value={z.desde}
-                      onChange={(e) => editarLimite(i, +e.target.value)}
-                      style={{ width: 82, padding: '5px 8px', fontSize: 13, textAlign: 'right' }} />
-                  ) : (
-                    <strong style={{ color: 'var(--ink)' }}>{z.desde} ppm</strong>
-                  )}
-                </td>
-                <td>{z.hasta ? `${z.hasta} ppm` : 'máx'}</td>
-                <td>{z.pct} %</td>
-                <td style={{ fontFamily: 'var(--sans)', textAlign: 'left', whiteSpace: 'normal',
-                  fontSize: 13, color: 'var(--ink2)', verticalAlign: 'middle',
-                  paddingLeft: 18, lineHeight: 1.5 }}>
-                  {DESCRIPCIONES[i]}
-                </td>
-              </tr>
+              <div key={z.n}>
+                <dt><i style={{ background: z.color }} />Z{z.n} · {z.nombre}</dt>
+                <dd>{DESCRIPCIONES[i]}</dd>
+              </div>
             ))}
-          </tbody>
-        </table>
+          </dl>
+        </section>
       </div>
 
       <h2>Cómo has repartido tu entrenamiento</h2>
@@ -154,9 +183,9 @@ export default function Datos({ cfg, setCfg, zonas, reparto, fondo }) {
       {hayDatos && (
         <>
           <div className="chips" style={{ marginTop: 0, marginBottom: 14 }}>
-            {[['barras', 'Barras'], ['radar', 'Radar'], ['pastel', 'Sectores']].map(([id, txt]) => (
-              <button key={id} aria-pressed={vista === id} onClick={() => setVista(id)}
-                style={vista === id ? { background: 'var(--ink)', borderColor: 'var(--ink)' } : null}>
+            {/* Los sectores ya salen arriba, junto a la tabla de zonas. */}
+            {[['barras', 'Barras'], ['radar', 'Radar']].map(([id, txt]) => (
+              <button key={id} aria-pressed={vista === id} onClick={() => setVista(id)}>
                 {txt}
               </button>
             ))}
@@ -165,7 +194,6 @@ export default function Datos({ cfg, setCfg, zonas, reparto, fondo }) {
           <div className="chart">
             {vista === 'barras' && <Barras zonas={zonas} reparto={reparto} />}
             {vista === 'radar' && <Radar zonas={zonas} reparto={reparto} />}
-            {vista === 'pastel' && <Pastel zonas={zonas} reparto={reparto} />}
             <div className="legend">
               {zonas.map((z) => (
                 <span key={z.n}>
@@ -268,8 +296,14 @@ function Radar({ zonas, reparto }) {
 }
 
 /* ---------- sectores ---------- */
-function Pastel({ zonas, reparto }) {
-  const cx = 500, cy = 190, R = 150, r = 82;
+/*
+  En modo compacto el dibujo es el mismo pero encuadrado: al ir al lado de
+  la tabla dispone de un cuadrado estrecho, no de una franja ancha, y con
+  el encuadre de la version grande quedaria diminuto en medio de un mar de
+  hueco.
+*/
+function Pastel({ zonas, reparto, compacto = false }) {
+  const cx = compacto ? 190 : 500, cy = 190, R = 150, r = 82;
   let acc = -Math.PI / 2;
 
   const sectores = zonas.map((z, i) => {
@@ -290,9 +324,9 @@ function Pastel({ zonas, reparto }) {
       <g key={z.n}>
         <path
           d={`M ${x1} ${y1} A ${R} ${R} 0 ${grande} 1 ${x2} ${y2} L ${x3} ${y3} A ${r} ${r} 0 ${grande} 0 ${x4} ${y4} Z`}
-          fill={z.color} stroke="#0E1116" strokeWidth="2" />
+          fill={z.color} stroke="var(--bg)" strokeWidth="2" />
         {frac > 0.06 && (
-          <text x={tx} y={ty + 5} textAnchor="middle" fill="#0E1116" fontSize="14" fontWeight="500"
+          <text x={tx} y={ty + 5} textAnchor="middle" fill="var(--bg)" fontSize="14" fontWeight="500"
             fontFamily="ui-monospace,Menlo,monospace">
             {num(reparto.porcentaje[i], 0)} %
           </text>
@@ -303,18 +337,18 @@ function Pastel({ zonas, reparto }) {
 
   const suave = reparto.porcentaje[0] + reparto.porcentaje[1];
   return (
-    <svg viewBox="0 0 1000 380" width="100%">
+    <svg viewBox={compacto ? '0 0 380 380' : '0 0 1000 380'} width="100%">
       {sectores}
-      <text x={cx} y={cy - 6} textAnchor="middle" fill="#E8EAED" fontSize="26" fontWeight="500"
-        fontFamily="ui-monospace,Menlo,monospace">
+      <text x={cx} y={cy - 6} textAnchor="middle" fill="var(--ink)" fontSize="26" fontWeight="500"
+        fontFamily="var(--mono)">
         {num(suave, 0)} %
       </text>
-      <text x={cx} y={cy + 16} textAnchor="middle" fill="#6B7684" fontSize="12"
-        fontFamily="Helvetica,Arial,sans-serif">
+      <text x={cx} y={cy + 16} textAnchor="middle" fill="var(--ink3)" fontSize="12"
+        fontFamily="var(--sans)">
         en zona 1 y 2
       </text>
-      <text x={cx} y={cy + 34} textAnchor="middle" fill="#6B7684" fontSize="11.5"
-        fontFamily="Helvetica,Arial,sans-serif">
+      <text x={cx} y={cy + 34} textAnchor="middle" fill="var(--ink3)" fontSize="11.5"
+        fontFamily="var(--sans)">
         {duracion(reparto.total)} analizados
       </text>
     </svg>
