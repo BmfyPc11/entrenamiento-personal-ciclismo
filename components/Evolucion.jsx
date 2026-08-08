@@ -33,7 +33,8 @@ export default function Evolucion({ salidas, cache, zonas, excluidas, fondo }) {
         corresponde por su propia pendiente y en la zona de pulso en la que ibas en ese
         momento. Así lo que compara la gráfica son esfuerzos equivalentes: lo que rindes
         hoy en una zona y un terreno frente a lo que rendías antes en esa misma
-        combinación.
+        combinación. Los descensos quedan fuera: bajar a 45 km/h sin pedalear no dice
+        nada de cómo llaneas, y contarlo como llano solo inflaba la media.
       </p>
 
       {!hayDatos ? (
