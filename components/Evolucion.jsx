@@ -38,6 +38,13 @@ export default function Evolucion({ salidas, cache, zonas, excluidas, fondo }) {
         horizontal da una columna a cada salida, no a cada día del calendario: así un
         parón no deja un hueco que la línea cruce como si fuera progreso.
       </p>
+      <p className="hint">
+        <strong>El llano se mide en km/h y las subidas en metros verticales por hora.</strong>{' '}
+        No es un capricho: a igual esfuerzo, subir al 15 % en vez de al 7 % te deja la
+        velocidad por la mitad, mientras que la VAM apenas se mueve. En km/h, dos ascensos
+        idénticos de esfuerzo saldrían distintos solo porque uno era más empinado, y la
+        gráfica estaría midiendo qué puerto tocaba ese día en lugar de cómo estás.
+      </p>
 
       {!hayDatos ? (
         <div className="callout">
@@ -93,9 +100,19 @@ function Terreno({ t }) {
   const zonasVisibles = zonaSel ? t.zonas.filter((z) => z.n === zonaSel) : t.zonas;
   const visibles = zonasVisibles.flatMap((z) => z.puntos.map((p) => ({ ...p, zona: z })));
 
+  /* Cada terreno se mide con lo suyo: el llano en km/h y las subidas en
+     metros verticales por hora. El motivo esta en TERRENOS, en metrics.js. */
+  const valor = (p) => (t.metrica === 'vam' ? p.vam : p.velocidad);
+
+  /* Un punto sin valor en la metrica del terreno no se puede colocar en el
+     eje. Con las bandas actuales no deberia darse —en mixto y montaña todo
+     tramo sube—, pero pintarlo saldria como un punto pegado al suelo sin
+     que nada avisara de que es basura. */
+  const dibujables = (z) => z.puntos.filter((p) => valor(p) != null);
+
   /* Solo se traza linea con dos puntos o mas: con uno no hay tendencia que dibujar. */
-  const conLinea = zonasVisibles.filter((z) => z.puntos.length >= 2);
-  const escasas = zonasVisibles.filter((z) => z.puntos.length < 2);
+  const conLinea = zonasVisibles.filter((z) => dibujables(z).length >= 2);
+  const escasas = zonasVisibles.filter((z) => dibujables(z).length < 2);
 
   if (!todos.length) {
     return (
@@ -131,8 +148,8 @@ function Terreno({ t }) {
   const ultimo = Math.max(0, t.salidas - 1);
 
   /* El vertical, en cambio, se ajusta a lo que se esta viendo. */
-  const vels = visibles.map((p) => p.velocidad);
-  const vMin = Math.min(...vels) * 0.92, vMax = Math.max(...vels) * 1.08;
+  const vals = visibles.map(valor).filter((v) => v != null);
+  const vMin = Math.min(...vals) * 0.92, vMax = Math.max(...vals) * 1.08;
 
   const x = (orden) => (ultimo === 0
     ? mIzq + ancho / 2
@@ -164,12 +181,12 @@ function Terreno({ t }) {
 
           {conLinea.map((z) => (
             <path key={z.n} fill="none" stroke={z.color} strokeWidth="2" strokeLinejoin="round"
-              d={z.puntos.map((p, i) =>
-                `${i ? 'L' : 'M'} ${x(p.orden)} ${y(p.velocidad)}`).join(' ')} />
+              d={dibujables(z).map((p, i) =>
+                `${i ? 'L' : 'M'} ${x(p.orden)} ${y(valor(p))}`).join(' ')} />
           ))}
 
-          {zonasVisibles.map((z) => z.puntos.map((p, i) => (
-            <circle key={`${z.n}-${i}`} cx={x(p.orden)} cy={y(p.velocidad)} r="3.5"
+          {zonasVisibles.map((z) => dibujables(z).map((p, i) => (
+            <circle key={`${z.n}-${i}`} cx={x(p.orden)} cy={y(valor(p))} r="3.5"
               fill={z.color} />
           )))}
 
@@ -178,7 +195,7 @@ function Terreno({ t }) {
           <text x={mIzq - 8} y={mSup + alto} textAnchor="end" fontFamily="var(--mono)"
             fontSize="10.5" fill="var(--ink2)">{num(vMin, 0)}</text>
           <text x={mIzq - 8} y={mSup - 8} textAnchor="end" fontFamily="var(--mono)"
-            fontSize="10" fill="var(--ink3)">km/h</text>
+            fontSize="10" fill="var(--ink3)">{t.unidad}</text>
 
           {marcas.map((m, i) => (
             <text key={i} x={x(m)} y={H - 14}
@@ -241,36 +258,6 @@ function Terreno({ t }) {
         </div>
       )}
 
-      <div className="scroll" style={{ marginTop: 14 }}>
-        <table>
-          <thead>
-            <tr>
-              <th>Salida</th><th>Fecha</th><th>Zona</th><th>Km</th><th>Vel.</th><th>FC</th>
-            </tr>
-          </thead>
-          <tbody>
-            {/* La tabla acompaña a la gráfica: si filtras una zona, filtra tambien. */}
-            {[...visibles]
-              .sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : a.zona.n - b.zona.n))
-              .map((p) => (
-                <tr key={`${p.id}-${p.zona.n}`}>
-                  <td>{p.nombre}</td>
-                  <td>{fechaCorta(p.fecha)}</td>
-                  <td>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <i style={{ background: p.zona.color, width: 9, height: 9,
-                        borderRadius: 2, display: 'inline-block' }} />
-                      Z{p.zona.n}
-                    </span>
-                  </td>
-                  <td>{num(p.km, 1)}</td>
-                  <td>{num(p.velocidad, 1)}</td>
-                  <td>{num(p.fc, 0)}</td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
-      </div>
     </>
   );
 }
