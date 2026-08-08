@@ -1,9 +1,13 @@
 :root{
-  /* Superficies. Negro mas profundo que antes para ganar contraste: el
-     relieve, las tablas y los colores de zona se leen mejor cuanto mas
-     oscuro es el fondo del que salen. */
-  --bg:#0A0C0F; --bg2:#111419; --card:#12161C; --card2:#191E26;
-  --line:#232A34; --line2:#333C48;
+  /*
+    Superficies. Lo que importa aqui no es cuan oscuro es cada tono sino
+    cuanto se separan entre si: con el fondo y la tarjeta casi iguales,
+    los bloques no despegan de la pagina y el panel entero parece
+    apagado por mucho borde que se le ponga. De ahi que el fondo baje y
+    la tarjeta suba, en vez de dejar los dos rondando el mismo negro.
+  */
+  --bg:#08090C; --bg2:#101419; --card:#161B23; --card2:#1F2530;
+  --line:#2B3340; --line2:#3C4757;
 
   --ink:#F2F4F6; --ink2:#A8B2BE; --ink3:#6E7885;
 
@@ -314,56 +318,59 @@ label{margin-bottom:7px;display:block}
 
 
 /* ============================================================
-   Menos caja, mas linea.
+   Superficies.
 
-   Antes cada bloque era una tarjeta con relleno y borde, y esa
-   uniformidad aplanaba la jerarquia: un dato suelto pesaba lo mismo que
-   una tabla de veinte filas. Ahora el relleno se reserva a las tarjetas
-   de dato, que son las que lo aprovechan, y el resto del contenido se
-   apoya en el fondo de la pagina separado por lineas finas.
+   Aqui hubo un intento de quitar los marcos y dejar el contenido
+   apoyado en el fondo, con la idea de que pareciese un cuaderno. Salio
+   mal: sin bordes, un panel de datos no se lee como un documento
+   elegante sino como una pagina a medio cargar, y todo el peso visual
+   se perdia en negro plano. Un panel de control necesita bloques con
+   principio y final.
    ============================================================ */
 
-/* El titulo de seccion abre con una linea, como el encabezado de un
-   capitulo. Es lo que ordena la pagina ahora que no hay marcos. */
-h2{font-size:23px;font-weight:600;letter-spacing:-.02em;
-  margin:var(--e7) 0 var(--e3);padding-top:var(--e4);
-  border-top:1px solid var(--line)}
-h2:first-child{margin-top:var(--e2);padding-top:0;border-top:0}
+h2{font-size:21px;font-weight:600;letter-spacing:-.02em;
+  margin:var(--e6) 0 var(--e3)}
+h2:first-child{margin-top:var(--e2)}
 
-.panel,.chart,.card{background:none;border:0;border-radius:0;padding:0}
-.panel+.panel,.card+.card{margin-top:var(--e5)}
-
-/* Los formularios si necesitan delimitarse: sin marco, los campos
-   flotan sueltos y no se ve donde acaba el grupo. */
-.panel:has(.fields){background:var(--card);border:1px solid var(--line);
+.panel,.chart,.card{background:var(--card);border:1px solid var(--line);
   border-radius:var(--r);padding:var(--e5)}
+.panel+.panel,.card+.card{margin-top:var(--e4)}
 
-/* Unica superficie con relleno de toda la interfaz. */
+/*
+  Las tarjetas de dato llevan una linea de color arriba. Es lo unico
+  decorativo de la interfaz y se gana el sitio: rompe la monotonia de
+  una fila de cajas identicas y da un punto de apoyo a la vista sin
+  recurrir a degradados.
+*/
 .stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
-  padding:var(--e4) 17px}
-.stat .v{font-size:29px;font-weight:600}
+  padding:var(--e4) 17px;position:relative;overflow:hidden}
+.stat::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;
+  background:var(--acento);opacity:.5}
+.stat .k{color:var(--ink3)}
+.stat .v{font-size:30px;font-weight:600;margin-top:9px}
+.stat .d{margin-top:7px}
 
-/* Las tablas se sostienen con sus propias lineas, sin caja alrededor. */
-.scroll{border:0;border-top:1px solid var(--line2);border-radius:0;background:none}
-table th{padding:11px 12px;white-space:nowrap}
+.scroll{border:1px solid var(--line);border-radius:var(--r);background:var(--card)}
+table th{padding:12px;white-space:nowrap;background:var(--bg2)}
 table td{padding:12px}
-tbody tr:hover td{background:var(--bg2)}
+tbody tr:hover td{background:var(--card2)}
 
-.callout{background:none;border-radius:0;padding:14px 0 14px 16px}
+.callout{background:var(--card);border-radius:0 var(--r) var(--r) 0;padding:15px 18px}
 
 .consejo{background:var(--card);border:1px solid var(--line);border-left-width:3px;
   padding:18px 20px}
 .consejo .tit{margin-bottom:8px}
 
-.legend{margin-top:var(--e3)}
+.chart .legend{margin-top:var(--e4);padding-top:var(--e3);
+  border-top:1px solid var(--line)}
 
 /* El estado activo de los selectores usa el acento de marca, que es su
    sitio: son cromo de interfaz, no datos. */
 .chips button[aria-pressed="true"]{background:var(--acento);border-color:var(--acento);
   color:var(--acento-ink)}
 
-.goal{background:none;border:0;border-radius:0;padding:0 0 var(--e5);
-  border-bottom:1px solid var(--line);margin-bottom:var(--e5)}
+.goal{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+  padding:var(--e5);margin-bottom:var(--e3)}
 
 /* Dos columnas: una estrecha para el formulario y una ancha para lo que
    se deriva de el. Se apilan en cuanto no caben. */

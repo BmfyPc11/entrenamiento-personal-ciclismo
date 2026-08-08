@@ -142,15 +142,17 @@ export default function Datos({ cfg, setCfg, zonas, reparto, fondo }) {
               </table>
             </div>
 
-            {hayDatos
-              ? <Pastel zonas={zonas} reparto={reparto} compacto />
-              : (
-                <p className="hint" style={{ fontSize: 13, margin: 0 }}>
-                  {fondo?.activo
-                    ? 'Trayendo el detalle de tus salidas para calcular el reparto…'
-                    : 'Sin salidas con pulsómetro analizadas todavía, no hay reparto que dibujar.'}
-                </p>
-              )}
+            <div className="chart">
+              {hayDatos
+                ? <Pastel zonas={zonas} reparto={reparto} compacto />
+                : (
+                  <p className="hint" style={{ fontSize: 13, margin: 0 }}>
+                    {fondo?.activo
+                      ? 'Trayendo el detalle de tus salidas para calcular el reparto…'
+                      : 'Sin salidas con pulsómetro analizadas todavía, no hay reparto que dibujar.'}
+                  </p>
+                )}
+            </div>
           </div>
 
           <dl className="glosario">
@@ -324,9 +326,9 @@ function Pastel({ zonas, reparto, compacto = false }) {
       <g key={z.n}>
         <path
           d={`M ${x1} ${y1} A ${R} ${R} 0 ${grande} 1 ${x2} ${y2} L ${x3} ${y3} A ${r} ${r} 0 ${grande} 0 ${x4} ${y4} Z`}
-          fill={z.color} stroke="var(--bg)" strokeWidth="2" />
+          fill={z.color} stroke="var(--card)" strokeWidth="2" />
         {frac > 0.06 && (
-          <text x={tx} y={ty + 5} textAnchor="middle" fill="var(--bg)" fontSize="14" fontWeight="500"
+          <text x={tx} y={ty + 5} textAnchor="middle" fill="var(--bg)" fontSize="14" fontWeight="600"
             fontFamily="ui-monospace,Menlo,monospace">
             {num(reparto.porcentaje[i], 0)} %
           </text>
