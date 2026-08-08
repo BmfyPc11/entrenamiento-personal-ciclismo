@@ -10,6 +10,7 @@ import Rutas from './Rutas';
 import AnalizadorGPX from './AnalizadorGPX';
 import Semana from './Semana';
 import Consejo from './Consejo';
+import Layout, { SECCIONES } from './Layout';
 import { calcularObjetivos, BarrasObjetivo, OBJETIVOS_INICIALES } from './objetivosLib';
 import { Linea, Barras, Carga } from './Graficos';
 import {
@@ -19,16 +20,7 @@ import {
   num, duracion, fechaCorta, kmh, km, metrosPorKm, vamSalida, esLlana,
 } from '@/lib/metrics';
 
-const PESTANAS = [
-  ['resumen', 'Resumen'],
-  ['datos', 'Tus datos'],
-  ['entrenamientos', 'Entrenamientos'],
-  ['ascensiones', 'Mis ascensiones'],
-  ['carga', 'Carga y forma'],
-  ['objetivos', 'Objetivos'],
-  ['rutas', 'Rutas'],
-  ['analizador', 'Analizar GPX'],
-];
+/* La lista de secciones vive en Layout, que es quien la pinta. */
 
 const CFG_INICIAL = {
   peso: 75, bici: 11, fcmax: 185, cda: 0.36, crr: 0.008, perfil: 'gravel_alto',
@@ -45,6 +37,7 @@ export default function Dashboard({ atleta }) {
   const [rango, setRango] = useState({ desde: '', hasta: '' });
   const [objetivos, setObjetivos] = useState({ ...OBJETIVOS_INICIALES });
   const [refrescando, setRefrescando] = useState(false);
+  const [menuAbierto, setMenuAbierto] = useState(false);
 
   /* --- preferencias guardadas en el navegador --- */
   useEffect(() => {
@@ -217,43 +210,24 @@ export default function Dashboard({ atleta }) {
     );
   }
 
+  const titulo = (SECCIONES.find(([id]) => id === pestana) || [])[1] || '';
+
   return (
+    <Layout seccion={pestana} setSeccion={setPestana} atleta={atleta}
+      onActualizar={cargar} refrescando={refrescando}
+      abierto={menuAbierto} setAbierto={setMenuAbierto}>
     <div className="wrap">
       <div className="top">
-        <h1>Analiza tu<br /><em>rendimiento</em></h1>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div className="usuario">
-            {atleta?.foto
-              ? <img src={atleta.foto} alt="" />
-              : <div className="ini">{(atleta?.nombre || '?').charAt(0)}</div>}
-            <div>
-              <b>{atleta?.nombre || 'Conectado'}</b>
-              <span>vía Strava</span>
-            </div>
-          </div>
-          <button onClick={cargar} disabled={refrescando}>
-            {refrescando ? 'Actualizando…' : 'Actualizar'}
-          </button>
-          <button onClick={() =>
-            fetch('/api/auth/logout', { method: 'POST' }).then(() => window.location.reload())}>
-            Salir
-          </button>
+        <div>
+          <p className="eyebrow">Cuaderno de ruta</p>
+          <h1>{titulo}</h1>
         </div>
       </div>
 
       {error && <div className="callout warn">{error}</div>}
 
-      <Consejo consejo={consejo} />
+      {pestana === 'resumen' && <Consejo consejo={consejo} />}
 
-      <nav role="tablist">
-        {PESTANAS.map(([id, txt]) => (
-          <button key={id} role="tab" aria-selected={pestana === id} onClick={() => setPestana(id)}>
-            {txt}
-          </button>
-        ))}
-      </nav>
-
-      {/* ---------- constantes ---------- */}
       {pestana === 'resumen' && (
         <Resumen salidas={activas} cfg={cfg} umbral={umbral} masaTotal={masaTotal}
           excluidas={excluidas} setExcluidas={setExcluidas} enRango={enRango}
@@ -300,6 +274,7 @@ export default function Dashboard({ atleta }) {
         tengas medidor de potencia, en cuyo caso se usa el dato real.
       </footer>
     </div>
+    </Layout>
   );
 }
 
