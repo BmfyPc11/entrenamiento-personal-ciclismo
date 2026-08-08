@@ -33,7 +33,10 @@ export default function Evolucion({ salidas, cache, zonas, excluidas, fondo }) {
         corresponde por su propia pendiente y en la zona de pulso en la que ibas en ese
         momento. Así lo que compara la gráfica son esfuerzos equivalentes: lo que rindes
         hoy en una zona y un terreno frente a lo que rendías antes en esa misma
-        combinación.
+        combinación. Los descensos quedan fuera: bajar a 45 km/h sin pedalear no dice
+        nada de cómo llaneas, y contarlo como llano solo inflaba la media. El eje
+        horizontal da una columna a cada salida, no a cada día del calendario: así un
+        parón no deja un hueco que la línea cruce como si fuera progreso.
       </p>
 
       {!hayDatos ? (
@@ -58,7 +61,9 @@ export default function Evolucion({ salidas, cache, zonas, excluidas, fondo }) {
             ))}
           </div>
 
-          {activo && <Terreno t={activo} />}
+          {/* La clave reinicia la zona elegida al cambiar de terreno: una zona
+              con datos en Llano puede no tener ninguno en Montaña. */}
+          {activo && <Terreno t={activo} key={activo.id} />}
 
           {fondo?.activo && (
             <div className="callout">
@@ -73,10 +78,24 @@ export default function Evolucion({ salidas, cache, zonas, excluidas, fondo }) {
 }
 
 function Terreno({ t }) {
-  /* Solo se traza linea con dos puntos o mas: con uno no hay tendencia que dibujar. */
-  const conLinea = t.zonas.filter((z) => z.puntos.length >= 2);
-  const escasas = t.zonas.filter((z) => z.puntos.length < 2);
+  const [zonaSel, setZonaSel] = useState(null);
+
   const todos = t.zonas.flatMap((z) => z.puntos.map((p) => ({ ...p, zona: z })));
+
+  /*
+    Con una zona elegida se dibuja solo ella. No se atenuan las demas como
+    en el perfil de Entrenamientos, y la diferencia importa: al quedarse
+    una sola serie, la escala vertical se reajusta a su rango y la
+    tendencia se despliega. Con las cinco a la vez el eje tiene que cubrir
+    desde el paseo de Z1 hasta el sprint de Z5, y dentro de esa horquilla
+    la variacion de una zona concreta se ve como una linea casi plana.
+  */
+  const zonasVisibles = zonaSel ? t.zonas.filter((z) => z.n === zonaSel) : t.zonas;
+  const visibles = zonasVisibles.flatMap((z) => z.puntos.map((p) => ({ ...p, zona: z })));
+
+  /* Solo se traza linea con dos puntos o mas: con uno no hay tendencia que dibujar. */
+  const conLinea = zonasVisibles.filter((z) => z.puntos.length >= 2);
+  const escasas = zonasVisibles.filter((z) => z.puntos.length < 2);
 
   if (!todos.length) {
     return (
@@ -92,27 +111,46 @@ function Terreno({ t }) {
   const ancho = W - mIzq - mDer, alto = H - mSup - mInf;
 
   /*
-    El eje X va por fecha real, no por indice. Cada zona tiene un numero
-    distinto de puntos, y con indices las series quedarian desalineadas
-    entre si: el tercer punto de Z2 y el tercero de Z4 se pintarian en la
-    misma vertical aunque fueran de meses distintos.
+    El eje X reparte por salidas, no por calendario.
+
+    Con fechas reales, un mes sin entrenar se comia un tercio del ancho
+    en blanco y una semana de cuatro salidas se apelotonaba en dos
+    centimetros. Peor todavia: la linea cruzaba el hueco como un segmento
+    recto larguisimo, que se lee como una progresion continua cuando ahi
+    en medio no se midio nada.
+
+    La numeracion viene de metrics.js y es por salida, no por serie, de
+    modo que todos los puntos del mismo dia comparten columna y las zonas
+    siguen alineadas entre si. Las etiquetas siguen siendo fechas reales:
+    lo que se pierde es la escala temporal, no la referencia.
   */
-  const fechas = todos.map((p) => new Date(p.fecha).getTime());
-  const tMin = Math.min(...fechas), tMax = Math.max(...fechas);
-  const vels = todos.map((p) => p.velocidad);
+  /* El eje horizontal se calcula siempre sobre todas las salidas del
+     terreno, elijas la zona que elijas: si se encogiera al filtrar, cada
+     zona pintaria sus puntos en sitios distintos y compararlas saltando
+     de una a otra dejaria de significar nada. */
+  const ultimo = Math.max(0, t.salidas - 1);
+
+  /* El vertical, en cambio, se ajusta a lo que se esta viendo. */
+  const vels = visibles.map((p) => p.velocidad);
   const vMin = Math.min(...vels) * 0.92, vMax = Math.max(...vels) * 1.08;
 
-  const x = (f) => (tMax === tMin
+  const x = (orden) => (ultimo === 0
     ? mIzq + ancho / 2
-    : mIzq + ((new Date(f).getTime() - tMin) / (tMax - tMin)) * ancho);
+    : mIzq + (orden / ultimo) * ancho);
   const y = (v) => (vMax === vMin
     ? mSup + alto / 2
     : mSup + alto - ((v - vMin) / (vMax - vMin)) * alto);
 
+  /* Fecha de cada columna, para poder etiquetar el eje. Se construye con
+     todos los puntos y no solo con los visibles: una zona filtrada puede
+     no tener punto en la columna que toca etiquetar. */
+  const fechaDe = new Map();
+  todos.forEach((p) => { if (!fechaDe.has(p.orden)) fechaDe.set(p.orden, p.fecha); });
+
   /* Etiquetas del eje X: extremos y centro, que es lo que cabe sin amasijo. */
-  const marcas = tMax === tMin
-    ? [tMin]
-    : [tMin, (tMin + tMax) / 2, tMax];
+  const marcas = ultimo === 0
+    ? [0]
+    : [0, Math.round(ultimo / 2), ultimo];
 
   return (
     <>
@@ -127,11 +165,11 @@ function Terreno({ t }) {
           {conLinea.map((z) => (
             <path key={z.n} fill="none" stroke={z.color} strokeWidth="2" strokeLinejoin="round"
               d={z.puntos.map((p, i) =>
-                `${i ? 'L' : 'M'} ${x(p.fecha)} ${y(p.velocidad)}`).join(' ')} />
+                `${i ? 'L' : 'M'} ${x(p.orden)} ${y(p.velocidad)}`).join(' ')} />
           ))}
 
-          {t.zonas.map((z) => z.puntos.map((p, i) => (
-            <circle key={`${z.n}-${i}`} cx={x(p.fecha)} cy={y(p.velocidad)} r="3.5"
+          {zonasVisibles.map((z) => z.puntos.map((p, i) => (
+            <circle key={`${z.n}-${i}`} cx={x(p.orden)} cy={y(p.velocidad)} r="3.5"
               fill={z.color} />
           )))}
 
@@ -146,31 +184,45 @@ function Terreno({ t }) {
             <text key={i} x={x(m)} y={H - 14}
               textAnchor={i === 0 ? 'start' : i === marcas.length - 1 ? 'end' : 'middle'}
               fontFamily="var(--mono)" fontSize="10" fill="var(--ink3)">
-              {fechaCorta(m).slice(0, 6)}
+              {fechaCorta(fechaDe.get(m)).slice(0, 6)}
             </text>
           ))}
         </svg>
 
         {/*
-          Las zonas sin datos siguen en la leyenda, atenuadas. Si
-          desaparecieran sin mas, faltaria la mitad de la historia: que esa
-          combinacion existe y todavia no tienes material en ella.
+          La leyenda es tambien el selector. Las zonas sin datos siguen
+          listadas, atenuadas y sin poder pulsarse: si desapareciesen sin
+          mas, faltaria la mitad de la historia: que esa combinacion existe
+          y todavia no tienes material en ella.
         */}
         <div className="chips" style={{ marginTop: 10 }}>
+          <button
+            aria-pressed={zonaSel === null}
+            onClick={() => setZonaSel(null)}
+            style={zonaSel === null
+              ? { background: 'var(--ink2)', borderColor: 'var(--ink2)' } : null}
+          >
+            Todas
+          </button>
           {t.zonas.map((z) => {
-            const flojo = z.puntos.length < 2;
+            const vacia = z.puntos.length === 0;
+            const activa = zonaSel === z.n;
             return (
-              <span key={z.n} style={{
-                fontFamily: 'var(--mono)', fontSize: 11.5,
-                color: flojo ? 'var(--ink3)' : 'var(--ink2)',
-                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 9px',
-                border: '1px solid var(--line2)', borderRadius: 6,
-                opacity: flojo ? 0.55 : 1,
-              }}>
-                <i style={{ background: z.color, width: 9, height: 9, borderRadius: 2,
-                  display: 'inline-block', opacity: flojo ? 0.5 : 1 }} />
+              <button
+                key={z.n}
+                aria-pressed={activa}
+                disabled={vacia}
+                onClick={() => setZonaSel(activa ? null : z.n)}
+                title={vacia
+                  ? `Todavía no hay ninguna salida con tramos en Z${z.n} en este terreno`
+                  : `Ver solo Z${z.n}`}
+                style={activa
+                  ? { background: z.color, borderColor: z.color, color: '#0E1116' }
+                  : null}
+              >
+                <i style={{ background: z.color, opacity: vacia ? 0.4 : 1 }} />
                 Z{z.n} {z.nombre} · {z.puntos.length}
-              </span>
+              </button>
             );
           })}
         </div>
@@ -197,7 +249,8 @@ function Terreno({ t }) {
             </tr>
           </thead>
           <tbody>
-            {[...todos]
+            {/* La tabla acompaña a la gráfica: si filtras una zona, filtra tambien. */}
+            {[...visibles]
               .sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : a.zona.n - b.zona.n))
               .map((p) => (
                 <tr key={`${p.id}-${p.zona.n}`}>
