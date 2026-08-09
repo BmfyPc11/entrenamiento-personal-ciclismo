@@ -217,12 +217,19 @@ export default function Dashboard({ atleta }) {
       onActualizar={cargar} refrescando={refrescando}
       abierto={menuAbierto} setAbierto={setMenuAbierto}>
     <div className="wrap">
-      <div className="top">
-        <div>
-          <p className="eyebrow">Cuaderno de ruta</p>
-          <h1>{titulo}</h1>
+      {/*
+        Entrenamientos pinta su propia cabecera porque el selector de salida
+        va junto al titulo. El resto de secciones usa esta generica hasta que
+        les toque su pasada de la fase 3.
+      */}
+      {pestana !== 'entrenamientos' && (
+        <div className="top">
+          <div>
+            <p className="eyebrow">Cuaderno de ruta</p>
+            <h1>{titulo}</h1>
+          </div>
         </div>
-      </div>
+      )}
 
       {error && <div className="callout warn">{error}</div>}
 

@@ -57,6 +57,14 @@ export default function Perfil({
   const [hover, setHover] = useState(null);
   const [zoom, setZoom] = useState(false);
 
+  /*
+    Los nombres de las subidas ya no son cosa del modo "Informacion".
+    Saber que esa rampa es Vallvesana ayuda igual mirando el color de la
+    pendiente o la zona de pulso en la que ibas, asi que la ficha se
+    conserva en los tres y se puede apagar cuando estorbe.
+  */
+  const [verNombres, setVerNombres] = useState(true);
+
   const datos = useMemo(() => {
     const { distancia: d, altitud: a, fc } = streams || {};
     if (!d || !a || d.length < 2) return null;
@@ -85,50 +93,27 @@ export default function Perfil({
   const X = (k) => L + (k / maxD) * (W - L - R);
 
   /*
-    Las fichas de los puertos se colocan primero, porque de cuantas filas
-    ocupen depende cuanto crece el grafico.
+    El grafico ya no crece para hacer sitio a las fichas.
 
-    Al principio esto se resolvia duplicando la escala de altitud: el
-    relieve bajaba a la mitad inferior y arriba quedaba hueco. Pero eso
-    mezclaba dos cosas que no tienen por que ir juntas, y el precio era
-    aplastar el perfil un 38 %. El sitio para las etiquetas es una banda
-    de pixeles; la escala de altitud es otra cosa. Separadas, el relieve
-    conserva su forma y las fichas siguen teniendo su hueco.
+    Hubo dos intentos antes de este. El primero duplicaba la escala de
+    altitud para dejar hueco arriba, y aplastaba el relieve un 38 %. El
+    segundo, que es el que se sustituye aqui, reservaba una banda de
+    pixeles por encima del area de dibujo: no deformaba nada, pero abria
+    un pasillo vacio entre cada nombre y su cima que crecia con cada fila,
+    hasta comerse media altura del grafico con cuatro puertos.
+
+    Ahora las fichas van dentro, aprovechando el aire que la escala ya
+    deja sobre la cota maxima. Como su sitio depende de la altura de cada
+    cima, se colocan despues de la escala y no antes.
   */
   const ALTO_FICHA = 44, HUECO_FICHA = 4;
-  const cajas = [];
-  if (modo === 'relieve' && puertos.length) {
-    const filas = [];   // ultimo x ocupado por cada fila
-    puertos
-      .map((p, i) => ({ p, i, k: mapearIdx(p.fin, datos) }))
-      .sort((u, v) => datos.d[u.k] - datos.d[v.k])
-      .forEach(({ p, i, k }) => {
-        const cat = categoriaPuerto(p.metros, p.pendiente);
-        const nombre = nombres[i] || `Subida ${i + 1}`;
-        const anchoCat = cat.nombre.length * 8 + 12;
-        const ancho = Math.max(150,
-          Math.min(6 + anchoCat + 7 + nombre.length * 6.7 + 10, 300));
-        const x = X(datos.d[k]);
-        const xCaja = Math.max(L, Math.min(x - ancho / 2, W - R - ancho));
 
-        /* Primera fila donde la caja no pise a la anterior. */
-        let fila = 0;
-        while (filas[fila] != null && xCaja < filas[fila] + HUECO_FICHA) fila++;
-        filas[fila] = xCaja + ancho;
+  /* Aire entre la cima y la ficha que la nombra. Suficiente para que se
+     lean como dos cosas unidas por el hilo, no como una encima de otra. */
+  const SEPARACION_CIMA = 12;
 
-        cajas.push({ p, i, k, cat, nombre, ancho, anchoCat, x, xCaja, fila });
-      });
-    /* Se ordenan por indice para que el foco y las claves no bailen. */
-    cajas.sort((a, b) => a.i - b.i);
-  }
-
-  const nFilas = cajas.length ? Math.max(...cajas.map((c) => c.fila)) + 1 : 0;
-  const banda = nFilas ? nFilas * (ALTO_FICHA + HUECO_FICHA) + 6 : 0;
-
-  /* El grafico crece justo lo que ocupan las fichas, de modo que el area
-     donde se dibuja el relieve conserva su tamano de siempre. */
-  const H = altura + banda;
-  const T = T0 + banda;
+  const H = altura;
+  const T = T0;
 
   /*
     Escala vertical: dos reglas, y manda la que pida mas aire.
@@ -174,6 +159,52 @@ export default function Perfil({
   const zoomUtil = techoCon(AIRE_NORMAL) !== techoCon(AIRE_AMPLIADO);
 
   const Y = (v) => H - B - ((v - base) / (techo - base)) * (H - T - B);
+
+  /*
+    --- colocacion de las fichas de puerto ---
+
+    Cada una quiere ir justo encima de su cima, que es donde la vista la
+    busca. Cuando dos se pisan —puertos seguidos, o nombres largos— la
+    siguiente sube un piso, y asi hasta encontrar hueco.
+
+    El limite es el techo del area de dibujo: por encima no se sale,
+    aunque eso signifique que dos fichas queden mas juntas de lo ideal.
+    Mejor eso que una etiqueta recortada fuera del marco.
+  */
+  const cajas = [];
+  if (verNombres && puertos.length) {
+    puertos
+      .map((p, i) => ({ p, i, k: mapearIdx(p.fin, datos) }))
+      .sort((u, v) => datos.d[u.k] - datos.d[v.k])
+      .forEach(({ p, i, k }) => {
+        const cat = categoriaPuerto(p.metros, p.pendiente);
+        const nombre = nombres[i] || `Subida ${i + 1}`;
+        const anchoCat = cat.nombre.length * 8 + 12;
+        const ancho = Math.max(150,
+          Math.min(6 + anchoCat + 7 + nombre.length * 6.7 + 10, 300));
+        const x = X(datos.d[k]);
+        const xCaja = Math.max(L, Math.min(x - ancho / 2, W - R - ancho));
+        const yCima = Y(datos.a[k]);
+
+        let yCaja = yCima - SEPARACION_CIMA - ALTO_FICHA;
+
+        /* Sube mientras pise a alguna ya colocada que solape en horizontal. */
+        for (let vuelta = 0; vuelta < cajas.length + 1; vuelta++) {
+          const choca = cajas.find((c) =>
+            xCaja < c.xCaja + c.ancho + HUECO_FICHA &&
+            c.xCaja < xCaja + ancho + HUECO_FICHA &&
+            yCaja < c.yCaja + ALTO_FICHA + HUECO_FICHA &&
+            c.yCaja < yCaja + ALTO_FICHA + HUECO_FICHA);
+          if (!choca) break;
+          yCaja = choca.yCaja - ALTO_FICHA - HUECO_FICHA;
+        }
+        if (yCaja < T0) yCaja = T0;
+
+        cajas.push({ p, i, k, cat, nombre, ancho, anchoCat, x, xCaja, yCaja, yCima });
+      });
+    /* Se ordenan por indice para que el foco y las claves no bailen. */
+    cajas.sort((a, b) => a.i - b.i);
+  }
 
   /* --- lineas de altura de referencia --- */
   const vista = techo - base;
@@ -251,13 +282,11 @@ export default function Perfil({
     setHover(mejor);
   };
 
-  /* Las cajas ya traen su fila y su ancho; aqui solo se les pone la
-     altura, que necesita la escala vertical ya definida. */
+  /* Las cajas ya traen sitio y medidas; aqui solo se marca cual esta
+     bajo el cursor, que es lo unico que cambia al vuelo. */
   const fichas = cajas.map((c) => ({
     ...c,
     alto: ALTO_FICHA,
-    yCaja: T0 + c.fila * (ALTO_FICHA + HUECO_FICHA),
-    yCima: Y(datos.a[c.k]),
     activo: puertoFoco === c.i,
   }));
 
@@ -333,21 +362,26 @@ export default function Perfil({
           </>
         )}
 
-        {/* puertos: subrayado de la subida y ficha en la coronacion */}
-        {modo === 'relieve' && (
-          <>
-            {puertos.map((p, i) => {
-              const a = mapear(p.inicio), b = mapear(p.fin);
-              if (b <= a) return null;
-              const activo = puertoFoco === i;
-              return (
-                <path key={`s${i}`} d={lineaPath(a, b)} fill="none"
-                  stroke={activo ? '#D14B42' : '#E0A82E'}
-                  strokeWidth={activo ? 4.5 : 3.2} strokeLinecap="round" />
-              );
-            })}
+        {/*
+          El subrayado de la subida se queda solo en "Informacion". En los
+          otros dos modos el recorrido ya esta pintado con su propio codigo
+          de color —la pendiente o la zona de pulso— y una linea amarilla
+          encima competiria con el: el amarillo significa ya otra cosa en
+          la escala de dureza. La ficha, en cambio, no compite con nada
+          porque va sobre fondo opaco.
+        */}
+        {modo === 'relieve' && puertos.map((p, i) => {
+          const a = mapear(p.inicio), b = mapear(p.fin);
+          if (b <= a) return null;
+          const activo = puertoFoco === i;
+          return (
+            <path key={`s${i}`} d={lineaPath(a, b)} fill="none"
+              stroke={activo ? '#D14B42' : '#E0A82E'}
+              strokeWidth={activo ? 4.5 : 3.2} strokeLinecap="round" />
+          );
+        })}
 
-            {fichas.map((f) => {
+        {fichas.map((f) => {
               /* Marco y vertical van del color del trazo de la subida, no
                  del de la categoria: asi la ficha se lee como parte del
                  mismo dibujo y la vista sigue sola de una a la otra. El
@@ -390,8 +424,6 @@ export default function Perfil({
               </g>
               );
             })}
-          </>
-        )}
 
         <line x1={L} y1={H - B} x2={W - R} y2={H - B} stroke="#2A3341" strokeWidth="1" />
         {[0, 0.25, 0.5, 0.75, 1].map((f) => (
@@ -425,16 +457,30 @@ export default function Perfil({
         )}
       </svg>
 
-      {zoomUtil && (
-        <label style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12,
-          fontSize: 13.5, color: 'var(--ink2)', cursor: 'pointer' }}>
-          <input type="checkbox" checked={zoom}
-            onChange={(e) => setZoom(e.target.checked)} />
-          Ampliar el relieve
-          <span style={{ color: 'var(--ink3)', fontSize: 12.5 }}>
-            — el perfil se dibuja con menos aire, para ver la forma del terreno de cerca
-          </span>
-        </label>
+      {(zoomUtil || puertos.length > 0) && (
+        <div className="interruptores">
+          {puertos.length > 0 && (
+            <label className="interruptor">
+              <input type="checkbox" checked={verNombres}
+                onChange={(e) => setVerNombres(e.target.checked)} />
+              Nombres de las subidas
+              <span className="apunte">
+                — {puertos.length === 1 ? 'la subida detectada' : `las ${puertos.length} subidas detectadas`},
+                con su categoría, sobre el perfil
+              </span>
+            </label>
+          )}
+          {zoomUtil && (
+            <label className="interruptor">
+              <input type="checkbox" checked={zoom}
+                onChange={(e) => setZoom(e.target.checked)} />
+              Ampliar el relieve
+              <span className="apunte">
+                — el perfil se dibuja con menos aire, para ver la forma del terreno de cerca
+              </span>
+            </label>
+          )}
+        </div>
       )}
     </div>
   );

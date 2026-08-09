@@ -19,7 +19,14 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
   );
 
   const [sel, setSel] = useState(ordenadas[0]?.id ?? null);
-  const [modo, setModo] = useState('relieve');
+  /*
+    Se arranca en dureza. Habia un tercer modo, "Informacion", que pintaba
+    el relieve en gris con las subidas subrayadas; desde que las fichas con
+    el nombre y la categoria salen en los tres, ese modo se quedo sin nada
+    propio que aportar y solo obligaba a un clic mas para llegar al color.
+    La vista sigue existiendo en Perfil.jsx, que la usa la pestana de Rutas.
+  */
+  const [modo, setModo] = useState('dureza');
   const [zonaFoco, setZonaFoco] = useState(null);
   const [durezaFoco, setDurezaFoco] = useState(null);
   const [mono, setMono] = useState(false);
@@ -120,38 +127,63 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
     if (cambio) { setCacheNombres(nueva); escribirCache(nueva); }
   }, [segmentos, sel, puertos, streams, cacheNombres]);
 
-  if (!ordenadas.length) return <p className="hint">No hay salidas en bicicleta para mostrar.</p>;
+  /* Sin salidas tambien hay que pintar la cabecera: desde que esta seccion
+     la trae puesta, Dashboard ya no dibuja ninguna por ella y la pagina se
+     quedaria sin titulo. */
+  if (!ordenadas.length) {
+    return (
+      <div>
+        <div className="top">
+          <div>
+            <p className="eyebrow">Análisis de una salida</p>
+            <h1>Entrenamientos</h1>
+          </div>
+        </div>
+        <p className="hint">No hay salidas en bicicleta para mostrar.</p>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <h2>Elige una salida</h2>
-      <p className="hint">
-        Todas tus actividades en bicicleta registradas en Strava, de la más reciente a la más antigua.
-      </p>
-
-      <select
-        className="grande"
-        value={sel ?? ''}
-        onChange={(e) => setSel(Number(e.target.value))}
-        aria-label="Seleccionar salida"
-      >
-        {ordenadas.map((s) => (
-          <option key={s.id} value={s.id}>
-            {new Date(s.fecha).toLocaleDateString('es-ES')} · {s.nombre} · {num(km(s), 1)} km
-            {s.desnivel > 0 ? ` · +${num(s.desnivel, 0)} m` : ''}
-            {s.fcMedia ? ' · con FC' : ''}
-          </option>
-        ))}
-      </select>
+      {/*
+        Esta seccion pinta su propia cabecera en vez de usar la generica de
+        Dashboard. El motivo es el selector: la salida analizada manda sobre
+        todo lo que hay debajo, y ponerla junto al titulo la convierte en lo
+        primero que se lee. Antes ocupaba una fila entera a media pagina.
+      */}
+      <div className="top">
+        <div>
+          <p className="eyebrow">Análisis de una salida</p>
+          <h1>Entrenamientos</h1>
+        </div>
+        <div className="sel-salida">
+          <label htmlFor="salida">Salida analizada</label>
+          <select
+            id="salida"
+            value={sel ?? ''}
+            onChange={(e) => setSel(Number(e.target.value))}
+          >
+            {ordenadas.map((s) => (
+              <option key={s.id} value={s.id}>
+                {new Date(s.fecha).toLocaleDateString('es-ES')} · {s.nombre} · {num(km(s), 1)} km
+                {s.desnivel > 0 ? ` · +${num(s.desnivel, 0)} m` : ''}
+                {s.fcMedia ? ' · con FC' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
 
       {salida && (
         <>
-          <h2 style={{ marginBottom: 2 }}>{salida.nombre}</h2>
-          <p className="hint" style={{ textTransform: 'capitalize', marginBottom: 18 }}>
+          {/* El desplegable ya dice el nombre y la fecha corta; aqui solo se
+              anade el dia de la semana, que es lo que situa la salida. */}
+          <p className="eyebrow" style={{ marginBottom: 18 }}>
             {fechaLarga(salida.fecha)}
           </p>
 
-          <div className="grid">
+          <div className="grid compacta">
             <Dato k="Distancia" v={num(km(salida), 1)} u="km" />
             <Dato k="Desnivel" v={`+${num(salida.desnivel, 0)}`} u="m"
               d={`${num(metrosPorKm(salida), 1)} m por km`} />
@@ -168,12 +200,34 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
           </div>
 
           {/* ---------- perfil ---------- */}
-          <h2>Perfil de la ruta</h2>
-          <p className="hint">
-            Pasa el cursor por encima para ver la altitud y la frecuencia cardíaca en cada punto.
-          </p>
+          <div className="chart" style={{ marginTop: 26 }}>
+            {/*
+              Los modos suben a la cabecera del panel. Debajo del grafico
+              estaban en el sitio donde menos se buscan: para cambiar de vista
+              hay que mirar primero que vista hay, y eso se mira arriba.
+            */}
+            <div className="cab-panel">
+              <span className="rotulo">Perfil de altimetría</span>
+              {streams && (
+                <div className="chips">
+                  <button
+                    aria-pressed={modo === 'dureza'}
+                    onClick={() => { setModo('dureza'); setZonaFoco(null); }}
+                  >
+                    Perfil y dureza
+                  </button>
+                  <button
+                    aria-pressed={modo === 'zonas'}
+                    disabled={!tieneFC}
+                    onClick={() => { setModo('zonas'); setDurezaFoco(null); }}
+                    title={tieneFC ? '' : 'Esta salida no tiene frecuencia cardíaca'}
+                  >
+                    Zonas de frecuencia cardíaca
+                  </button>
+                </div>
+              )}
+            </div>
 
-          <div className="chart">
             {cargando && <p className="cargando"><span className="spin" />Cargando el perfil…</p>}
             {fallo && <div className="callout warn">No se pudo cargar el perfil: {fallo}</div>}
             {streams && (
@@ -193,39 +247,19 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
 
             {streams && (
               <>
-                <div className="chips">
-                  <button
-                    aria-pressed={modo === 'relieve'}
-                    onClick={() => { setModo('relieve'); setZonaFoco(null); setDurezaFoco(null); }}
-                    style={modo === 'relieve' ? { background: 'var(--ink)', borderColor: 'var(--ink)' } : null}
-                  >
-                    Información
-                  </button>
-                  <button
-                    aria-pressed={modo === 'dureza'}
-                    onClick={() => { setModo('dureza'); setZonaFoco(null); }}
-                    style={modo === 'dureza' ? { background: 'var(--ink)', borderColor: 'var(--ink)' } : null}
-                  >
-                    Perfil y dureza
-                  </button>
-                  <button
-                    aria-pressed={modo === 'zonas'}
-                    disabled={!tieneFC}
-                    onClick={() => { setModo('zonas'); setDurezaFoco(null); }}
-                    title={tieneFC ? '' : 'Esta salida no tiene frecuencia cardíaca'}
-                    style={modo === 'zonas' ? { background: 'var(--ink)', borderColor: 'var(--ink)' } : null}
-                  >
-                    Zonas de frecuencia cardíaca
-                  </button>
-                </div>
+                {/* El cursor funciona en los dos modos, asi que la pista deja
+                    de estar atada a uno. */}
+                <p className="hint" style={{ margin: '14px 0 0' }}>
+                  Pasa el cursor por encima para ver la altitud y la frecuencia cardíaca en
+                  cada punto.
+                </p>
 
                 {modo === 'dureza' && dureza && (
                   <>
-                    <div className="chips" style={{ marginTop: 8 }}>
+                    <div className="chips">
                       <button
                         aria-pressed={durezaFoco === null}
                         onClick={() => setDurezaFoco(null)}
-                        style={durezaFoco === null ? { background: 'var(--ink2)', borderColor: 'var(--ink2)' } : null}
                       >
                         Todo
                       </button>
@@ -237,7 +271,7 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
                             onClick={() => setDurezaFoco(durezaFoco === t.n ? null : t.n)}
                             style={durezaFoco === t.n
                               ? { background: t.color, borderColor: t.color,
-                                  color: t.n === 6 ? '#E8EAED' : '#0E1116' }
+                                  color: t.n === 6 ? '#E8EAED' : '#0A0C0F' }
                               : null}
                           >
                             <i style={{ background: t.color }} />{t.nombre} · {num(dureza.porcentaje[i], 0)} %
@@ -246,9 +280,7 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
                       )}
                     </div>
 
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 14,
-                      fontFamily: 'var(--sans)', fontSize: 13.5, textTransform: 'none',
-                      letterSpacing: 0, color: 'var(--ink2)', cursor: 'pointer' }}>
+                    <label className="interruptor">
                       <input type="checkbox" checked={mono} onChange={(e) => setMono(e.target.checked)} />
                       Ver el perfil en un solo color
                     </label>
@@ -257,11 +289,10 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
 
                 {modo === 'zonas' && tieneFC && (
                   <>
-                    <div className="chips" style={{ marginTop: 8 }}>
+                    <div className="chips">
                       <button
                         aria-pressed={zonaFoco === null}
                         onClick={() => setZonaFoco(null)}
-                        style={zonaFoco === null ? { background: 'var(--ink2)', borderColor: 'var(--ink2)' } : null}
                       >
                         Todas
                       </button>
@@ -277,15 +308,21 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
                         </button>
                       ))}
                     </div>
-                    <p className="hint" style={{ marginTop: 10, marginBottom: 0 }}>
+                    <p className="hint" style={{ marginTop: 12, marginBottom: 0 }}>
                       Selecciona una zona para ver exactamente en qué tramos de la ruta estuviste
-                      en ella. Los límites se configuran en la pestaña Zonas.
+                      en ella. Los límites se configuran en <strong>Tus datos</strong>.
                     </p>
                   </>
                 )}
 
-                {!tieneFC && modo !== 'dureza' && (
-                  <div className="callout warn" style={{ marginBottom: 0 }}>
+                {/*
+                  Antes este aviso solo salia estando en un modo distinto de
+                  dureza. Al quitar "Informacion", dureza es el modo de
+                  entrada y zonas esta deshabilitado, asi que nunca se
+                  llegaba a ver: quedaba un boton apagado sin explicacion.
+                */}
+                {!tieneFC && (
+                  <div className="callout warn" style={{ marginTop: 16, marginBottom: 0 }}>
                     Esta salida se registró sin pulsómetro, así que no hay zonas que pintar.
                     Si la grabaste con el móvil en lugar del Garmin, ahí está la razón.
                   </div>
@@ -325,68 +362,74 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
           </div>
 
           {puertos.length === 0 ? (
-            <p className="hint" style={{ marginTop: 14 }}>
+            <p className="hint" style={{ marginTop: 16 }}>
               {streams
                 ? 'Ningún tramo cumple esos mínimos. Baja el desnivel o la pendiente mínima para ver subidas más suaves.'
                 : ''}
             </p>
           ) : (
-            <div className="scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Puerto</th><th>Km</th><th>Long.</th><th>Desn.</th>
-                    <th>Pend.</th><th>Máx.</th><th>Tiempo</th><th>Vel.</th>
-                    <th>VAM</th><th>FC</th><th>W est.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {puertos.map((p, i) => (
-                    <tr key={i}
-                      onMouseEnter={() => setPuertoFoco(i)}
-                      onMouseLeave={() => setPuertoFoco(null)}
-                      onClick={() => setPuertoAbierto(puertoAbierto === i ? null : i)}
-                      style={{ cursor: 'pointer',
-                        background: puertoAbierto === i ? 'var(--card2)'
-                          : puertoFoco === i ? 'var(--card2)' : undefined }}>
-                      <td>
-                        <span style={{ color: 'var(--ink3)', fontFamily: 'var(--mono)',
-                          fontSize: 11, marginRight: 7 }}>
-                          {puertoAbierto === i ? '▾' : '▸'}
-                        </span>
-                        {nombresPuertos[i]}
-                        {(() => {
-                          const c = categoriaPuerto(p.metros, p.pendiente);
-                          return (
-                            <span title={`Coeficiente ${num(c.coef, 0)}`}
-                              style={{ color: c.color, fontFamily: 'var(--mono)',
-                                fontSize: 11.5, marginLeft: 7 }}>
-                              ({c.nombre})
-                            </span>
-                          );
-                        })()}
-                      </td>
-                      <td>{num(p.kmInicio, 1)}–{num(p.kmFin, 1)}</td>
-                      <td>{num(p.metros / 1000, 2)} km</td>
-                      <td>+{num(p.desnivel, 0)} m</td>
-                      <td><strong>{num(p.pendiente, 1)} %</strong></td>
-                      <td>{num(p.pendienteMax, 1)} %</td>
-                      <td>{duracion(p.segundos)}</td>
-                      <td>{num(p.velocidad, 1)}</td>
-                      <td>{p.vam ? num(p.vam, 0) : '—'}</td>
-                      <td>{p.fcMedia ?? '—'}</td>
-                      <td>{num(vatiosPuerto(p, cfg), 0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+            <>
+              <div className="cab-tabla">
+                <span className="rotulo">Puertos detectados</span>
+                <span className="hint" style={{ margin: 0 }}>
+                  Pulsa una fila para ver su perfil detallado
+                </span>
+              </div>
 
-          {puertos.length > 0 && (
-            <p className="hint" style={{ marginTop: 10 }}>
-              Pulsa cualquier subida para desplegar su perfil detallado.
-            </p>
+              <div className="scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Puerto</th><th>Km</th><th>Long.</th><th>Desn.</th>
+                      <th>Pend.</th><th>Máx.</th><th>Tiempo</th><th>Vel.</th>
+                      <th>VAM</th><th>FC</th><th>W est.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {puertos.map((p, i) => {
+                      const c = categoriaPuerto(p.metros, p.pendiente);
+                      return (
+                        <tr key={i}
+                          onMouseEnter={() => setPuertoFoco(i)}
+                          onMouseLeave={() => setPuertoFoco(null)}
+                          onClick={() => setPuertoAbierto(puertoAbierto === i ? null : i)}
+                          style={{ cursor: 'pointer',
+                            background: puertoAbierto === i ? 'var(--card2)'
+                              : puertoFoco === i ? 'var(--card2)' : undefined }}>
+                          <td>
+                            <span className="fila-puerto">
+                              <span className="flecha">{puertoAbierto === i ? '▾' : '▸'}</span>
+                              <span className="cat" title={`Coeficiente ${num(c.coef, 0)}`}
+                                style={{ background: c.color,
+                                  color: c.codigo === 'hc' ? '#FFFFFF' : '#0A0C0F' }}>
+                                {c.nombre.replace(' cat', '')}
+                              </span>
+                              {nombresPuertos[i]}
+                            </span>
+                          </td>
+                          <td>{num(p.kmInicio, 1)}–{num(p.kmFin, 1)}</td>
+                          <td>{num(p.metros / 1000, 2)} km</td>
+                          <td>+{num(p.desnivel, 0)} m</td>
+                          <td><strong>{num(p.pendiente, 1)} %</strong></td>
+                          <td>{num(p.pendienteMax, 1)} %</td>
+                          <td>{duracion(p.segundos)}</td>
+                          <td>{num(p.velocidad, 1)}</td>
+                          <td>{p.vam ? num(p.vam, 0) : '—'}</td>
+                          <td>{p.fcMedia ?? '—'}</td>
+                          <td>{num(vatiosPuerto(p, cfg), 0)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <p className="nota">
+                {salida.vatiosReales
+                  ? 'Los vatios de la salida vienen de tu medidor; los de cada puerto son una estimación a partir de la pendiente y el tiempo.'
+                  : `Los vatios son una estimación con ${num(cfg.peso, 0)} kg de peso y ${num(cfg.bici, 0)} kg de bici, sin medidor de potencia.`}
+              </p>
+            </>
           )}
 
           {puertoAbierto !== null && puertos[puertoAbierto] && streams && (
@@ -496,12 +539,24 @@ function Valoracion({ salida, streams, reparto, dureza, puertos, cfg, zonas, umb
   );
 }
 
+/*
+  Tarjeta compacta: etiqueta y valor, sin la linea de descripcion.
+
+  Esa linea era lo que hacia altas las tarjetas —una o dos lineas mas de
+  texto por tarjeta, seis veces— y con ella dentro no habia forma de
+  bajar de dos tercios del tamano original. Sin ella caen al 47 %, que
+  es lo que se pedia, y coincide con lo que propone la maqueta.
+
+  El dato no se tira: viaja al title, de modo que sigue estando a un
+  cursor de distancia. Es una degradacion consciente, no un descuido:
+  en un movil con dedos no hay title que valga, y ahi ese detalle deja
+  de estar disponible.
+*/
 function Dato({ k, v, u, d }) {
   return (
-    <div className="stat">
+    <div className="stat" title={d || undefined}>
       <div className="k">{k}</div>
       <div className="v">{v} {u && <small>{u}</small>}</div>
-      {d && <div className="d">{d}</div>}
     </div>
   );
 }

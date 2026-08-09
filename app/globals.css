@@ -408,3 +408,104 @@ tbody tr:hover td{background:var(--card2)}
 .wrap{padding-bottom:var(--e7)}
 .top{padding:var(--e6) 0 var(--e5)}
 h1{font-size:clamp(26px,3.4vw,34px)}
+
+/* ============================================================
+   Entrenamientos.
+
+   Piezas de la seccion de analisis de una salida. Van con nombre
+   propio y no como clases genericas: son decisiones de esta pantalla
+   y no hay motivo para que se propaguen a las otras siete.
+   ============================================================ */
+
+/*
+  Tarjetas de dato en version compacta.
+
+  En Entrenamientos son seis y encabezan la pestana, pero no son el
+  contenido: lo que se viene a mirar es el perfil y la tabla de puertos.
+  A tamano normal se comian la primera pantalla entera y empujaban el
+  grafico por debajo del pliegue.
+
+  Se reducen a la mitad de superficie conservando la proporcion: el ancho
+  minimo de columna baja de 165 a 118 px y el alto encoge en la misma
+  medida via relleno y cuerpo de letra. Los tamanos no se dividen entre
+  dos literalmente —una etiqueta de 5 px no se lee— sino lo justo para
+  que el conjunto ocupe la mitad y siga siendo legible.
+
+  Es una variante y no un cambio de .stat porque en Resumen esas mismas
+  tarjetas SI son el contenido, y ahi el tamano grande esta bien.
+*/
+/*
+  auto-FILL y no auto-fit, que es la diferencia entre pedir el tamano y
+  obtenerlo. Con auto-fit, la columna que sobra al no llegar a llenar la
+  fila se colapsa a cero y su ancho se reparte entre las demas: las seis
+  tarjetas se estiraban a 146 px pidiendo 118, y la proporcion se iba a
+  1,6 de ancho por alto en vez de mantener el 1,25 original. Con
+  auto-fill la columna vacia se conserva y cada tarjeta se queda donde se
+  le ha dicho.
+*/
+.grid.compacta{gap:var(--e2);grid-template-columns:repeat(auto-fill,minmax(118px,1fr))}
+/* Centrado. A tamano grande el alineado a la izquierda crea una columna
+   que guia la lectura de arriba abajo; a este tamano, con etiquetas que
+   ocupan dos lineas de anchos muy distintos, el borde izquierdo deja de
+   ordenar nada y el centro equilibra mejor la caja. */
+.grid.compacta .stat{padding:12px 11px;text-align:center}
+.grid.compacta .stat::before{height:1px}
+.grid.compacta .stat .k{font-size:8.5px;letter-spacing:.1em}
+.grid.compacta .stat .v{font-size:17px;margin-top:5px}
+.grid.compacta .stat .v small{font-size:9.5px}
+
+/*
+  El selector de salida vive en la cabecera, a la derecha del titulo.
+  Manda sobre todo lo que hay debajo, asi que se lee antes que nada.
+*/
+.sel-salida{display:grid;gap:var(--e2);justify-items:end;min-width:0}
+.sel-salida label{font-family:var(--mono);font-size:10px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink3);margin:0}
+.sel-salida select{max-width:min(520px,44vw);font-size:13.5px;padding:10px 12px}
+
+/*
+  Cabecera de panel: rotulo a la izquierda, controles a la derecha, y una
+  linea que los separa del contenido. Sirve para el perfil y para
+  cualquier bloque que gane mandos propios mas adelante.
+*/
+.cab-panel{display:flex;justify-content:space-between;align-items:center;gap:var(--e4);
+  flex-wrap:wrap;padding-bottom:var(--e3);margin-bottom:var(--e4);
+  border-bottom:1px solid var(--line)}
+.cab-panel .chips{margin-top:0}
+
+.rotulo{font-family:var(--mono);font-size:10px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink3)}
+
+/* Rotulo y pista sobre una tabla, en la misma linea y sin marco: la
+   tabla ya trae el suyo justo debajo. */
+.cab-tabla{display:flex;justify-content:space-between;align-items:baseline;
+  gap:var(--e4);flex-wrap:wrap;margin-bottom:var(--e3)}
+
+/* Insignia de categoria del puerto. El color lo pone el componente,
+   que es quien conoce la escala. */
+.cat{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:700;
+  line-height:1;padding:4px 6px;border-radius:var(--r-s);min-width:30px;
+  text-align:center}
+
+.fila-puerto{display:inline-flex;align-items:center;gap:8px}
+.fila-puerto .flecha{font-family:var(--mono);font-size:11px;color:var(--ink3)}
+
+/* Interruptores sueltos bajo un grafico. */
+.interruptor{display:flex;align-items:center;gap:9px;margin-top:var(--e4);
+  font-family:var(--sans);font-size:13.5px;text-transform:none;letter-spacing:0;
+  color:var(--ink2);cursor:pointer}
+.interruptor .apunte{color:var(--ink3);font-size:12.5px}
+
+/* Cuando hay mas de uno se apilan juntos, sin el aire que cada uno
+   reserva por su cuenta para separarse del grafico. */
+.interruptores{margin-top:var(--e4)}
+.interruptores .interruptor{margin-top:var(--e2)}
+.interruptores .interruptor:first-child{margin-top:0}
+
+/* Nota al pie de un bloque: aclara como se ha calculado lo de arriba. */
+.nota{font-size:12.5px;color:var(--ink3);line-height:1.55;margin:var(--e3) 0 0}
+
+@media(max-width:760px){
+  .sel-salida{justify-items:start;width:100%}
+  .sel-salida select{max-width:none}
+}
