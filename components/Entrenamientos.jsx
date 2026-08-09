@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import Perfil from './Perfil';
 import PerfilPuerto from './PerfilPuerto';
 import {
@@ -389,7 +389,8 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
                     {puertos.map((p, i) => {
                       const c = categoriaPuerto(p.metros, p.pendiente);
                       return (
-                        <tr key={i}
+                        <Fragment key={i}>
+                        <tr
                           onMouseEnter={() => setPuertoFoco(i)}
                           onMouseLeave={() => setPuertoFoco(null)}
                           onClick={() => setPuertoAbierto(puertoAbierto === i ? null : i)}
@@ -418,6 +419,24 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
                           <td>{p.fcMedia ?? '—'}</td>
                           <td>{num(vatiosPuerto(p, cfg), 0)}</td>
                         </tr>
+
+                        {/*
+                          El detalle se despliega dentro de la tabla, en una
+                          fila propia justo debajo de la suya. Antes colgaba
+                          del final del bloque: con seis puertos, pulsabas el
+                          primero y el perfil aparecia cinco filas mas abajo,
+                          sin nada que lo atara al que habias abierto.
+                        */}
+                        {puertoAbierto === i && streams && (
+                          <tr className="fila-detalle">
+                            <td colSpan={11}>
+                              <PerfilPuerto streams={streams} puerto={p}
+                                indice={i} cfg={cfg} zonas={zonas}
+                                nombre={nombresPuertos[i]} />
+                            </td>
+                          </tr>
+                        )}
+                        </Fragment>
                       );
                     })}
                   </tbody>
@@ -430,12 +449,6 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
                   : `Los vatios son una estimación con ${num(cfg.peso, 0)} kg de peso y ${num(cfg.bici, 0)} kg de bici, sin medidor de potencia.`}
               </p>
             </>
-          )}
-
-          {puertoAbierto !== null && puertos[puertoAbierto] && streams && (
-            <PerfilPuerto streams={streams} puerto={puertos[puertoAbierto]}
-              indice={puertoAbierto} cfg={cfg} zonas={zonas}
-              nombre={nombresPuertos[puertoAbierto]} />
           )}
 
           {puertos.length > 0 && (() => {

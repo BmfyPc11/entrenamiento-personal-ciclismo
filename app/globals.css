@@ -490,6 +490,12 @@ h1{font-size:clamp(26px,3.4vw,34px)}
 .fila-puerto{display:inline-flex;align-items:center;gap:8px}
 .fila-puerto .flecha{font-family:var(--mono);font-size:11px;color:var(--ink3)}
 
+/* La fila que despliega el perfil de un puerto. Sin relleno propio —el
+   panel de dentro ya lo trae— y sin el resaltado de paso del cursor, que
+   ahi no significa nada porque no se puede pulsar. */
+.fila-detalle td{padding:0 var(--e3) var(--e3);background:var(--bg2)}
+.fila-detalle:hover td{background:var(--bg2)}
+
 /* Interruptores sueltos bajo un grafico. */
 .interruptor{display:flex;align-items:center;gap:9px;margin-top:var(--e4);
   font-family:var(--sans);font-size:13.5px;text-transform:none;letter-spacing:0;
