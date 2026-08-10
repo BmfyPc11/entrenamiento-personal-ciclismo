@@ -106,26 +106,49 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
     });
   }, [puertos, segmentos, sel, streams, cacheNombres]);
 
-  /* Se guardan para que el resto de pestanas los aprovechen sin volver
-     a gastar peticiones. */
+  /*
+    Se guardan para que el resto de pestanas los aprovechen sin volver a
+    gastar peticiones.
+
+    El efecto lee y escribe cacheNombres, y por eso NO puede llevarlo en
+    sus dependencias: si lo llevara, cada guardado cambiaria la propia
+    dependencia y el efecto se volveria a disparar solo. Con puertos
+    detectados muy cerca entre si -algo normal al bajar los minimos de
+    deteccion- dos de ellos pueden pisarse el guardado el uno al otro
+    (cada cima cae dentro del radio de la del vecino) y la condicion de
+    parada, "esto ya esta guardado igual", no llega a cumplirse nunca:
+    bucle infinito de verdad, no solo un aviso en consola. Se vio como
+    "Maximum update depth exceeded" y, con la pestana ocupada en volver a
+    renderizar sin parar, el perfil se quedaba en "Cargando..." aunque la
+    peticion de red llevara rato resuelta.
+
+    La forma correcta de leer el ultimo valor sin declararlo como
+    dependencia es la funcion de actualizacion de setState: React pasa el
+    valor mas reciente como argumento, y si se devuelve exactamente el
+    mismo (prev) cuando no hay cambios, ni siquiera vuelve a renderizar.
+    Eso corta el bucle de raiz, tenga o no el problema de los puertos
+    cercanos, que sigue existiendo pero ya no cuesta un cuelgue.
+  */
   useEffect(() => {
     const efforts = sel ? segmentos[sel] : null;
     if (!efforts || !efforts.length || !streams?.latlng) return;
 
-    let nueva = cacheNombres, cambio = false;
-    puertos.forEach((p) => {
-      const cima = streams.latlng[p.fin];
-      if (!cima) return;
-      const n = emparejarSegmento(p, efforts);
-      if (!n) return;
-      const ya = buscarNombre(nueva, cima);
-      if (ya?.fuente === 'strava' && ya.nombre === n) return;
-      nueva = guardarNombre(nueva, cima, n, 'strava');
-      cambio = true;
+    setCacheNombres((prev) => {
+      let nueva = prev, cambio = false;
+      puertos.forEach((p) => {
+        const cima = streams.latlng[p.fin];
+        if (!cima) return;
+        const n = emparejarSegmento(p, efforts);
+        if (!n) return;
+        const ya = buscarNombre(nueva, cima);
+        if (ya?.fuente === 'strava' && ya.nombre === n) return;
+        nueva = guardarNombre(nueva, cima, n, 'strava');
+        cambio = true;
+      });
+      if (cambio) escribirCache(nueva);
+      return cambio ? nueva : prev;
     });
-
-    if (cambio) { setCacheNombres(nueva); escribirCache(nueva); }
-  }, [segmentos, sel, puertos, streams, cacheNombres]);
+  }, [segmentos, sel, puertos, streams]);
 
   /* Sin salidas tambien hay que pintar la cabecera: desde que esta seccion
      la trae puesta, Dashboard ya no dibuja ninguna por ella y la pagina se
