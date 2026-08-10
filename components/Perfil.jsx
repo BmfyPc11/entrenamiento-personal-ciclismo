@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  zonaDeFC, tramoDureza, TRAMOS_DUREZA, categoriaPuerto, num,
+  zonaDeFC, tramoDureza, TRAMOS_DUREZA, categoriaPuerto, detectarParadas, num, duracion,
 } from '@/lib/metrics';
 
 /*
@@ -23,6 +23,24 @@ function redondearTecho(v) {
 */
 const AIRE_NORMAL = 4;
 const AIRE_AMPLIADO = 1.2;
+
+/*
+  Tres tamanos de parada, por duracion: hasta un minuto, de uno a diez, y
+  mas de diez. No es un gradiente continuo a proposito: con un punto por
+  segundo de parada el circulo crecería sin parar y el ojo no distingue
+  bien variaciones finas de radio. Tres escalones si se leen de un
+  vistazo, y separan justo los casos que importan distinguir: un
+  semaforo, una parada normal (foto, fuente, cambiar de ruta) y una
+  parada larga (comida, avería).
+*/
+const PARADA_MEDIA_SEG = 60;   // 1 minuto
+const PARADA_LARGA_SEG = 600;  // 10 minutos
+
+function radioParada(segundos) {
+  if (segundos >= PARADA_LARGA_SEG) return 8;
+  if (segundos >= PARADA_MEDIA_SEG) return 6;
+  return 4;
+}
 
 /* Posicion de un indice del stream original dentro del array reducido. */
 function mapearIdx(iOriginal, datos) {
@@ -64,6 +82,24 @@ export default function Perfil({
     conserva en los tres y se puede apagar cuando estorbe.
   */
   const [verNombres, setVerNombres] = useState(true);
+
+  /* Mismo patron que verNombres: encendido por defecto, con su propio
+     interruptor para poder apagarlo si en una salida con muchos
+     semaforos los puntos se acumulan y estorban mas de lo que informan. */
+  const [verParadas, setVerParadas] = useState(true);
+
+  /* Foco de una parada al pasar el cursor, independiente del hover general
+     del perfil: son dos tooltips distintos y no tienen por que ir juntos. */
+  const [paradaFoco, setParadaFoco] = useState(null);
+
+  /*
+    Se detecta sobre el stream completo, no sobre los hasta 900 puntos
+    reducidos para el SVG: una parada corta se puede perder al reducir, y
+    aqui es justo lo que se busca. La posicion en pantalla se calcula
+    despues, mapeando el indice original al reducido con mapearIdx, igual
+    que hacen las fichas de puerto.
+  */
+  const paradas = useMemo(() => detectarParadas(streams), [streams]);
 
   const datos = useMemo(() => {
     const { distancia: d, altitud: a, fc } = streams || {};
@@ -205,6 +241,12 @@ export default function Perfil({
     /* Se ordenan por indice para que el foco y las claves no bailen. */
     cajas.sort((a, b) => a.i - b.i);
   }
+
+  /* --- posicion de las paradas sobre el perfil ya escalado --- */
+  const paradasMapeadas = paradas.map((p, i) => {
+    const k = mapearIdx(p.inicio, datos);
+    return { ...p, i, k, x: X(datos.d[k]), y: Y(datos.a[k]), radio: radioParada(p.segundos) };
+  });
 
   /* --- lineas de altura de referencia --- */
   const vista = techo - base;
@@ -433,7 +475,51 @@ export default function Perfil({
           </text>
         ))}
 
-        {hover != null && (
+        {/*
+          Paradas: puntos rojos translucidos sobre el perfil, en cualquier
+          modo. Se detectan por velocidad (metrics.js, detectarParadas), asi
+          que una rampa lenta no se confunde con una parada de verdad.
+
+          El radio marca la duracion en tres escalones (radioParada): un
+          semaforo no pesa lo mismo que la parada de la comida, y hasta
+          ahora todos los puntos se veian iguales. El area de deteccion
+          (mouseenter) crece con el punto y no es fija, para que un circulo
+          grande no obligue a acertar el mismo pixel exacto que uno pequeno.
+        */}
+        {verParadas && paradasMapeadas.map((p) => (
+          <g key={`p${p.i}`}>
+            <circle cx={p.x} cy={p.y} r={p.radio + 6} fill="transparent"
+              onMouseEnter={() => setParadaFoco(p.i)}
+              onMouseLeave={() => setParadaFoco(null)}
+              style={{ cursor: 'pointer' }} />
+            <circle cx={p.x} cy={p.y} r={paradaFoco === p.i ? p.radio + 1.5 : p.radio}
+              fill="#D14B42" fillOpacity={paradaFoco === p.i ? 0.55 : 0.35}
+              stroke="#D14B42" strokeOpacity={paradaFoco === p.i ? 0.9 : 0.6}
+              strokeWidth="1.3" pointerEvents="none" />
+          </g>
+        ))}
+
+        {verParadas && paradaFoco != null && (() => {
+          const p = paradasMapeadas.find((x) => x.i === paradaFoco);
+          if (!p) return null;
+          return (
+            <g pointerEvents="none">
+              <g transform={`translate(${Math.min(p.x + 10, W - 140)},${Math.max(p.y - 46, T + 4)})`}>
+                <rect width="130" height="38" rx="2" fill="#212936" stroke="#3A4553" opacity=".97" />
+                <text x="9" y="17" fill="#E8EAED" fontSize="11.5" fontWeight="600"
+                  fontFamily="ui-monospace,Menlo,monospace">
+                  Parada · {duracion(p.segundos)}
+                </text>
+                <text x="9" y="32" fill="#9BA5B4" fontSize="10.5"
+                  fontFamily="ui-monospace,Menlo,monospace">
+                  km {num(p.km, 1)}
+                </text>
+              </g>
+            </g>
+          );
+        })()}
+
+        {hover != null && paradaFoco == null && (
           <g pointerEvents="none">
             <line x1={X(datos.d[hover])} y1={T} x2={X(datos.d[hover])} y2={H - B}
               stroke="#9BA5B4" strokeWidth="1" strokeDasharray="3 3" opacity=".55" />
@@ -457,7 +543,7 @@ export default function Perfil({
         )}
       </svg>
 
-      {(zoomUtil || puertos.length > 0) && (
+      {(zoomUtil || puertos.length > 0 || paradas.length > 0) && (
         <div className="interruptores">
           {puertos.length > 0 && (
             <label className="interruptor">
@@ -467,6 +553,17 @@ export default function Perfil({
               <span className="apunte">
                 — {puertos.length === 1 ? 'la subida detectada' : `las ${puertos.length} subidas detectadas`},
                 con su categoría, sobre el perfil
+              </span>
+            </label>
+          )}
+          {paradas.length > 0 && (
+            <label className="interruptor">
+              <input type="checkbox" checked={verParadas}
+                onChange={(e) => setVerParadas(e.target.checked)} />
+              Paradas
+              <span className="apunte">
+                — {paradas.length === 1 ? 'la parada detectada' : `las ${paradas.length} paradas detectadas`},
+                con su duración al pasar el cursor
               </span>
             </label>
           )}
