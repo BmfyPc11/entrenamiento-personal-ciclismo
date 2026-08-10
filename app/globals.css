@@ -155,21 +155,21 @@ h3{font-family:var(--mono);font-size:11px;letter-spacing:.15em;text-transform:up
 .stat .v small{font-size:13px;font-weight:400;color:var(--ink3);margin-left:2px}
 .stat .d{font-size:12.5px;color:var(--ink2);margin-top:5px;line-height:1.45}
 
-/* ---------- calendario semanal ---------- */
-.semana{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}
-.dia{background:var(--card2);border:1px solid var(--line);border-radius:var(--r);
-  padding:13px 9px;text-align:center;min-height:104px;display:flex;flex-direction:column;
-  justify-content:space-between;transition:transform .15s,border-color .15s}
-.dia.activo{cursor:default}
-.dia.activo:hover{transform:translateY(-2px)}
-.dia .dow{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--ink3)}
-.dia .num{font-size:19px;font-weight:500;line-height:1.15;margin:4px 0 2px}
-.dia .mes{font-family:var(--mono);font-size:9.5px;color:var(--ink3);text-transform:uppercase}
-.dia .km{font-family:var(--mono);font-size:12px;font-weight:500;margin-top:6px}
-.dia .zn{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;margin-top:3px;opacity:.85}
-.dia.hoy{outline:1px solid var(--line2);outline-offset:2px}
-.dia .vacio{font-family:var(--mono);font-size:10px;color:var(--ink3);margin-top:8px}
+/* ---------- ultimos dias ---------- */
+/*
+  Cajas minimas: treinta no tiene una factorizacion que lea bien como una
+  semana (ni 5x6 ni 6x5 son un calendario reconocible), asi que en vez de
+  fijar columnas se dejan encajar solas con auto-fill. El numero de filas
+  se ajusta al ancho disponible sin necesitar una regla aparte en movil.
+*/
+.dias30{display:grid;grid-template-columns:repeat(auto-fill,minmax(34px,1fr));gap:6px}
+.dia30{aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+  background:var(--card2);border:1px solid var(--line);border-radius:var(--r-s);
+  font-family:var(--mono);font-size:12px;color:var(--ink3);
+  transition:transform .15s,border-color .15s}
+.dia30.activo{cursor:default;font-weight:600}
+.dia30.activo:hover{transform:translateY(-1px)}
+.dia30.hoy{outline:1px solid var(--line2);outline-offset:2px}
 
 /* ---------- consejo ---------- */
 .consejo{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
@@ -247,6 +247,17 @@ svg{display:block;max-width:100%;height:auto}
   vertical-align:-1px}
 .chips button[aria-pressed="true"] i{background:rgba(14,17,22,.55)!important}
 
+/*
+  Campo de fecha compacto, para que quepa en la misma fila que los
+  atajos en vez de ocupar una fila entera el solo. input[type=date] es
+  ancho por defecto (el navegador le deja hueco de sobra alrededor del
+  icono del calendario) asi que aqui se le quita el width:100% global y
+  se le da solo el que necesita el propio control.
+*/
+.campo-fecha{display:inline-flex;align-items:center;gap:7px}
+.campo-fecha label{margin:0;font-size:10px}
+.campo-fecha input[type=date]{width:auto;padding:7px 9px;font-size:12.5px;border-radius:6px}
+
 /* ---------- login ---------- */
 .login{max-width:540px;margin:0 auto;padding:80px 0 40px}
 .login h1{font-size:clamp(34px,7vw,52px);margin-bottom:24px}
@@ -269,7 +280,6 @@ footer strong{color:var(--ink2);font-weight:500}
 
 @media(max-width:720px){
   .wrap{padding:0 15px 64px}
-  .semana{grid-template-columns:repeat(4,1fr)}
   .stat .v{font-size:23px}
   .top{padding-top:28px}
 }
@@ -337,18 +347,19 @@ h2:first-child{margin-top:var(--e2)}
 .panel+.panel,.card+.card{margin-top:var(--e4)}
 
 /*
-  Las tarjetas de dato llevan una linea de color arriba. Es lo unico
-  decorativo de la interfaz y se gana el sitio: rompe la monotonia de
-  una fila de cajas identicas y da un punto de apoyo a la vista sin
-  recurrir a degradados.
+  Las tarjetas de dato llevan una franja del color de acento arriba, con
+  la etiqueta encima. Antes era una linea de 2px y la etiqueta, gris
+  sobre el mismo fondo de la tarjeta, se leia tarde entre tantas cifras.
+  Con la franja ancha la etiqueta es lo primero que entra por el ojo, no
+  lo ultimo, y de paso rompe la monotonia de una fila de cajas iguales
+  sin recurrir a degradados.
 */
 .stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
-  padding:var(--e4) 17px;position:relative;overflow:hidden}
-.stat::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;
-  background:var(--acento);opacity:.5}
-.stat .k{color:var(--ink3)}
-.stat .v{font-size:30px;font-weight:600;margin-top:9px}
-.stat .d{margin-top:7px}
+  padding:0 0 var(--e4);position:relative;overflow:hidden}
+.stat .k{display:block;background:var(--acento);color:var(--acento-ink);
+  padding:9px 17px;margin-bottom:9px}
+.stat .v{font-size:30px;font-weight:600;padding:0 17px}
+.stat .d{margin-top:7px;padding:0 17px}
 
 .scroll{border:1px solid var(--line);border-radius:var(--r);background:var(--card)}
 table th{padding:12px;white-space:nowrap;background:var(--bg2)}
@@ -448,10 +459,9 @@ h1{font-size:clamp(26px,3.4vw,34px)}
    que guia la lectura de arriba abajo; a este tamano, con etiquetas que
    ocupan dos lineas de anchos muy distintos, el borde izquierdo deja de
    ordenar nada y el centro equilibra mejor la caja. */
-.grid.compacta .stat{padding:12px 11px;text-align:center}
-.grid.compacta .stat::before{height:1px}
-.grid.compacta .stat .k{font-size:8.5px;letter-spacing:.1em}
-.grid.compacta .stat .v{font-size:17px;margin-top:5px}
+.grid.compacta .stat{padding:0 0 12px;text-align:center}
+.grid.compacta .stat .k{font-size:8.5px;letter-spacing:.1em;padding:6px 11px;margin-bottom:6px}
+.grid.compacta .stat .v{font-size:17px;padding:0 11px}
 .grid.compacta .stat .v small{font-size:9.5px}
 
 /*

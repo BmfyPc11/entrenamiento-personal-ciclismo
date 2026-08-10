@@ -8,10 +8,10 @@ import Ascensiones from './Ascensiones';
 import Evolucion from './Evolucion';
 import Rutas from './Rutas';
 import AnalizadorGPX from './AnalizadorGPX';
-import Semana from './Semana';
+import UltimosDias from './UltimosDias';
 import Consejo from './Consejo';
 import Layout, { SECCIONES } from './Layout';
-import { calcularObjetivos, BarrasObjetivo, OBJETIVOS_INICIALES } from './objetivosLib';
+import { OBJETIVOS_INICIALES } from './objetivosLib';
 import { Linea, Barras, Carga } from './Graficos';
 import {
   PERFILES_BICI, detectarPuertos, serieCarga, umbralEstimado,
@@ -178,7 +178,7 @@ export default function Dashboard({ atleta }) {
   const zonas = useMemo(() => calcularZonas(cfg), [cfg]);
 
   const dias = useMemo(
-    () => ultimosDias(activas, cfg, zonas, umbral, 7),
+    () => ultimosDias(activas, cfg, zonas, umbral, 30),
     [activas, cfg, zonas, umbral]
   );
   const consejo = useMemo(
@@ -233,13 +233,16 @@ export default function Dashboard({ atleta }) {
 
       {error && <div className="callout warn">{error}</div>}
 
+      {pestana === 'resumen' && (
+        <Estadisticas salidas={activas} cfg={cfg} umbral={umbral}
+          enRango={enRango} rango={rango} setRango={setRango} />
+      )}
       {pestana === 'resumen' && <Consejo consejo={consejo} />}
 
       {pestana === 'resumen' && (
         <Resumen salidas={activas} cfg={cfg} umbral={umbral} masaTotal={masaTotal}
           excluidas={excluidas} setExcluidas={setExcluidas} enRango={enRango}
-          rango={rango} setRango={setRango} cache={cache} objetivos={objetivos}
-          dias={dias} />
+          cache={cache} dias={dias} />
       )}
       {pestana === 'entrenamientos' && (
         <Entrenamientos salidas={salidas} cfg={cfg} zonas={zonas} umbral={umbral} cache={cache}
@@ -297,17 +300,70 @@ function Dato({ k, v, u, d, cl }) {
   );
 }
 
-function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
-  enRango, rango, setRango, cache, objetivos, dias }) {
-
-  const obj = calcularObjetivos({ salidas, cache, excluidas, cfg, masaTotal, obj: objetivos });
-
+/*
+  Lo primero que se ve al entrar en Resumen: el estado actual, antes de
+  nada mas. El filtro de fechas vive aqui mismo, entre el titulo y las
+  cifras, porque es lo que decide que periodo resumen: verlo justo antes
+  evita tener que buscarlo mas abajo para entender a que corresponden.
+*/
+function Estadisticas({ salidas, cfg, umbral, enRango, rango, setRango }) {
   /* Limites reales del historial, para acotar los selectores de fecha */
   const limites = useMemo(() => {
     if (!enRango.length && !salidas.length) return null;
     const todas = enRango.length ? enRango : salidas;
     return { min: todas[0].fecha.slice(0, 10), max: todas[todas.length - 1].fecha.slice(0, 10) };
   }, [enRango, salidas]);
+
+  const atajo = (dias) => {
+    const hoy = new Date();
+    const desde = new Date(hoy.getTime() - dias * 864e5);
+    setRango({ desde: desde.toISOString().slice(0, 10), hasta: hoy.toISOString().slice(0, 10) });
+  };
+
+  const suma = (f) => salidas.reduce((a, s) => a + f(s), 0);
+  const llanas = salidas.filter(esLlana);
+  const mejorLlano = llanas.length ? Math.max(...llanas.map(kmh)) : 0;
+
+  return (
+    <>
+      <h2>Tus estadísticas</h2>
+
+      <div className="chips" style={{ marginTop: 0, marginBottom: 'var(--e4)' }}>
+        <span className="campo-fecha">
+          <label htmlFor="fd">Desde</label>
+          <input id="fd" type="date" value={rango.desde} min={limites?.min} max={limites?.max}
+            onChange={(e) => setRango({ ...rango, desde: e.target.value })} />
+        </span>
+        <span className="campo-fecha">
+          <label htmlFor="fh">Hasta</label>
+          <input id="fh" type="date" value={rango.hasta} min={limites?.min} max={limites?.max}
+            onChange={(e) => setRango({ ...rango, hasta: e.target.value })} />
+        </span>
+
+        <button onClick={() => atajo(30)}>Último mes</button>
+        <button onClick={() => atajo(90)}>Últimos 3 meses</button>
+        <button onClick={() => atajo(365)}>Último año</button>
+        <button onClick={() => setRango({ desde: '', hasta: '' })}>Todo el historial</button>
+      </div>
+
+      {salidas.length > 0 && (
+        <div className="grid" style={{ marginBottom: 'var(--e4)' }}>
+          <Dato k="Distancia total" v={num(suma(km), 0)} u="km" d={`${salidas.length} salidas`} />
+          <Dato k="Desnivel acumulado" v={num(suma((s) => s.desnivel), 0)} u="m" />
+          <Dato k="Horas sobre la bici" v={num(suma((s) => s.tiempoMovimiento) / 3600, 1)} u="h"
+            d="tiempo en movimiento" />
+          <Dato k="Salida media" v={num(suma(km) / salidas.length, 1)} u="km" />
+          <Dato k="Mejor registro en llano" v={mejorLlano ? num(mejorLlano, 1) : '—'} u="km/h"
+            d={mejorLlano ? 'terreno realmente llano' : 'sin salidas llanas'} />
+          <Dato k="Umbral estimado" v={umbral} u="W" d={`${num(umbral / cfg.peso, 2)} W/kg`} />
+        </div>
+      )}
+    </>
+  );
+}
+
+function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
+  enRango, cache, dias }) {
 
   /* Máximos de cada columna para resaltar */
   const maximos = useMemo(() => ({
@@ -325,53 +381,12 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
     celebrar sino, si acaso, un dia en que fuiste mas al limite.
   */
 
-  const atajo = (dias) => {
-    const hoy = new Date();
-    const desde = new Date(hoy.getTime() - dias * 864e5);
-    setRango({ desde: desde.toISOString().slice(0, 10), hasta: hoy.toISOString().slice(0, 10) });
-  };
-
-  const suma = (f) => salidas.reduce((a, s) => a + f(s), 0);
-  const llanas = salidas.filter(esLlana);
-  const mejorLlano = llanas.length ? Math.max(...llanas.map(kmh)) : 0;
   const sinFC = salidas.filter((s) => !s.fcMedia).length;
 
   return (
     <>
-      <h2>Últimos siete días</h2>
-      <Semana dias={dias} />
-
-      <h2>Periodo que se analiza</h2>
-      <p className="hint">
-        Elige el intervalo de fechas y todos los cálculos del panel se limitarán a él. Dentro del
-        intervalo puedes además descartar salidas concretas que no sean representativas.
-      </p>
-
-      <div className="panel">
-        <div className="fields">
-          <div>
-            <label htmlFor="fd">Desde</label>
-            <input id="fd" type="date" value={rango.desde} min={limites?.min} max={limites?.max}
-              onChange={(e) => setRango({ ...rango, desde: e.target.value })} />
-          </div>
-          <div>
-            <label htmlFor="fh">Hasta</label>
-            <input id="fh" type="date" value={rango.hasta} min={limites?.min} max={limites?.max}
-              onChange={(e) => setRango({ ...rango, hasta: e.target.value })} />
-          </div>
-        </div>
-        <div className="chips" style={{ marginTop: 14 }}>
-          <button onClick={() => atajo(30)}>Último mes</button>
-          <button onClick={() => atajo(90)}>Últimos 3 meses</button>
-          <button onClick={() => atajo(365)}>Último año</button>
-          <button onClick={() => setRango({ desde: '', hasta: '' })}>Todo el historial</button>
-        </div>
-        <p className="hint" style={{ margin: '14px 0 0' }}>
-          {enRango.length === 0
-            ? 'No hay ninguna salida en ese intervalo.'
-            : `${salidas.length} de ${enRango.length} salidas del intervalo entran en el análisis.`}
-        </p>
-      </div>
+      <h2>Últimos 30 días</h2>
+      <UltimosDias dias={dias} />
 
       {salidas.length === 0 ? (
         <div className="callout warn">
@@ -379,33 +394,6 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
         </div>
       ) : (
         <>
-          <h2>Dónde estás hoy</h2>
-          <div className="grid">
-            <Dato k="Distancia total" v={num(suma(km), 0)} u="km" d={`${salidas.length} salidas`} />
-            <Dato k="Desnivel acumulado" v={num(suma((s) => s.desnivel), 0)} u="m" />
-            <Dato k="Horas sobre la bici" v={num(suma((s) => s.tiempoMovimiento) / 3600, 1)} u="h"
-              d="tiempo en movimiento" />
-            <Dato k="Salida media" v={num(suma(km) / salidas.length, 1)} u="km" />
-            <Dato k="Mejor registro en llano" v={mejorLlano ? num(mejorLlano, 1) : '—'} u="km/h"
-              d={mejorLlano ? 'terreno realmente llano' : 'sin salidas llanas'} />
-            <Dato k="Umbral estimado" v={umbral} u="W" d={`${num(umbral / cfg.peso, 2)} W/kg`} />
-          </div>
-
-          <h2>Progreso hacia tus objetivos</h2>
-          <p className="hint">
-            Medidos contra tu mejor registro del periodo. Puedes cambiar las metas en la pestaña
-            Objetivos.
-          </p>
-          <BarrasObjetivo lista={obj.lista} />
-
-          {obj.sinAnalizar && (
-            <div className="callout">
-              Los dos objetivos de subida se calculan sobre las salidas que abras en{' '}
-              <strong>Entrenamientos</strong>, porque necesitan el detalle del recorrido. Abre unas
-              cuantas y estas barras se afinarán.
-            </div>
-          )}
-
           {sinFC > 0 && (
             <div className="callout">
               <strong>{sinFC} de tus {salidas.length} salidas no tienen frecuencia cardíaca.</strong>{' '}
