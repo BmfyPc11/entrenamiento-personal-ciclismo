@@ -17,6 +17,7 @@ import {
   PERFILES_BICI, detectarPuertos, serieCarga, umbralEstimado,
   vatios, vatiosSalida, vatiosPuerto, repartoZonas, repartoGlobal,
   calcularZonas, ultimosDias, consejoEntrenador, normalizarAltitud,
+  velocidadMaximaLlano,
   num, duracion, fechaCorta, kmh, km, metrosPorKm, vamSalida, esLlana,
 } from '@/lib/metrics';
 
@@ -171,6 +172,11 @@ export default function Dashboard({ atleta }) {
     return umbralEstimado(todos, cfg) || 150;
   }, [cache, cfg, excluidas]);
 
+  const velMaxLlano = useMemo(
+    () => velocidadMaximaLlano(cache, excluidas),
+    [cache, excluidas]
+  );
+
   const masaTotal = cfg.peso + cfg.bici;
   const wPara30 = vatios(30 / 3.6, 0, masaTotal, cfg.cda, cfg.crr);
 
@@ -235,7 +241,7 @@ export default function Dashboard({ atleta }) {
 
       {pestana === 'resumen' && (
         <Estadisticas salidas={activas} cfg={cfg} umbral={umbral}
-          enRango={enRango} rango={rango} setRango={setRango} />
+          enRango={enRango} rango={rango} setRango={setRango} velMaxLlano={velMaxLlano} />
       )}
       {pestana === 'resumen' && <Consejo consejo={consejo} />}
 
@@ -290,9 +296,9 @@ export default function Dashboard({ atleta }) {
 
 /* ============================================================ */
 
-function Dato({ k, v, u, d, cl }) {
+function Dato({ k, v, u, d, cl, dEnHover }) {
   return (
-    <div className="stat">
+    <div className={`stat${dEnHover ? ' con-detalle' : ''}`} tabIndex={dEnHover && d ? 0 : undefined}>
       <div className="k">{k}</div>
       <div className="v">{v} {u && <small>{u}</small>}</div>
       {d && <div className={`d ${cl || ''}`}>{d}</div>}
@@ -306,7 +312,7 @@ function Dato({ k, v, u, d, cl }) {
   cifras, porque es lo que decide que periodo resumen: verlo justo antes
   evita tener que buscarlo mas abajo para entender a que corresponden.
 */
-function Estadisticas({ salidas, cfg, umbral, enRango, rango, setRango }) {
+function Estadisticas({ salidas, cfg, umbral, enRango, rango, setRango, velMaxLlano }) {
   /* Limites reales del historial, para acotar los selectores de fecha */
   const limites = useMemo(() => {
     if (!enRango.length && !salidas.length) return null;
@@ -321,8 +327,9 @@ function Estadisticas({ salidas, cfg, umbral, enRango, rango, setRango }) {
   };
 
   const suma = (f) => salidas.reduce((a, s) => a + f(s), 0);
-  const llanas = salidas.filter(esLlana);
-  const mejorLlano = llanas.length ? Math.max(...llanas.map(kmh)) : 0;
+  const masLarga = salidas.length
+    ? salidas.reduce((a, s) => (s.distancia > a.distancia ? s : a))
+    : null;
 
   return (
     <>
@@ -348,14 +355,16 @@ function Estadisticas({ salidas, cfg, umbral, enRango, rango, setRango }) {
 
       {salidas.length > 0 && (
         <div className="grid" style={{ marginBottom: 'var(--e4)' }}>
-          <Dato k="Distancia total" v={num(suma(km), 0)} u="km" d={`${salidas.length} salidas`} />
+          <Dato k="Distancia total" v={num(suma(km), 0)} u="km" dEnHover
+            d={`${num(suma(km) / salidas.length, 1)} km de media`} />
           <Dato k="Desnivel acumulado" v={num(suma((s) => s.desnivel), 0)} u="m" />
-          <Dato k="Horas sobre la bici" v={num(suma((s) => s.tiempoMovimiento) / 3600, 1)} u="h"
+          <Dato k="Horas totales" v={num(suma((s) => s.tiempoMovimiento) / 3600, 1)} u="h" dEnHover
             d="tiempo en movimiento" />
-          <Dato k="Salida media" v={num(suma(km) / salidas.length, 1)} u="km" />
-          <Dato k="Mejor registro en llano" v={mejorLlano ? num(mejorLlano, 1) : '—'} u="km/h"
-            d={mejorLlano ? 'terreno realmente llano' : 'sin salidas llanas'} />
-          <Dato k="Umbral estimado" v={umbral} u="W" d={`${num(umbral / cfg.peso, 2)} W/kg`} />
+          <Dato k="Número de salidas" v={salidas.length} />
+          <Dato k="Salida más larga" v={masLarga ? num(km(masLarga), 1) : '—'} u="km" dEnHover
+            d={masLarga ? fechaCorta(masLarga.fecha) : 'sin salidas'} />
+          <Dato k="Velocidad máxima en llano" v={velMaxLlano ? num(velMaxLlano, 1) : '—'} u="km/h" dEnHover
+            d={velMaxLlano ? 'tramo de 100 m, pendiente ≥ -1 %' : 'sin tramos analizados'} />
         </div>
       )}
     </>

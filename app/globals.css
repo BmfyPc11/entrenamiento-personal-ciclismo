@@ -525,3 +525,28 @@ h1{font-size:clamp(26px,3.4vw,34px)}
   .sel-salida{justify-items:start;width:100%}
   .sel-salida select{max-width:none}
 }
+
+/*
+  Detalle que solo aparece al pasar el cursor.
+
+  En "Tus estadisticas" el numero grande ya dice lo esencial; el texto de
+  apoyo (la media, la fecha, la condicion del calculo) es una ampliacion
+  para quien se detiene a mirar, no algo que necesite ocupar sitio en las
+  cuatro tarjetas todo el rato. Se mantiene en el DOM y se revela al
+  pasar el raton o al enfocar con teclado, en vez de desaparecer del
+  todo: sigue siendo accesible, solo que bajo demanda.
+
+  El overflow del .stat pasa a visible en el propio estado de hover/foco:
+  la tarjeta lo mantiene oculto el resto del tiempo (asi recorta la
+  franja de acento en la esquina), pero aqui el tooltip necesita asomar
+  por debajo del borde.
+*/
+.stat.con-detalle{cursor:default}
+.stat.con-detalle:hover,
+.stat.con-detalle:focus-visible{overflow:visible}
+.stat.con-detalle .d{display:none}
+.stat.con-detalle:hover .d,
+.stat.con-detalle:focus-visible .d{
+  display:block;position:absolute;left:0;right:0;top:100%;margin-top:6px;
+  background:var(--card2);border:1px solid var(--line2);border-radius:var(--r-s);
+  padding:8px 12px;z-index:6;box-shadow:0 6px 16px rgba(0,0,0,.35)}
