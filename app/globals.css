@@ -606,19 +606,6 @@ h1{font-size:clamp(26px,3.4vw,34px)}
 .tabla-salidas td:nth-child(n+3){padding-left:var(--e5);padding-right:var(--e5)}
 
 /*
-  La unidad viaja siempre en el DOM pero se queda oculta hasta que se
-  pasa el raton por encima del valor: el rotulo de la columna ya dice
-  que se mide ahi (Km, Desnivel +...), y repetirlo en cada fila apretaba
-  las cifras sin anadir nada que no se pudiera intuir. Se muestra como
-  una pastilla pequena, no como texto plano, para que el gesto de "esto
-  se puede mirar mas de cerca" se note antes de leer la palabra.
-*/
-.tabla-salidas .unidad{
-  display:none;font-weight:300;margin-left:4px;padding:1px 5px;
-  border-radius:var(--r-s);background:var(--card2);color:var(--ink3)}
-.tabla-salidas td:hover .unidad{display:inline-block}
-
-/*
   Insignia del maximo de una columna (salida mas larga, mayor desnivel,
   mayor velocidad media, tiempo mas largo). Antes era el fondo de toda
   la celda en amarillo, y a tamano de tabla se veia como un bloque

@@ -410,19 +410,6 @@ function ValorTabla({ max, children }) {
   return max ? <span className="marca-max">{children}</span> : children;
 }
 
-/* La unidad viaja siempre en el DOM pero se queda oculta hasta que se
-   pasa el raton por encima del valor: el rotulo de la columna ya dice
-   que se mide ahi, y la unidad repetida en cada fila apretaba las
-   cifras entre si sin anadir nada que no se pudiera intuir. */
-function ConUnidad({ children, unidad }) {
-  return (
-    <span className="con-unidad">
-      {children}
-      {unidad && <span className="unidad">{unidad}</span>}
-    </span>
-  );
-}
-
 function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
   enRango, cache, dias }) {
 
@@ -489,7 +476,7 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
                         <td>{s.nombre}</td>
                         <td>
                           <ValorTabla max={Math.abs(distVal - maximos.dist) < 0.01}>
-                            <ConUnidad unidad="km">{num(distVal, 1)}</ConUnidad>
+                            {num(distVal, 1)}
                           </ValorTabla>
                         </td>
                         <td>
@@ -499,15 +486,15 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
                         </td>
                         <td>
                           <ValorTabla max={desnVal === maximos.desn}>
-                            <ConUnidad unidad="m">+{num(desnVal, 0)}</ConUnidad>
+                            +{num(desnVal, 0)}
                           </ValorTabla>
                         </td>
                         <td>
                           <ValorTabla max={Math.abs(velVal - maximos.vel) < 0.01}>
-                            <ConUnidad unidad="km/h">{num(velVal, 1)}</ConUnidad>
+                            {num(velVal, 1)}
                           </ValorTabla>
                         </td>
-                        <td>{fcVal ? <ConUnidad unidad="ppm">{num(fcVal, 0)}</ConUnidad> : '—'}</td>
+                        <td>{fcVal ? num(fcVal, 0) : '—'}</td>
                         <td>
                           <span className="cat" style={{ background: insignia.fondo, color: insignia.tinta }}>
                             {insignia.codigo}
