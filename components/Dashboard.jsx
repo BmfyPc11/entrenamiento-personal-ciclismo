@@ -16,11 +16,23 @@ import { OBJETIVOS_INICIALES } from './objetivosLib';
 import { Linea, Barras, Carga } from './Graficos';
 import {
   PERFILES_BICI, detectarPuertos, serieCarga, umbralEstimado,
-  vatios, vatiosSalida, vatiosPuerto, repartoZonas, repartoGlobal,
+  vatios, vatiosPuerto, repartoZonas, repartoGlobal,
   calcularZonas, ultimosDias, consejoEntrenador, normalizarAltitud,
-  velocidadMaximaLlano,
-  num, duracion, fechaCorta, kmh, km, metrosPorKm, vamSalida, esLlana,
+  velocidadMaximaLlano, tipoRuta,
+  num, duracionHMS, fechaCorta, fechaDDMMAA, kmh, km,
 } from '@/lib/metrics';
+
+/* Codigo de tres letras y color de cada tipo de terreno, para la
+   insignia de la tabla de salidas. No son los mismos colores que usa
+   COLORES_TIPO en el calendario de Ultimos 30 dias: alli el naranja de
+   "mixto" tiene que distinguirse del ambar de la zona 3 de FC en el
+   mismo golpe de vista, y aqui la insignia va sola en su columna, sin
+   esa colision. */
+const TIPO_INSIGNIA = {
+  llano: { codigo: 'LLA', fondo: 'var(--green)', tinta: '#0A0C0F' },
+  mixto: { codigo: 'COL', fondo: 'var(--amber)', tinta: '#0A0C0F' },
+  puerto: { codigo: 'MON', fondo: 'var(--red)', tinta: '#FFFFFF' },
+};
 
 /* La lista de secciones vive en Layout, que es quien la pinta. */
 
@@ -392,18 +404,35 @@ function Estadisticas({ salidas, cfg, umbral, enRango, rango, setRango, velMaxLl
   );
 }
 
+/* Envuelve el contenido de una celda en la insignia del maximo cuando
+   corresponde; si no, lo deja tal cual, sin nodo extra alrededor. */
+function ValorTabla({ max, children }) {
+  return max ? <span className="marca-max">{children}</span> : children;
+}
+
+/* La unidad viaja siempre en el DOM pero se queda oculta hasta que se
+   pasa el raton por encima del valor: el rotulo de la columna ya dice
+   que se mide ahi, y la unidad repetida en cada fila apretaba las
+   cifras entre si sin anadir nada que no se pudiera intuir. */
+function ConUnidad({ children, unidad }) {
+  return (
+    <span className="con-unidad">
+      {children}
+      {unidad && <span className="unidad">{unidad}</span>}
+    </span>
+  );
+}
+
 function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
   enRango, cache, dias }) {
 
   /* Máximos de cada columna para resaltar */
   const maximos = useMemo(() => ({
     dist: salidas.length ? Math.max(...salidas.map(km)) : 0,
+    tiempo: salidas.length ? Math.max(...salidas.map((s) => s.tiempoMovimiento)) : 0,
     desn: salidas.length ? Math.max(...salidas.map((s) => s.desnivel)) : 0,
-    mkm: salidas.length ? Math.max(...salidas.map(metrosPorKm)) : 0,
     vel: salidas.length ? Math.max(...salidas.map(kmh)) : 0,
-    vam: salidas.length ? Math.max(...salidas.map(vamSalida)) : 0,
-    w: salidas.length ? Math.max(...salidas.map((s) => vatiosSalida(s, cfg))) : 0,
-  }), [salidas, cfg]);
+  }), [salidas]);
   /*
     La frecuencia cardiaca queda deliberadamente fuera de los maximos. Las
     demas columnas miden rendimiento y su mayor valor es un logro; la FC
@@ -438,11 +467,11 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
             <div className="callout">No hay salidas en el intervalo elegido.</div>
           ) : (
             <div className="scroll">
-              <table>
+              <table className="tabla-salidas">
                 <thead>
                   <tr>
-                    <th>Salida</th><th>Fecha</th><th>Dist.</th><th>Desn.</th>
-                    <th>m/km</th><th>Vel.</th><th>VAM</th><th>W est.</th><th>FC</th><th>Incluir</th>
+                    <th>Fecha</th><th>Salida</th><th>Km</th><th>Tiempo</th><th>Desnivel +</th>
+                    <th>Vel media</th><th>FC</th><th>Tipo</th><th>Incluir</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -450,30 +479,40 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
                     const dentro = !excluidas.has(s.id);
                     const distVal = km(s);
                     const desnVal = s.desnivel;
-                    const mkmVal = metrosPorKm(s);
                     const velVal = kmh(s);
-                    const vamVal = vamSalida(s);
                     const fcVal = s.fcMedia;
-                    const wVal = vatiosSalida(s, cfg);
-
-                    const bgMax = { background: '#E0C020', color: '#0E1116', fontWeight: 600 };
+                    const insignia = TIPO_INSIGNIA[tipoRuta(s)];
 
                     return (
                       <tr key={s.id} style={{ opacity: dentro ? 1 : 0.35 }}>
+                        <td>{fechaDDMMAA(s.fecha)}</td>
+                        <td>{s.nombre}</td>
                         <td>
-                          {s.nombre}
-                          <span className={`tag ${esLlana(s) ? 'lla' : metrosPorKm(s) > 12 ? 'col' : ''}`}>
-                            {esLlana(s) ? 'llano' : metrosPorKm(s) > 12 ? 'puerto' : 'mixto'}
+                          <ValorTabla max={Math.abs(distVal - maximos.dist) < 0.01}>
+                            <ConUnidad unidad="km">{num(distVal, 1)}</ConUnidad>
+                          </ValorTabla>
+                        </td>
+                        <td>
+                          <ValorTabla max={s.tiempoMovimiento === maximos.tiempo}>
+                            {duracionHMS(s.tiempoMovimiento)}
+                          </ValorTabla>
+                        </td>
+                        <td>
+                          <ValorTabla max={desnVal === maximos.desn}>
+                            <ConUnidad unidad="m">+{num(desnVal, 0)}</ConUnidad>
+                          </ValorTabla>
+                        </td>
+                        <td>
+                          <ValorTabla max={Math.abs(velVal - maximos.vel) < 0.01}>
+                            <ConUnidad unidad="km/h">{num(velVal, 1)}</ConUnidad>
+                          </ValorTabla>
+                        </td>
+                        <td>{fcVal ? <ConUnidad unidad="ppm">{num(fcVal, 0)}</ConUnidad> : '—'}</td>
+                        <td>
+                          <span className="cat" style={{ background: insignia.fondo, color: insignia.tinta }}>
+                            {insignia.codigo}
                           </span>
                         </td>
-                        <td>{fechaCorta(s.fecha)}</td>
-                        <td style={Math.abs(distVal - maximos.dist) < 0.01 ? bgMax : null}>{num(distVal, 1)}</td>
-                        <td style={desnVal === maximos.desn ? bgMax : null}>+{num(desnVal, 0)}</td>
-                        <td style={Math.abs(mkmVal - maximos.mkm) < 0.01 ? bgMax : null}>{num(mkmVal, 1)}</td>
-                        <td style={Math.abs(velVal - maximos.vel) < 0.01 ? bgMax : null}>{num(velVal, 1)}</td>
-                        <td style={Math.abs(vamVal - maximos.vam) < 0.01 ? bgMax : null}>{num(vamVal, 0)}</td>
-                        <td style={Math.abs(wVal - maximos.w) < 0.01 ? bgMax : null}>{num(wVal, 0)}</td>
-                        <td>{fcVal ? num(fcVal, 0) : '—'}</td>
                         <td>
                           <input type="checkbox" checked={dentro}
                             onChange={() => {

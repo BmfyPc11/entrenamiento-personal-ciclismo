@@ -32,7 +32,7 @@
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
 
   --e1:4px; --e2:8px; --e3:12px; --e4:16px; --e5:24px; --e6:32px; --e7:48px;
-  --r:8px; --r-s:5px;
+  --r:8px; --r-s:5px; --r-l:12px;
 
   --lateral:232px;
 }
@@ -578,3 +578,55 @@ h1{font-size:clamp(26px,3.4vw,34px)}
   display:block;position:absolute;left:0;right:0;top:100%;margin-top:6px;
   background:var(--card2);border:1px solid var(--line2);border-radius:var(--r-s);
   padding:8px 12px;z-index:6;box-shadow:0 6px 16px rgba(0,0,0,.35)}
+
+/*
+  Tabla de "Tus salidas". Fecha paso a ser la primera columna cuando se
+  reordeno la tabla, y con ella arrastro sin querer el tratamiento que
+  td:first-child reserva para un nombre (sans, negrita implicita via el
+  bold que pide esta pantalla, ancho minimo, ajuste de linea). Aqui se
+  revierte eso para la fecha y se traslada a Salida, que es quien de
+  verdad lo necesita ahora en la segunda columna.
+*/
+.tabla-salidas td:first-child{
+  font-family:var(--mono);font-weight:300;white-space:nowrap;min-width:0;color:var(--ink2)}
+.tabla-salidas th:nth-child(2),
+.tabla-salidas td:nth-child(2){text-align:left}
+.tabla-salidas td:nth-child(2){
+  font-family:var(--sans);font-weight:700;white-space:normal;min-width:150px;color:var(--ink)}
+
+/* Km, Tiempo, Desnivel+, Vel media y FC: peso normal, no el 500 que
+   pone la tabla por defecto. */
+.tabla-salidas td:nth-child(n+3):nth-child(-n+7){font-weight:400}
+
+/* Desde Km en adelante las columnas son mas estrechas que Fecha y
+   Salida, y con el mismo relleno de 12px que el resto de la tabla las
+   cifras quedaban pegadas unas a otras. Fecha y Salida se quedan como
+   estaban: ya tienen aire de sobra por su propio ancho. */
+.tabla-salidas th:nth-child(n+3),
+.tabla-salidas td:nth-child(n+3){padding-left:var(--e5);padding-right:var(--e5)}
+
+/*
+  La unidad viaja siempre en el DOM pero se queda oculta hasta que se
+  pasa el raton por encima del valor: el rotulo de la columna ya dice
+  que se mide ahi (Km, Desnivel +...), y repetirlo en cada fila apretaba
+  las cifras sin anadir nada que no se pudiera intuir. Se muestra como
+  una pastilla pequena, no como texto plano, para que el gesto de "esto
+  se puede mirar mas de cerca" se note antes de leer la palabra.
+*/
+.tabla-salidas .unidad{
+  display:none;font-weight:300;margin-left:4px;padding:1px 5px;
+  border-radius:var(--r-s);background:var(--card2);color:var(--ink3)}
+.tabla-salidas td:hover .unidad{display:inline-block}
+
+/*
+  Insignia del maximo de una columna (salida mas larga, mayor desnivel,
+  mayor velocidad media, tiempo mas largo). Antes era el fondo de toda
+  la celda en amarillo, y a tamano de tabla se veia como un bloque
+  desproporcionado tapando la fila entera. Ahora es del mismo tamano que
+  el dato que envuelve, con el mismo trato que la insignia de Tipo pero
+  con las esquinas mas redondeadas para que no se confundan a primer
+  vistazo: Tipo clasifica, esto destaca un record.
+*/
+.tabla-salidas .marca-max{display:inline-block;font-family:var(--mono);
+  font-weight:600;padding:2px 9px;border-radius:var(--r-l);
+  background:#E0C020;color:#0E1116}
