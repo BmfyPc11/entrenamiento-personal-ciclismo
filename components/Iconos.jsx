@@ -95,3 +95,12 @@ export const IcoCerrar = (p) => (
     <path d="M6 6l12 12M18 6L6 18" />
   </svg>
 );
+
+/* Aviso: el triangulo de precaucion, para avisos junto a un callout. */
+export const IcoAviso = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 3.5 21.5 20h-19z" />
+    <path d="M12 9.5v5" />
+    <circle cx="12" cy="17.3" r=".9" fill="currentColor" stroke="none" />
+  </svg>
+);

@@ -10,6 +10,7 @@ import Rutas from './Rutas';
 import AnalizadorGPX from './AnalizadorGPX';
 import UltimosDias from './UltimosDias';
 import Consejo from './Consejo';
+import { IcoAviso } from './Iconos';
 import Layout, { SECCIONES } from './Layout';
 import { OBJETIVOS_INICIALES } from './objetivosLib';
 import { Linea, Barras, Carga } from './Graficos';
@@ -423,19 +424,16 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
         </div>
       ) : (
         <>
+          <h2>Tus salidas</h2>
           {sinFC > 0 && (
-            <div className="callout">
-              <strong>{sinFC} de tus {salidas.length} salidas no tienen frecuencia cardíaca.</strong>{' '}
-              Sin ese dato, su intensidad en el calendario es una estimación a partir del desnivel y
-              la velocidad. Graba siempre con el Garmin y en unos meses este panel valdrá el doble.
+            <div className="callout con-icono">
+              <IcoAviso className="icono" />
+              <p>
+                Algunas de tus salidas no tienen registrada una frecuencia cardíaca. Sin ese dato, su
+                intensidad en el calendario es una estimación a partir del desnivel y la velocidad.
+              </p>
             </div>
           )}
-
-          <h2>Salidas del intervalo</h2>
-          <p className="hint">
-            Desmarca las que no sean representativas (paradas largas, ruta acompañando a alguien, error
-            de registro) y desaparecerán de todos los cálculos.
-          </p>
           {enRango.length === 0 ? (
             <div className="callout">No hay salidas en el intervalo elegido.</div>
           ) : (

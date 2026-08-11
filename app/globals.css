@@ -228,6 +228,12 @@ svg{display:block;max-width:100%;height:auto}
 .callout.warn{border-left-color:var(--red)}
 .callout.ok{border-left-color:var(--green)}
 
+/* Callout con icono de precaucion: el triangulo se lee antes que el
+   texto, en vez de competir con el en la misma linea. */
+.callout.con-icono{display:flex;align-items:flex-start;gap:12px}
+.callout.con-icono .icono{flex:0 0 auto;width:19px;height:19px;margin-top:1px;color:var(--amber)}
+.callout.con-icono p{margin:0}
+
 /* ---------- barras de objetivo ---------- */
 .goal{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
   padding:20px;margin-bottom:12px}
