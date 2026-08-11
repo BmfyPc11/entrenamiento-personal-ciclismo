@@ -173,8 +173,8 @@ export default function Dashboard({ atleta }) {
   }, [cache, cfg, excluidas]);
 
   const velMaxLlano = useMemo(
-    () => velocidadMaximaLlano(cache, excluidas),
-    [cache, excluidas]
+    () => velocidadMaximaLlano(cache, activas),
+    [cache, activas]
   );
 
   const masaTotal = cfg.peso + cfg.bici;
@@ -363,8 +363,8 @@ function Estadisticas({ salidas, cfg, umbral, enRango, rango, setRango, velMaxLl
           <Dato k="Número de salidas" v={salidas.length} />
           <Dato k="Salida más larga" v={masLarga ? num(km(masLarga), 1) : '—'} u="km" dEnHover
             d={masLarga ? fechaCorta(masLarga.fecha) : 'sin salidas'} />
-          <Dato k="Velocidad máxima en llano" v={velMaxLlano ? num(velMaxLlano, 1) : '—'} u="km/h" dEnHover
-            d={velMaxLlano ? 'tramo de 100 m, pendiente ≥ -1 %' : 'sin tramos analizados'} />
+          <Dato k="Vel. punta en llano" v={velMaxLlano ? num(velMaxLlano, 1) : '—'} u="km/h" dEnHover
+            d={velMaxLlano ? 'tramo de 100 m sin llegar de bajada' : 'sin tramos analizados'} />
         </div>
       )}
     </>
