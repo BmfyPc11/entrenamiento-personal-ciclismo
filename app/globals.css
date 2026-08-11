@@ -460,9 +460,31 @@ h1{font-size:clamp(26px,3.4vw,34px)}
    ocupan dos lineas de anchos muy distintos, el borde izquierdo deja de
    ordenar nada y el centro equilibra mejor la caja. */
 .grid.compacta .stat{padding:0 0 12px;text-align:center}
-.grid.compacta .stat .k{font-size:8.5px;letter-spacing:.1em;padding:6px 11px;margin-bottom:6px}
+.grid.compacta .stat .k{font-size:8.5px;font-weight:700;letter-spacing:.1em;padding:6px 11px;margin-bottom:6px}
 .grid.compacta .stat .v{font-size:17px;padding:0 11px}
 .grid.compacta .stat .v small{font-size:9.5px}
+
+/*
+  Variante de las tarjetas de dato a tamano base: centrada y con el
+  titulo en negrita y un punto mas grande (10px -> 11.5px). Nacio en
+  "Tus estadisticas" y ahora la llevan las cuatro secciones que usan
+  .stat a este tamano -Resumen, Carga y forma, Analizar GPX, Rutas-, asi
+  que hoy no queda ninguna excepcion real. Sigue siendo una clase aparte
+  y no un cambio directo en .stat por si el dia de manana una seccion
+  nueva quiere las tarjetas de siempre sin este tratamiento; mientras
+  eso no pase, .centrado es lo que ve todo el mundo. La unica variante
+  de verdad distinta es .compacta, en Entrenamientos, que ademas achica
+  las tarjetas: esa es una decision de tamano, no de esta.
+
+  El letter-spacing baja de .13em a .06em en el mismo golpe: al agrandar
+  la letra sin tocarlo, las etiquetas mas largas -"Desnivel acumulado",
+  "Vel. punta en llano"- se partian en dos lineas y esas tarjetas
+  quedaban mas altas que el resto de la fila. Comprobado a mano contra
+  las etiquetas reales de las cuatro secciones: por debajo de .06em
+  vuelven a caber todas en una linea a este tamano.
+*/
+.grid.centrado .stat{text-align:center}
+.grid.centrado .stat .k{font-weight:700;font-size:11.5px;letter-spacing:.06em}
 
 /*
   El selector de salida vive en la cabecera, a la derecha del titulo.

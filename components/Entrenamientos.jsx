@@ -210,11 +210,11 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
             <Dato k="Distancia" v={num(km(salida), 1)} u="km" />
             <Dato k="Desnivel" v={`+${num(salida.desnivel, 0)}`} u="m"
               d={`${num(metrosPorKm(salida), 1)} m por km`} />
-            <Dato k="Tiempo en movimiento" v={duracion(salida.tiempoMovimiento)}
+            <Dato k="Tiempo" v={duracion(salida.tiempoMovimiento)}
               d={salida.tiempoTotal > salida.tiempoMovimiento * 1.15
                 ? `${duracion(salida.tiempoTotal)} en total, con paradas` : 'sin paradas relevantes'} />
             <Dato k="Velocidad media" v={num(kmh(salida), 1)} u="km/h" />
-            <Dato k="Frecuencia cardíaca" v={salida.fcMedia ? num(salida.fcMedia, 0) : '—'}
+            <Dato k="FC" v={salida.fcMedia ? num(salida.fcMedia, 0) : '—'}
               u={salida.fcMedia ? 'ppm' : ''}
               d={salida.fcMax ? `máxima de ${num(salida.fcMax, 0)} ppm` : 'sin pulsómetro'} />
             <Dato k={salida.vatiosReales ? 'Potencia medida' : 'Potencia estimada'}

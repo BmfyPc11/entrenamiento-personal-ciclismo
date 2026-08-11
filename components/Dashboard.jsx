@@ -172,10 +172,30 @@ export default function Dashboard({ atleta }) {
     return umbralEstimado(todos, cfg) || 150;
   }, [cache, cfg, excluidas]);
 
-  const velMaxLlano = useMemo(
-    () => velocidadMaximaLlano(cache, activas),
-    [cache, activas]
-  );
+  /*
+    Se calcula una vez por carga completa, no una vez por salida que va
+    llegando.
+
+    Por dentro, velocidadMaximaLlano agrupa las anomalias de GPS de todas
+    las salidas con un coste que crece con el cuadrado de cuantas
+    anomalias haya. Con esta cuenta son 325 y tarda unos 4 ms, nada -pero
+    el useMemo anterior repetia la funcion ENTERA cada vez que cache
+    cambiaba de referencia, y cache cambia una vez por cada salida que
+    pedirStreams va trayendo en segundo plano. Con 12 salidas cargando
+    eso eran 8 pasadas de mas por el mismo resultado (31 ms en vez de
+    4). El desperdicio crece con el numero de salidas, no es fijo.
+
+    El efecto de abajo solo dispara cuando fondo.activo pasa a false, es
+    decir, cuando la carga de fondo ya ha terminado: se calcula una vez
+    por carga real. El efecto secundario -y el que se pedia aqui- es que
+    el dato deja de cambiar de valor delante del usuario mientras van
+    llegando salidas: aparece una sola vez, ya con el resultado final.
+  */
+  const [velMaxLlano, setVelMaxLlano] = useState(null);
+  useEffect(() => {
+    if (fondo.activo) return;
+    setVelMaxLlano(velocidadMaximaLlano(cache, activas));
+  }, [fondo.activo, cache, activas]);
 
   const masaTotal = cfg.peso + cfg.bici;
   const wPara30 = vatios(30 / 3.6, 0, masaTotal, cfg.cda, cfg.crr);
@@ -354,7 +374,7 @@ function Estadisticas({ salidas, cfg, umbral, enRango, rango, setRango, velMaxLl
       </div>
 
       {salidas.length > 0 && (
-        <div className="grid" style={{ marginBottom: 'var(--e4)' }}>
+        <div className="grid centrado" style={{ marginBottom: 'var(--e4)' }}>
           <Dato k="Distancia total" v={num(suma(km), 0)} u="km" dEnHover
             d={`${num(suma(km) / salidas.length, 1)} km de media`} />
           <Dato k="Desnivel acumulado" v={num(suma((s) => s.desnivel), 0)} u="m" />
@@ -503,7 +523,7 @@ function CargaTab({ salidas, cfg, umbral, zonas, global: rep }) {
         </div>
       </div>
       {ult && (
-        <div className="grid" style={{ marginTop: 14 }}>
+        <div className="grid centrado" style={{ marginTop: 14 }}>
           <Dato k="Condición" v={num(ult.condicion, 0)} d="base aeróbica acumulada" />
           <Dato k="Fatiga" v={num(ult.fatiga, 0)} d="carga de los últimos 7 días" />
           <div className="stat" style={{ borderLeft: `3px solid ${estado[1]}` }}>

@@ -135,7 +135,7 @@ export default function AnalizadorGPX({ salidas, cache, excluidas, cfg, zonas })
       {datos && an && (
         <>
           <h2>{datos.nombre}</h2>
-          <div className="grid">
+          <div className="grid centrado">
             <Dato k="Distancia" v={num(an.kmR, 1)} u="km" />
             <Dato k="Desnivel positivo" v={num(datos.desnivel, 0)} u="m" />
             <Dato k="Desnivel por km" v={num(an.mkm, 1)} u="m/km"

@@ -316,7 +316,7 @@ function DetalleRuta({ ruta, datos, cargando, ref_, cfg, zonas }) {
             Ruta guardada en Strava · {ruta.niv.nombre.toLowerCase()}
           </p>
 
-          <div className="grid">
+          <div className="grid centrado">
             <Dato k="Distancia" v={num(ruta.km, 1)} u="km" />
             <Dato k="Desnivel" v={`+${num(ruta.desnivel, 0)}`} u="m"
               d={`${num(ruta.desnivel / ruta.km, 1)} m por km`} />

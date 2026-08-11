@@ -240,12 +240,12 @@ const PUNTO_MALO = [41.32514, 2.13376];
 test('fallar una vez en un sitio no lo convierte en zona dudosa', () => {
   /* dos salidas que fallan, pero cada una en un sitio distinto */
   const cache = { 1: conSaltoEn(40, PUNTO_MALO), 2: conSaltoEn(40, [41.9, 2.9]) };
-  assert.equal(zonasGpsDudoso(cache, [{ id: 1 }, { id: 2 }]).length, 0);
+  assert.equal(zonasGpsDudoso(cache).length, 0);
 });
 
 test('fallar en el mismo sitio en dos salidas si crea zona', () => {
   const cache = { 1: conSaltoEn(40, PUNTO_MALO), 2: conSaltoEn(70, PUNTO_MALO) };
-  const zonas = zonasGpsDudoso(cache, [{ id: 1 }, { id: 2 }]);
+  const zonas = zonasGpsDudoso(cache);
   assert.equal(zonas.length, 1);
   assert.ok(Math.abs(zonas[0].punto[0] - PUNTO_MALO[0]) < 0.01);
 });
@@ -275,6 +275,34 @@ test('una zona marcada por otras salidas descarta la deriva suave', () => {
 
 test('sin latlng no se inventan zonas', () => {
   const cache = { 1: construir([LLANO]), 2: construir([LLANO]) };
-  assert.equal(zonasGpsDudoso(cache, [{ id: 1 }, { id: 2 }]).length, 0);
-  assert.equal(zonasGpsDudoso(null, null).length, 0);
+  assert.equal(zonasGpsDudoso(cache).length, 0);
+  assert.equal(zonasGpsDudoso(null).length, 0);
+});
+
+/*
+  Regresion del bug real: filtrar por fecha resucitaba una zona ya
+  conocida. Con las tres salidas en cache, la de la deriva suave (3) se
+  descarta porque 1 y 2 rompieron fuerte en el mismo sitio. Pero si el
+  filtro de "velocidadMaximaLlano" solo mira la salida 3 -por ejemplo,
+  porque 1 y 2 quedaron fuera del rango de fechas elegido- el criterio
+  antiguo (zonasGpsDudoso solo sobre las salidas filtradas) dejaba de
+  ver esas dos confirmaciones y la zona desaparecia: la deriva volvia a
+  colarse como un sprint legitimo.
+
+  zonasGpsDudoso ya no recibe una lista de salidas: recorre toda la
+  cache siempre, asi que el filtro de fechas no puede arrebatarle
+  pruebas. La fiabilidad de un sitio no depende de que dias mire el
+  usuario ahora mismo.
+*/
+test('un filtro de fechas no le quita pruebas al catalogo de zonas', () => {
+  const cache = {
+    1: conSaltoEn(40, PUNTO_MALO),     // fuera del filtro, pero sigue en cache
+    2: conSaltoEn(70, PUNTO_MALO),     // idem
+    3: conDerivaEn(50, PUNTO_MALO),    // la unica salida "del periodo filtrado"
+  };
+
+  /* Solo la salida 3 entra en el filtro -como si 1 y 2 fueran de otro mes-,
+     pero 1 y 2 siguen en cache porque el fondo las descarga todas. */
+  const soloFiltrada = velocidadMaximaLlano(cache, [{ id: 3 }]);
+  assert.ok(soloFiltrada < 35, `la zona dudosa deberia seguir descontandose: ${soloFiltrada} km/h`);
 });
