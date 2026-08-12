@@ -262,7 +262,9 @@ export default function Dashboard({ atleta }) {
     );
   }
 
-  const titulo = (SECCIONES.find(([id]) => id === pestana) || [])[1] || '';
+  const seccionActual = SECCIONES.find(([id]) => id === pestana) || [];
+  const titulo = seccionActual[1] || '';
+  const IconoTitulo = seccionActual[2];
 
   return (
     <Layout seccion={pestana} setSeccion={setPestana} atleta={atleta}
@@ -277,8 +279,7 @@ export default function Dashboard({ atleta }) {
       {pestana !== 'entrenamientos' && (
         <div className="top">
           <div>
-            <p className="eyebrow">Cuaderno de ruta</p>
-            <h1>{titulo}</h1>
+            <h1>{IconoTitulo && <IconoTitulo className="icono-titulo" />}{titulo}</h1>
           </div>
         </div>
       )}
@@ -330,13 +331,6 @@ export default function Dashboard({ atleta }) {
           masaTotal={masaTotal} objetivos={objetivos} setObjetivos={setObjetivos} />
       )}
 
-      <footer>
-        <strong>Origen de los datos:</strong> tu cuenta de Strava, leída en directo. Solo se analizan
-        actividades de tipo bicicleta.<br />
-        <strong>Tiempos:</strong> siempre tiempo en movimiento, nunca tiempo transcurrido.<br />
-        <strong>Potencias:</strong> estimadas a partir de peso, desnivel, velocidad y tiempo, salvo que
-        tengas medidor de potencia, en cuyo caso se usa el dato real.
-      </footer>
     </div>
     </Layout>
   );
@@ -386,7 +380,7 @@ function Estadisticas({ salidas, cfg, umbral, enRango, rango, setRango, velMaxLl
 
   return (
     <>
-      <h2>Tus estadísticas</h2>
+      <h2 className="titulo-resumen">Tus estadísticas</h2>
 
       <div className="chips" style={{ marginTop: 0, marginBottom: 'var(--e4)' }}>
         <span className="campo-fecha">
@@ -491,8 +485,9 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
               <table className="tabla-salidas">
                 <thead>
                   <tr>
-                    <th>Fecha</th><th>Salida</th><th>Km</th><th>Tiempo</th><th>Desnivel +</th>
-                    <th>Vel media</th><th>FC</th><th>Tipo</th><th>Incluir</th>
+                    <th className="col-tipo">Tipo</th><th className="col-fecha">Fecha</th>
+                    <th className="col-nombre">Salida</th><th>Km</th><th>Tiempo</th>
+                    <th>Desnivel +</th><th>Vel media</th><th>FC</th><th>Incluir</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -506,8 +501,13 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
 
                     return (
                       <tr key={s.id} style={{ opacity: dentro ? 1 : 0.35 }}>
-                        <td>{fechaDDMMAA(s.fecha)}</td>
-                        <td>{s.nombre}</td>
+                        <td className="col-tipo">
+                          <span className="cat" style={{ background: insignia.fondo, color: insignia.tinta }}>
+                            {insignia.codigo}
+                          </span>
+                        </td>
+                        <td className="col-fecha">{fechaDDMMAA(s.fecha)}</td>
+                        <td className="col-nombre">{s.nombre}</td>
                         <td>
                           <ValorTabla max={Math.abs(distVal - maximos.dist) < 0.01}>
                             {num(distVal, 1)}
@@ -529,11 +529,6 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
                           </ValorTabla>
                         </td>
                         <td>{fcVal ? num(fcVal, 0) : '—'}</td>
-                        <td>
-                          <span className="cat" style={{ background: insignia.fondo, color: insignia.tinta }}>
-                            {insignia.codigo}
-                          </span>
-                        </td>
                         <td>
                           <input type="checkbox" checked={dentro}
                             onChange={() => {

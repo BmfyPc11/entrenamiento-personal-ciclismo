@@ -179,8 +179,7 @@ h3{font-family:var(--mono);font-size:11px;letter-spacing:.15em;text-transform:up
 .consejo .tag{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;
   color:var(--ink3);display:block;margin-bottom:9px}
 .consejo .tit{font-size:19px;font-weight:500;margin:0 0 9px;letter-spacing:-.01em}
-.consejo p{margin:0;color:var(--ink2);font-size:14.5px;line-height:1.68;
-  max-width:104ch}
+.consejo p{margin:0;color:var(--ink2);font-size:14.5px;line-height:1.68}
 
 /* ---------- formularios ---------- */
 .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px}
@@ -229,8 +228,11 @@ svg{display:block;max-width:100%;height:auto}
 .callout.ok{border-left-color:var(--green)}
 
 /* Callout con icono de precaucion: el triangulo se lee antes que el
-   texto, en vez de competir con el en la misma linea. */
-.callout.con-icono{display:flex;align-items:flex-start;gap:12px}
+   texto, en vez de competir con el en la misma linea. Sin max-width:
+   el limite de 108ch que lleva .callout por defecto es para avisos de
+   una linea, y aqui dejaba la caja parada muy antes del margen real de
+   la pagina. */
+.callout.con-icono{display:flex;align-items:flex-start;gap:12px;max-width:none}
 .callout.con-icono .icono{flex:0 0 auto;width:19px;height:19px;margin-top:1px;color:var(--amber)}
 .callout.con-icono p{margin:0}
 
@@ -599,30 +601,44 @@ h1{font-size:clamp(26px,3.4vw,34px)}
 .link-dato:hover{color:var(--ink);background:none}
 
 /*
-  Tabla de "Tus salidas". Fecha paso a ser la primera columna cuando se
-  reordeno la tabla, y con ella arrastro sin querer el tratamiento que
-  td:first-child reserva para un nombre (sans, negrita implicita via el
-  bold que pide esta pantalla, ancho minimo, ajuste de linea). Aqui se
-  revierte eso para la fecha y se traslada a Salida, que es quien de
-  verdad lo necesita ahora en la segunda columna.
+  Tabla de "Tus salidas". Las columnas se han reordenado un par de veces
+  ya, y basar el estilo en la POSICION (td:first-child, nth-child...) se
+  rompia cada vez sin avisar: Fecha hereda el trato pensado para Salida,
+  o al reves, sin que saltase ningun error. Cada columna lleva su propia
+  clase desde el JSX y el CSS se engancha a esa clase, no al hueco que
+  ocupa, asi que el orden se puede volver a tocar sin tener que venir
+  aqui a renumerar nada.
 */
-.tabla-salidas td:first-child{
-  font-family:var(--mono);font-weight:300;white-space:nowrap;min-width:0;color:var(--ink2)}
-.tabla-salidas th:nth-child(2),
-.tabla-salidas td:nth-child(2){text-align:left}
-.tabla-salidas td:nth-child(2){
+.tabla-salidas .col-tipo,
+.tabla-salidas .col-fecha,
+.tabla-salidas .col-nombre{text-align:left}
+/* Solo la celda de dato, no la cabecera: "FECHA" y "SALIDA" siguen el
+   mismo trato mono/mayuscula/peso 400 que el resto de rotulos de la
+   tabla, ese estilo es solo para lo que hay debajo. */
+.tabla-salidas td.col-fecha{
+  font-family:var(--mono);font-weight:300;white-space:nowrap;color:var(--ink2)}
+.tabla-salidas td.col-nombre{
   font-family:var(--sans);font-weight:700;white-space:normal;min-width:150px;color:var(--ink)}
+/*
+  Tipo es una insignia corta (30 px) mas el relleno de la celda a cada
+  lado. La causa real del hueco no era el reparto automatico de la
+  tabla: hay una regla generica td:first-child en otra parte de esta
+  hoja (pensada para el nombre en Rutas y Ascensiones, donde la primera
+  columna si es un texto largo) que pone min-width:150px, y como Tipo
+  ahora es literalmente la primera celda del DOM, la seguia heredando
+  pese al ancho fijo de aqui: min-width siempre gana sobre width cuando
+  es mayor. Se anula el min-width explicitamente.
+*/
+.tabla-salidas .col-tipo{width:56px;min-width:0;white-space:nowrap}
 
 /* Km, Tiempo, Desnivel+, Vel media y FC: peso normal, no el 500 que
-   pone la tabla por defecto. */
-.tabla-salidas td:nth-child(n+3):nth-child(-n+7){font-weight:400}
-
-/* Desde Km en adelante las columnas son mas estrechas que Fecha y
-   Salida, y con el mismo relleno de 12px que el resto de la tabla las
-   cifras quedaban pegadas unas a otras. Fecha y Salida se quedan como
-   estaban: ya tienen aire de sobra por su propio ancho. */
-.tabla-salidas th:nth-child(n+3),
-.tabla-salidas td:nth-child(n+3){padding-left:var(--e5);padding-right:var(--e5)}
+   pone la tabla por defecto; y mas separacion entre ellas, que con el
+   mismo relleno de 12px que el resto de la tabla quedaban pegadas unas
+   a otras. Tipo, Fecha y Salida no lo necesitan: ya tienen aire de
+   sobra por su propio ancho o por ser una insignia compacta. */
+.tabla-salidas th:not(.col-tipo):not(.col-fecha):not(.col-nombre),
+.tabla-salidas td:not(.col-tipo):not(.col-fecha):not(.col-nombre){
+  font-weight:400;padding-left:var(--e5);padding-right:var(--e5)}
 
 /*
   Insignia del maximo de una columna (salida mas larga, mayor desnivel,
@@ -686,3 +702,22 @@ h1{font-size:clamp(26px,3.4vw,34px)}
   align-items:center;justify-content:center;padding:0;border-radius:50%;
   background:var(--card2);border:1px solid var(--line2);color:var(--ink2)}
 .btn-cerrar-horizontal:hover{background:var(--card);color:var(--ink)}
+
+/* El icono del titulo hereda el font-size de h1 via 1em, asi que crece
+   y encoge con el mismo clamp() del texto sin tener que repetirlo. El
+   color de acento es el mismo que usa la barra lateral para marcar la
+   seccion activa: este icono representa esa misma seccion. */
+h1 .icono-titulo{display:inline-block;width:1em;height:1em;
+  margin-right:var(--e3);vertical-align:-.12em;color:var(--acento)}
+
+/* Solo el titulo de "Tus estadisticas", el primero que se ve en
+   Resumen justo debajo de RESUMEN: el margen por defecto de h2 (pensado
+   para separar bloques a mitad de pagina) dejaba demasiado aire nada
+   mas entrar. */
+h2.titulo-resumen{margin-top:var(--e5)}
+
+/* La leyenda de Ultimos 30 dias, en la tipografia principal de la
+   pagina en vez de la monoespaciada que usa .legend en el resto de
+   sitios (Datos, Entrenamientos, Zonas...): no se toca la regla
+   compartida para no arrastrar el cambio a esas otras leyendas. */
+.legend-30dias{font-family:var(--sans)}
