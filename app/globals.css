@@ -362,8 +362,17 @@ h2:first-child{margin-top:var(--e2)}
 */
 .stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
   padding:0 0 var(--e4);position:relative;overflow:hidden}
+/*
+  Las esquinas superiores redondeadas de la franja de acento dependian del
+  overflow:hidden de .stat para recortarse -la franja en si es un
+  rectangulo recto. Eso se rompio al necesitar overflow:visible en hover
+  para que el tooltip pudiera asomar: sin recorte, las esquinas cuadradas
+  de la franja quedaban a la vista encima de la tarjeta redondeada. Ahora
+  la propia franja lleva su radio, y no depende de que el padre recorte.
+*/
 .stat .k{display:block;background:var(--acento);color:var(--acento-ink);
-  padding:9px 17px;margin-bottom:9px}
+  padding:9px 17px;margin-bottom:9px;
+  border-radius:calc(var(--r) - 1px) calc(var(--r) - 1px) 0 0}
 .stat .v{font-size:30px;font-weight:600;padding:0 17px}
 .stat .d{margin-top:7px;padding:0 17px}
 
@@ -562,11 +571,32 @@ h1{font-size:clamp(26px,3.4vw,34px)}
 .stat.con-detalle:hover,
 .stat.con-detalle:focus-visible{overflow:visible}
 .stat.con-detalle .d{display:none}
+/*
+  El tooltip empieza pegado al borde de la tarjeta (top:100%, sin margen):
+  un hueco entre los dos, aunque sea de pocos pixeles, es tierra de nadie
+  para el raton. Al cruzarlo el puntero deja de estar sobre .stat O sobre
+  .d, el hover se apaga a medio camino y el tooltip desaparece antes de
+  llegar al enlace de dentro -justo el bug que hacia imposible clicarlo.
+  El aire visual se consigue con padding-top, que sigue formando parte
+  de la caja hoverable en vez de quedar fuera de ella.
+*/
 .stat.con-detalle:hover .d,
 .stat.con-detalle:focus-visible .d{
-  display:block;position:absolute;left:0;right:0;top:100%;margin-top:6px;
+  display:block;position:absolute;left:0;right:0;top:100%;
   background:var(--card2);border:1px solid var(--line2);border-radius:var(--r-s);
-  padding:8px 12px;z-index:6;box-shadow:0 6px 16px rgba(0,0,0,.35)}
+  padding:14px 12px 8px;margin-top:0;z-index:6;box-shadow:0 6px 16px rgba(0,0,0,.35)}
+
+/*
+  Enlace dentro del tooltip de una tarjeta (la salida que puso el record
+  de distancia o de velocidad punta): sin el borde ni el relleno de un
+  boton normal, que dentro de un cuadro de ocho por doce pixeles se veria
+  como una caja dentro de otra caja. Se lee como texto y se comporta como
+  enlace -subrayado y color de acento- porque eso es lo que es.
+*/
+.link-dato{border:none;background:none;padding:0;margin:0;display:inline;
+  font-family:inherit;font-size:inherit;font-weight:600;
+  color:var(--acento);text-decoration:underline;text-underline-offset:2px}
+.link-dato:hover{color:var(--ink);background:none}
 
 /*
   Tabla de "Tus salidas". Fecha paso a ser la primera columna cuando se

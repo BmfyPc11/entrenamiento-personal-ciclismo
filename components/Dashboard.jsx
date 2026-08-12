@@ -53,6 +53,19 @@ export default function Dashboard({ atleta }) {
   const [refrescando, setRefrescando] = useState(false);
   const [menuAbierto, setMenuAbierto] = useState(false);
 
+  /*
+    Enlace desde una tarjeta de "Tus estadisticas" (salida mas larga, vel.
+    punta...) hasta esa salida concreta en Entrenamientos. Como esa pestana
+    se desmonta en cuanto sales de ella (mas abajo, "pestana ===
+    'entrenamientos'"), le basta con leer este id UNA vez al montar -de
+    ahi el useState perezoso en Entrenamientos en vez de un efecto- y
+    avisar por onSalidaInicialConsumida para que aqui se limpie. Sin ese
+    aviso, volver a la pestana mas tarde por el menu normal reabriria
+    siempre esa misma salida antigua en vez de la mas reciente.
+  */
+  const [saltarASalida, setSaltarASalida] = useState(null);
+  const irASalida = (id) => { setSaltarASalida(id); setPestana('entrenamientos'); };
+
   /* --- preferencias guardadas en el navegador --- */
   useEffect(() => {
     try {
@@ -274,7 +287,8 @@ export default function Dashboard({ atleta }) {
 
       {pestana === 'resumen' && (
         <Estadisticas salidas={activas} cfg={cfg} umbral={umbral}
-          enRango={enRango} rango={rango} setRango={setRango} velMaxLlano={velMaxLlano} />
+          enRango={enRango} rango={rango} setRango={setRango} velMaxLlano={velMaxLlano}
+          irASalida={irASalida} />
       )}
       {pestana === 'resumen' && <Consejo consejo={consejo} />}
 
@@ -285,7 +299,8 @@ export default function Dashboard({ atleta }) {
       )}
       {pestana === 'entrenamientos' && (
         <Entrenamientos salidas={salidas} cfg={cfg} zonas={zonas} umbral={umbral} cache={cache}
-          pedirStreams={pedirStreams} />
+          pedirStreams={pedirStreams} salidaInicial={saltarASalida}
+          onSalidaInicialConsumida={() => setSaltarASalida(null)} />
       )}
       {pestana === 'datos' && (
         <Datos cfg={cfg} setCfg={setCfg} zonas={zonas} reparto={global} fondo={fondo} />
@@ -345,7 +360,7 @@ function Dato({ k, v, u, d, cl, dEnHover }) {
   cifras, porque es lo que decide que periodo resumen: verlo justo antes
   evita tener que buscarlo mas abajo para entender a que corresponden.
 */
-function Estadisticas({ salidas, cfg, umbral, enRango, rango, setRango, velMaxLlano }) {
+function Estadisticas({ salidas, cfg, umbral, enRango, rango, setRango, velMaxLlano, irASalida }) {
   /* Limites reales del historial, para acotar los selectores de fecha */
   const limites = useMemo(() => {
     if (!enRango.length && !salidas.length) return null;
@@ -363,6 +378,11 @@ function Estadisticas({ salidas, cfg, umbral, enRango, rango, setRango, velMaxLl
   const masLarga = salidas.length
     ? salidas.reduce((a, s) => (s.distancia > a.distancia ? s : a))
     : null;
+
+  /* Misma lista de salidas con la que se calculo velMaxLlano (Dashboard le
+     pasa "activas" a los dos), asi que la salida ganadora siempre esta
+     aqui dentro. */
+  const salidaVel = velMaxLlano ? salidas.find((s) => s.id === velMaxLlano.salidaId) : null;
 
   return (
     <>
@@ -395,9 +415,23 @@ function Estadisticas({ salidas, cfg, umbral, enRango, rango, setRango, velMaxLl
             d="tiempo en movimiento" />
           <Dato k="Número de salidas" v={salidas.length} />
           <Dato k="Salida más larga" v={masLarga ? num(km(masLarga), 1) : '—'} u="km" dEnHover
-            d={masLarga ? fechaCorta(masLarga.fecha) : 'sin salidas'} />
-          <Dato k="Vel. punta en llano" v={velMaxLlano ? num(velMaxLlano, 1) : '—'} u="km/h" dEnHover
-            d={velMaxLlano ? 'tramo de 100 m sin llegar de bajada' : 'sin tramos analizados'} />
+            d={masLarga ? (
+              <>
+                {fechaCorta(masLarga.fecha)} ·{' '}
+                <button className="link-dato" onClick={() => irASalida(masLarga.id)}>
+                  {masLarga.nombre}
+                </button>
+              </>
+            ) : 'sin salidas'} />
+          <Dato k="Vel. punta en llano" v={velMaxLlano ? num(velMaxLlano.valor, 1) : '—'} u="km/h" dEnHover
+            d={velMaxLlano && salidaVel ? (
+              <>
+                {fechaCorta(salidaVel.fecha)} ·{' '}
+                <button className="link-dato" onClick={() => irASalida(salidaVel.id)}>
+                  {salidaVel.nombre}
+                </button>
+              </>
+            ) : 'sin tramos analizados'} />
         </div>
       )}
     </>

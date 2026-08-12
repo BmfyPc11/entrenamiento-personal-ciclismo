@@ -164,8 +164,9 @@ test('se queda con la mejor de las salidas analizadas', () => {
     1: construir([LLANO]),
     2: construir([{ v0: 9, pend: 0, segs: 300 }]),   // 32,4 km/h
   };
-  const v = velocidadMaximaLlano(cache, [{ id: 1 }, { id: 2 }]);
-  assert.ok(Math.abs(v - 32.4) < 0.2, `esperaba ~32,4 km/h y dio ${v}`);
+  const r = velocidadMaximaLlano(cache, [{ id: 1 }, { id: 2 }]);
+  assert.ok(Math.abs(r.valor - 32.4) < 0.2, `esperaba ~32,4 km/h y dio ${r.valor}`);
+  assert.equal(r.salidaId, 2, 'la salida 2 es la que rueda mas rapido');
 });
 
 /*
@@ -178,8 +179,9 @@ test('solo cuentan las salidas que se le pasan, no toda la cache', () => {
     1: construir([LLANO]),
     2: construir([{ v0: 9, pend: 0, segs: 300 }]),
   };
-  const v = velocidadMaximaLlano(cache, [{ id: 1 }]);
-  assert.ok(Math.abs(v - 25.2) < 0.2, `esperaba ~25,2 km/h y dio ${v}`);
+  const r = velocidadMaximaLlano(cache, [{ id: 1 }]);
+  assert.ok(Math.abs(r.valor - 25.2) < 0.2, `esperaba ~25,2 km/h y dio ${r.valor}`);
+  assert.equal(r.salidaId, 1);
 });
 
 test('sin salidas o sin cache no hay resultado', () => {
@@ -270,7 +272,7 @@ test('una zona marcada por otras salidas descarta la deriva suave', () => {
   assert.ok(aSolas > 45, `el montaje no reproduce la deriva: ${aSolas} km/h`);
 
   const conZonas = velocidadMaximaLlano(cache, salidas);
-  assert.ok(conZonas < 35, `la zona dudosa no se esta descontando: ${conZonas} km/h`);
+  assert.ok(conZonas.valor < 35, `la zona dudosa no se esta descontando: ${conZonas.valor} km/h`);
 });
 
 test('sin latlng no se inventan zonas', () => {
@@ -304,5 +306,5 @@ test('un filtro de fechas no le quita pruebas al catalogo de zonas', () => {
   /* Solo la salida 3 entra en el filtro -como si 1 y 2 fueran de otro mes-,
      pero 1 y 2 siguen en cache porque el fondo las descarga todas. */
   const soloFiltrada = velocidadMaximaLlano(cache, [{ id: 3 }]);
-  assert.ok(soloFiltrada < 35, `la zona dudosa deberia seguir descontandose: ${soloFiltrada} km/h`);
+  assert.ok(soloFiltrada.valor < 35, `la zona dudosa deberia seguir descontandose: ${soloFiltrada.valor} km/h`);
 });

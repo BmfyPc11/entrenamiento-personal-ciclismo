@@ -13,13 +13,28 @@ import {
   emparejarSegmento, buscarNombre, guardarNombre, leerCache, escribirCache,
 } from '@/lib/nombres';
 
-export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, pedirStreams }) {
+export default function Entrenamientos({
+  salidas, cfg, zonas, umbral, cache, pedirStreams,
+  salidaInicial, onSalidaInicialConsumida,
+}) {
   const ordenadas = useMemo(
     () => [...salidas].sort((a, b) => (a.fecha < b.fecha ? 1 : -1)),
     [salidas]
   );
 
-  const [sel, setSel] = useState(ordenadas[0]?.id ?? null);
+  /*
+    salidaInicial llega de un enlace de "Tus estadisticas" (la salida que
+    puso el record de distancia o de velocidad punta). Solo hace falta
+    leerlo al montar -esta pestana se desmonta en cuanto sales de ella, asi
+    que "montar" es exactamente "el usuario acaba de entrar aqui"- de ahi
+    el useState perezoso en vez de un efecto que reaccione a cambios.
+  */
+  const [sel, setSel] = useState(salidaInicial ?? (ordenadas[0]?.id ?? null));
+
+  /* Avisa para que Dashboard limpie el enlace consumido: si no, volver
+     mas tarde por el menu normal reabriria siempre esa misma salida en
+     vez de la mas reciente. */
+  useEffect(() => { onSalidaInicialConsumida?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   /*
     Se arranca en dureza. Habia un tercer modo, "Informacion", que pintaba
     el relieve en gris con las subidas subrayadas; desde que las fichas con
