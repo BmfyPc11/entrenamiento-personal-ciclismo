@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import {
-  zonaDeFC, tramoDureza, TRAMOS_DUREZA, categoriaPuerto, detectarParadas, num, duracion,
+  zonaDeFC, tramoDureza, TRAMOS_DUREZA, tramoVelocidad, TRAMOS_VELOCIDAD,
+  categoriaPuerto, detectarParadas, num, duracion,
 } from '@/lib/metrics';
 
 /*
@@ -54,11 +55,13 @@ function mapearIdx(iOriginal, datos) {
 
 /*
   Perfil de altimetria.
-  - modo "relieve": relleno neutro clasico, con los puertos subrayados
-  - modo "dureza":  cada tramo se pinta segun su pendiente
-  - modo "zonas":   cada tramo se pinta con el color de la zona de FC en la que ibas
-  - zonaFoco:       si hay una zona seleccionada, el resto se atenua
-  - mono:           en modo dureza, pinta todo del mismo color
+  - modo "relieve":   relleno neutro clasico, con los puertos subrayados
+  - modo "dureza":    cada tramo se pinta segun su pendiente
+  - modo "zonas":     cada tramo se pinta con el color de la zona de FC en la que ibas
+  - modo "velocidad": cada tramo se pinta segun el ritmo al que se rodo
+  - zonaFoco:         si hay una zona seleccionada, el resto se atenua
+  - durezaFoco/velFoco: lo mismo, para dureza y velocidad
+  - mono:             en dureza y velocidad, pinta todo del mismo color
 */
 export default function Perfil({
   streams,
@@ -68,6 +71,7 @@ export default function Perfil({
   modo = 'relieve',
   zonaFoco = null,
   durezaFoco = null,
+  velFoco = null,
   mono = false,
   altura = 260,
   puertoFoco = null,
@@ -102,7 +106,7 @@ export default function Perfil({
   const paradas = useMemo(() => detectarParadas(streams), [streams]);
 
   const datos = useMemo(() => {
-    const { distancia: d, altitud: a, fc } = streams || {};
+    const { distancia: d, altitud: a, fc, tiempo: t } = streams || {};
     if (!d || !a || d.length < 2) return null;
 
     // Reducimos a un maximo de 900 puntos para que el SVG sea ligero
@@ -115,6 +119,9 @@ export default function Perfil({
       d: idx.map((i) => d[i] / 1000),
       a: idx.map((i) => a[i]),
       fc: fc ? idx.map((i) => fc[i]) : null,
+      /* Solo lo traen las salidas grabadas: una ruta planificada (GPX)
+         no tiene tiempo, y por eso el modo velocidad no se ofrece ahi. */
+      t: t ? idx.map((i) => t[i]) : null,
       idx,
     };
   }, [streams]);
@@ -169,12 +176,19 @@ export default function Perfil({
   */
   const rangoMinimo = Math.max(120, Math.min(400, maxD * 6));
 
-  /* La base baja a cero en cuanto la salida ronda el nivel del mar. Solo
-     sube cuando el recorrido entero transcurre alto, que si no el
-     relieve quedaria aplastado contra el techo. */
+  /*
+    La base baja hacia el nivel del mar en cuanto la salida ronda esa
+    altitud. Solo sube cuando el recorrido entero transcurre alto, que si
+    no el relieve quedaria aplastado contra el techo.
+
+    El suelo no se deja llegar a 0 exacto: con una ruta del delta (2-9 m
+    de altitud minima) eso pegaba la linea al borde inferior del grafico
+    sin nada de aire debajo, y una ruta llana se veia peor cuanto mas
+    llana era. El margen de -10 le da ese respiro incluso al ras del mar.
+  */
   const base = minA < 0
     ? Math.floor(minA / 25) * 25
-    : Math.max(0, Math.floor((minA - rangoMinimo * 0.15) / 25) * 25);
+    : Math.max(-10, Math.floor((minA - rangoMinimo * 0.15) / 25) * 25);
 
   /*
     Dos aires posibles sobre la cota maxima. Por defecto se dibuja con el
@@ -286,6 +300,26 @@ export default function Perfil({
     }
   }
 
+  /* Misma ventana de 20 m que dureza, para que las dos vistas troceen el
+     perfil igual y cambiar de una a otra no descoloque nada. */
+  if (modo === 'velocidad' && datos.t) {
+    const VENTANA = 0.02; // km
+    let i = 0;
+    while (i < datos.d.length - 1) {
+      let j = i;
+      while (j < datos.d.length - 1 && datos.d[j] - datos.d[i] < VENTANA) j++;
+      const dist = (datos.d[j] - datos.d[i]) * 1000;
+      const seg = datos.t[j] - datos.t[i];
+      if (dist <= 0 || !(seg > 0)) { i = j + 1; continue; }
+      const kmh = (dist / seg) * 3.6;
+      const n = tramoVelocidad(kmh).n;
+      const ult = tramos[tramos.length - 1];
+      if (ult && ult.velocidad === n) ult.fin = j;
+      else tramos.push({ ini: i, fin: j, velocidad: n, kmh });
+      i = j;
+    }
+  }
+
   if (modo === 'zonas' && datos.fc) {
     let ini = 0;
     let zAct = datos.fc[0] ? zonaDeFC(datos.fc[0], zonas).n : null;
@@ -371,6 +405,25 @@ export default function Perfil({
               tramos.map((t, i) => {
                 const c = TRAMOS_DUREZA[t.dureza - 1];
                 const atenuado = durezaFoco && t.dureza !== durezaFoco;
+                return (
+                  <path key={i} d={areaPath(t.ini, Math.min(t.fin + 1, datos.d.length - 1))}
+                    fill={c.color} stroke={c.color} strokeWidth="0.6"
+                    shapeRendering="crispEdges"
+                    opacity={atenuado ? 0.12 : 1} />
+                );
+              })
+            )}
+            <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#E8EAED"
+              strokeWidth="1.2" strokeLinejoin="round" opacity={mono ? 0.9 : 0.45} />
+          </>
+        ) : modo === 'velocidad' && datos.t ? (
+          <>
+            {mono ? (
+              <path d={areaPath(0, datos.d.length - 1)} fill="#C8CFD8" opacity="0.55" />
+            ) : (
+              tramos.map((t, i) => {
+                const c = TRAMOS_VELOCIDAD[t.velocidad - 1];
+                const atenuado = velFoco && t.velocidad !== velFoco;
                 return (
                   <path key={i} d={areaPath(t.ini, Math.min(t.fin + 1, datos.d.length - 1))}
                     fill={c.color} stroke={c.color} strokeWidth="0.6"
@@ -526,18 +579,40 @@ export default function Perfil({
             <circle cx={X(datos.d[hover])} cy={Y(datos.a[hover])} r="4.5"
               fill="#0E1116" stroke="#E8EAED" strokeWidth="2" />
             <g transform={`translate(${Math.min(X(datos.d[hover]) + 10, W - 150)},${T + 4})`}>
-              <rect width="140" height={datos.fc ? 50 : 34} rx="2"
+              <rect width="140" height={datos.fc || (modo === 'velocidad' && datos.t) ? 50 : 34} rx="2"
                 fill="#212936" stroke="#3A4553" opacity=".97" />
               <text x="9" y="18" fill="#E8EAED" fontSize="11.5"
                 fontFamily="ui-monospace,Menlo,monospace">
                 {num(datos.d[hover], 2)} km · {num(datos.a[hover], 0)} m
               </text>
-              {datos.fc && (
+              {/* En modo velocidad la segunda linea es el ritmo, no la FC:
+                  las dos compartian sitio (y="36") y con pulsometro se
+                  escribian una encima de la otra. */}
+              {datos.fc && modo !== 'velocidad' && (
                 <text x="9" y="36" fill="#E8EAED" fontSize="11.5"
                   fontFamily="ui-monospace,Menlo,monospace">
                   {datos.fc[hover] ? `${datos.fc[hover]} ppm · Z${zonaDeFC(datos.fc[hover], zonas).n}` : 'sin FC'}
                 </text>
               )}
+              {/*
+                Ritmo local en el punto, con una ventanita de +-2 muestras
+                alrededor: el paso suelto entre dos puntos consecutivos es
+                el mismo ruido de GPS que ha dado tanta guerra en toda la
+                app (ver velocidadMaximaLlanoTramo), y aqui no compensa
+                traer todo ese aparato para un tooltip.
+              */}
+              {modo === 'velocidad' && datos.t && (() => {
+                const a = Math.max(0, hover - 2), b = Math.min(datos.t.length - 1, hover + 2);
+                const dist = (datos.d[b] - datos.d[a]) * 1000;
+                const seg = datos.t[b] - datos.t[a];
+                const kmh = seg > 0 ? (dist / seg) * 3.6 : null;
+                return (
+                  <text x="9" y="36" fill="#E8EAED" fontSize="11.5"
+                    fontFamily="ui-monospace,Menlo,monospace">
+                    {kmh != null ? `${num(kmh, 1)} km/h` : '—'}
+                  </text>
+                );
+              })()}
             </g>
           </g>
         )}

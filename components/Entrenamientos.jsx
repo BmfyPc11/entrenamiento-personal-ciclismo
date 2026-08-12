@@ -4,8 +4,8 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import Perfil from './Perfil';
 import PerfilPuerto from './PerfilPuerto';
 import {
-  detectarPuertos, repartoZonas, repartoDureza, valorarEntrenamiento,
-  TRAMOS_DUREZA, vatiosPuerto, vatiosSalida, categoriaPuerto,
+  detectarPuertos, repartoZonas, repartoDureza, repartoVelocidad, valorarEntrenamiento,
+  TRAMOS_DUREZA, TRAMOS_VELOCIDAD, vatiosPuerto, vatiosSalida, categoriaPuerto,
   num, duracion, fechaLarga, kmh, km, metrosPorKm,
 } from '@/lib/metrics';
 import {
@@ -29,6 +29,7 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
   const [modo, setModo] = useState('dureza');
   const [zonaFoco, setZonaFoco] = useState(null);
   const [durezaFoco, setDurezaFoco] = useState(null);
+  const [velFoco, setVelFoco] = useState(null);
   const [mono, setMono] = useState(false);
   const [puertoFoco, setPuertoFoco] = useState(null);
   const [puertoAbierto, setPuertoAbierto] = useState(null);
@@ -62,6 +63,7 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
     [streams, zonas]
   );
   const dureza = useMemo(() => (streams ? repartoDureza(streams) : null), [streams]);
+  const velocidad = useMemo(() => (streams ? repartoVelocidad(streams) : null), [streams]);
 
   const tieneFC = !!(streams && streams.fc);
 
@@ -235,17 +237,23 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
                 <div className="chips">
                   <button
                     aria-pressed={modo === 'dureza'}
-                    onClick={() => { setModo('dureza'); setZonaFoco(null); }}
+                    onClick={() => { setModo('dureza'); setZonaFoco(null); setVelFoco(null); }}
                   >
-                    Perfil y dureza
+                    Dureza
+                  </button>
+                  <button
+                    aria-pressed={modo === 'velocidad'}
+                    onClick={() => { setModo('velocidad'); setZonaFoco(null); setDurezaFoco(null); }}
+                  >
+                    Velocidad
                   </button>
                   <button
                     aria-pressed={modo === 'zonas'}
                     disabled={!tieneFC}
-                    onClick={() => { setModo('zonas'); setDurezaFoco(null); }}
+                    onClick={() => { setModo('zonas'); setDurezaFoco(null); setVelFoco(null); }}
                     title={tieneFC ? '' : 'Esta salida no tiene frecuencia cardíaca'}
                   >
-                    Zonas de frecuencia cardíaca
+                    Frecuencia cardíaca
                   </button>
                 </div>
               )}
@@ -262,6 +270,7 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
                 modo={modo}
                 zonaFoco={zonaFoco}
                 durezaFoco={durezaFoco}
+                velFoco={velFoco}
                 mono={mono}
                 puertoFoco={puertoFoco}
                 altura={340}
@@ -298,6 +307,38 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
                               : null}
                           >
                             <i style={{ background: t.color }} />{t.nombre} · {num(dureza.porcentaje[i], 0)} %
+                          </button>
+                        ) : null
+                      )}
+                    </div>
+
+                    <label className="interruptor">
+                      <input type="checkbox" checked={mono} onChange={(e) => setMono(e.target.checked)} />
+                      Ver el perfil en un solo color
+                    </label>
+                  </>
+                )}
+
+                {modo === 'velocidad' && velocidad && (
+                  <>
+                    <div className="chips">
+                      <button
+                        aria-pressed={velFoco === null}
+                        onClick={() => setVelFoco(null)}
+                      >
+                        Todo
+                      </button>
+                      {TRAMOS_VELOCIDAD.map((t, i) =>
+                        velocidad.porcentaje[i] > 0.4 ? (
+                          <button
+                            key={t.n}
+                            aria-pressed={velFoco === t.n}
+                            onClick={() => setVelFoco(velFoco === t.n ? null : t.n)}
+                            style={velFoco === t.n
+                              ? { background: t.color, borderColor: t.color, color: '#0A0C0F' }
+                              : null}
+                          >
+                            <i style={{ background: t.color }} />{t.nombre} · {num(velocidad.porcentaje[i], 0)} %
                           </button>
                         ) : null
                       )}
