@@ -649,8 +649,17 @@ h1{font-size:clamp(26px,3.4vw,34px)}
   con las esquinas mas redondeadas para que no se confundan a primer
   vistazo: Tipo clasifica, esto destaca un record.
 */
+/*
+  margin-right negativo, igual al padding horizontal: en una columna
+  alineada a la derecha, el hueco interno de la pastilla empujaba el
+  numero 9 px hacia la izquierda respecto a las demas filas de la misma
+  columna, que no llevan ese relleno. El margen negativo desplaza la
+  caja entera esos mismos 9 px hacia el borde real de la celda, asi el
+  digito cae exactamente donde caeria sin insignia; la pastilla en si
+  no encoge, solo se recoloca.
+*/
 .tabla-salidas .marca-max{display:inline-block;font-family:var(--mono);
-  font-weight:600;padding:2px 9px;border-radius:var(--r-l);
+  font-weight:600;padding:2px 9px;margin-right:-9px;border-radius:var(--r-l);
   background:#E0C020;color:#0E1116}
 
 /*
