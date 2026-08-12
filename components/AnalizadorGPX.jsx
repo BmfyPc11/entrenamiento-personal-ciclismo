@@ -15,7 +15,6 @@ export default function AnalizadorGPX({ salidas, cache, excluidas, cfg, zonas })
   const [archivo, setArchivo] = useState(null);
   const [modo, setModo] = useState('dureza');
   const [durezaFoco, setDurezaFoco] = useState(null);
-  const [mono, setMono] = useState(false);
   const [abierto, setAbierto] = useState(null);
   const [arrastra, setArrastra] = useState(false);
 
@@ -187,7 +186,7 @@ export default function AnalizadorGPX({ salidas, cache, excluidas, cfg, zonas })
           <div className="panel">
             <Perfil streams={datos.streams} zonas={zonas} modo={modo}
               puertos={an.puertos} nombres={an.puertos.map(nombrePuerto)}
-              durezaFoco={durezaFoco} mono={mono} altura={340} />
+              durezaFoco={durezaFoco} altura={340} />
 
             <div className="chips" style={{ marginTop: 14 }}>
               <button aria-pressed={modo === 'relieve'}
@@ -222,11 +221,6 @@ export default function AnalizadorGPX({ salidas, cache, excluidas, cfg, zonas })
                     ) : null
                   )}
                 </div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 14,
-                  fontFamily: 'var(--sans)', fontSize: 13.5, color: 'var(--ink2)', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={mono} onChange={(e) => setMono(e.target.checked)} />
-                  Ver el perfil en un solo color
-                </label>
               </>
             )}
           </div>

@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import Perfil from './Perfil';
 import PerfilPuerto from './PerfilPuerto';
+import { IcoExpandir, IcoCerrar } from './Iconos';
 import {
   detectarPuertos, repartoZonas, repartoDureza, repartoVelocidad, valorarEntrenamiento,
   TRAMOS_DUREZA, TRAMOS_VELOCIDAD, vatiosPuerto, vatiosSalida, categoriaPuerto,
@@ -30,12 +31,48 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
   const [zonaFoco, setZonaFoco] = useState(null);
   const [durezaFoco, setDurezaFoco] = useState(null);
   const [velFoco, setVelFoco] = useState(null);
-  const [mono, setMono] = useState(false);
   const [puertoFoco, setPuertoFoco] = useState(null);
   const [puertoAbierto, setPuertoAbierto] = useState(null);
   const [criterio, setCriterio] = useState({ minMetros: 500, minDesnivel: 30, minPend: 3 });
   const [cargando, setCargando] = useState(false);
   const [fallo, setFallo] = useState(null);
+
+  /*
+    Vista horizontal del perfil. En vertical el grafico apenas tiene alto
+    para leerse bien; en vez de esperar a que cada uno gire el telefono, se
+    rota el propio contenido por CSS dentro de un overlay a pantalla
+    completa, asi el movil se queda como esta y el grafico ocupa el largo
+    de la pantalla igualmente.
+  */
+  const [horizontal, setHorizontal] = useState(false);
+  const [altoHorizontal, setAltoHorizontal] = useState(420);
+
+  useEffect(() => {
+    if (!horizontal) return;
+    /*
+      Tras la rotacion, el ancho fisico disponible para el grafico es el
+      ancho de la pantalla en vertical (innerWidth), no el alto: por eso
+      se resta aqui y no de innerHeight. El descuento de 150px deja sitio
+      a la fila de cierre y a los chips de modo, que viven en la misma
+      columna rotada.
+    */
+    const calcular = () => setAltoHorizontal(Math.max(220, window.innerWidth - 150));
+    calcular();
+    window.addEventListener('resize', calcular);
+    return () => window.removeEventListener('resize', calcular);
+  }, [horizontal]);
+
+  /* Bloquea el scroll de fondo mientras el overlay esta abierto, y permite
+     cerrarlo con Escape ademas de con el boton: es el gesto que la gente
+     prueba primero en cualquier pantalla completa. */
+  useEffect(() => {
+    if (!horizontal) return;
+    const previo = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e) => { if (e.key === 'Escape') setHorizontal(false); };
+    window.addEventListener('keydown', onKey);
+    return () => { document.body.style.overflow = previo; window.removeEventListener('keydown', onKey); };
+  }, [horizontal]);
 
   const salida = ordenadas.find((s) => s.id === sel) || null;
   const streams = sel ? cache[sel] : null;
@@ -152,6 +189,121 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
     });
   }, [segmentos, sel, puertos, streams]);
 
+  /*
+    Selector de modo y panel de submodo, sacados a variables para no
+    duplicar el JSX: los usan tanto la vista normal como el overlay
+    horizontal, que necesita los mismos controles para poder cambiar de
+    vista sin salir de pantalla completa.
+  */
+  const chipsPrincipales = (
+    <div className="chips">
+      <button
+        aria-pressed={modo === 'dureza'}
+        onClick={() => { setModo('dureza'); setZonaFoco(null); setVelFoco(null); }}
+      >
+        Dureza
+      </button>
+      <button
+        aria-pressed={modo === 'velocidad'}
+        onClick={() => { setModo('velocidad'); setZonaFoco(null); setDurezaFoco(null); }}
+      >
+        Velocidad
+      </button>
+      <button
+        aria-pressed={modo === 'zonas'}
+        disabled={!tieneFC}
+        onClick={() => { setModo('zonas'); setDurezaFoco(null); setVelFoco(null); }}
+        title={tieneFC ? '' : 'Esta salida no tiene frecuencia cardíaca'}
+      >
+        Frecuencia cardíaca
+      </button>
+    </div>
+  );
+
+  /* compacto=true quita las frases explicativas (el "Selecciona una
+     zona..." y el aviso de "sin pulsometro"): en el overlay rotado el alto
+     disponible es el ancho del movil, y ese texto es justo lo que sobra
+     para dejarle mas sitio al grafico. */
+  const panelSubmodo = (compacto) => (
+    <>
+      {modo === 'dureza' && dureza && (
+        <>
+          <div className="chips">
+            <button aria-pressed={durezaFoco === null} onClick={() => setDurezaFoco(null)}>Todo</button>
+            {TRAMOS_DUREZA.map((t, i) =>
+              dureza.porcentaje[i] > 0.4 ? (
+                <button
+                  key={t.n}
+                  aria-pressed={durezaFoco === t.n}
+                  onClick={() => setDurezaFoco(durezaFoco === t.n ? null : t.n)}
+                  style={durezaFoco === t.n
+                    ? { background: t.color, borderColor: t.color, color: t.n === 6 ? '#E8EAED' : '#0A0C0F' }
+                    : null}
+                >
+                  <i style={{ background: t.color }} />{t.nombre} · {num(dureza.porcentaje[i], 0)} %
+                </button>
+              ) : null
+            )}
+          </div>
+        </>
+      )}
+
+      {modo === 'velocidad' && velocidad && (
+        <>
+          <div className="chips">
+            <button aria-pressed={velFoco === null} onClick={() => setVelFoco(null)}>Todo</button>
+            {TRAMOS_VELOCIDAD.map((t, i) =>
+              velocidad.porcentaje[i] > 0.4 ? (
+                <button
+                  key={t.n}
+                  aria-pressed={velFoco === t.n}
+                  onClick={() => setVelFoco(velFoco === t.n ? null : t.n)}
+                  style={velFoco === t.n
+                    ? { background: t.color, borderColor: t.color, color: '#0A0C0F' }
+                    : null}
+                >
+                  <i style={{ background: t.color }} />{t.nombre} · {num(velocidad.porcentaje[i], 0)} %
+                </button>
+              ) : null
+            )}
+          </div>
+        </>
+      )}
+
+      {modo === 'zonas' && tieneFC && (
+        <>
+          <div className="chips">
+            <button aria-pressed={zonaFoco === null} onClick={() => setZonaFoco(null)}>Todas</button>
+            {zonas.map((z) => (
+              <button
+                key={z.n}
+                aria-pressed={zonaFoco === z.n}
+                onClick={() => setZonaFoco(zonaFoco === z.n ? null : z.n)}
+                style={zonaFoco === z.n ? { background: z.color, borderColor: z.color } : null}
+              >
+                <i style={{ background: z.color }} />Z{z.n} {z.nombre}
+                {reparto && ` · ${num(reparto.porcentaje[z.n - 1], 0)} %`}
+              </button>
+            ))}
+          </div>
+          {!compacto && (
+            <p className="hint" style={{ marginTop: 12, marginBottom: 0 }}>
+              Selecciona una zona para ver exactamente en qué tramos de la ruta estuviste
+              en ella. Los límites se configuran en <strong>Tus datos</strong>.
+            </p>
+          )}
+        </>
+      )}
+
+      {!tieneFC && !compacto && (
+        <div className="callout warn" style={{ marginTop: 16, marginBottom: 0 }}>
+          Esta salida se registró sin pulsómetro, así que no hay zonas que pintar.
+          Si la grabaste con el móvil en lugar del Garmin, ahí está la razón.
+        </div>
+      )}
+    </>
+  );
+
   /* Sin salidas tambien hay que pintar la cabecera: desde que esta seccion
      la trae puesta, Dashboard ya no dibuja ninguna por ella y la pagina se
      quedaria sin titulo. */
@@ -233,167 +385,82 @@ export default function Entrenamientos({ salidas, cfg, zonas, umbral, cache, ped
             */}
             <div className="cab-panel">
               <span className="rotulo">Perfil de altimetría</span>
-              {streams && (
-                <div className="chips">
-                  <button
-                    aria-pressed={modo === 'dureza'}
-                    onClick={() => { setModo('dureza'); setZonaFoco(null); setVelFoco(null); }}
-                  >
-                    Dureza
-                  </button>
-                  <button
-                    aria-pressed={modo === 'velocidad'}
-                    onClick={() => { setModo('velocidad'); setZonaFoco(null); setDurezaFoco(null); }}
-                  >
-                    Velocidad
-                  </button>
-                  <button
-                    aria-pressed={modo === 'zonas'}
-                    disabled={!tieneFC}
-                    onClick={() => { setModo('zonas'); setDurezaFoco(null); setVelFoco(null); }}
-                    title={tieneFC ? '' : 'Esta salida no tiene frecuencia cardíaca'}
-                  >
-                    Frecuencia cardíaca
-                  </button>
-                </div>
-              )}
+              {streams && chipsPrincipales}
             </div>
 
             {cargando && <p className="cargando"><span className="spin" />Cargando el perfil…</p>}
             {fallo && <div className="callout warn">No se pudo cargar el perfil: {fallo}</div>}
             {streams && (
-              <Perfil
-                streams={streams}
-                puertos={puertos}
-                nombres={nombresPuertos}
-                zonas={zonas}
-                modo={modo}
-                zonaFoco={zonaFoco}
-                durezaFoco={durezaFoco}
-                velFoco={velFoco}
-                mono={mono}
-                puertoFoco={puertoFoco}
-                altura={340}
-              />
-            )}
-
-            {streams && (
-              <>
-                {/* El cursor funciona en los dos modos, asi que la pista deja
-                    de estar atada a uno. */}
-                <p className="hint" style={{ margin: '14px 0 0' }}>
-                  Pasa el cursor por encima para ver la altitud y la frecuencia cardíaca en
-                  cada punto.
-                </p>
-
-                {modo === 'dureza' && dureza && (
-                  <>
-                    <div className="chips">
-                      <button
-                        aria-pressed={durezaFoco === null}
-                        onClick={() => setDurezaFoco(null)}
-                      >
-                        Todo
-                      </button>
-                      {TRAMOS_DUREZA.map((t, i) =>
-                        dureza.porcentaje[i] > 0.4 ? (
-                          <button
-                            key={t.n}
-                            aria-pressed={durezaFoco === t.n}
-                            onClick={() => setDurezaFoco(durezaFoco === t.n ? null : t.n)}
-                            style={durezaFoco === t.n
-                              ? { background: t.color, borderColor: t.color,
-                                  color: t.n === 6 ? '#E8EAED' : '#0A0C0F' }
-                              : null}
-                          >
-                            <i style={{ background: t.color }} />{t.nombre} · {num(dureza.porcentaje[i], 0)} %
-                          </button>
-                        ) : null
-                      )}
-                    </div>
-
-                    <label className="interruptor">
-                      <input type="checkbox" checked={mono} onChange={(e) => setMono(e.target.checked)} />
-                      Ver el perfil en un solo color
-                    </label>
-                  </>
-                )}
-
-                {modo === 'velocidad' && velocidad && (
-                  <>
-                    <div className="chips">
-                      <button
-                        aria-pressed={velFoco === null}
-                        onClick={() => setVelFoco(null)}
-                      >
-                        Todo
-                      </button>
-                      {TRAMOS_VELOCIDAD.map((t, i) =>
-                        velocidad.porcentaje[i] > 0.4 ? (
-                          <button
-                            key={t.n}
-                            aria-pressed={velFoco === t.n}
-                            onClick={() => setVelFoco(velFoco === t.n ? null : t.n)}
-                            style={velFoco === t.n
-                              ? { background: t.color, borderColor: t.color, color: '#0A0C0F' }
-                              : null}
-                          >
-                            <i style={{ background: t.color }} />{t.nombre} · {num(velocidad.porcentaje[i], 0)} %
-                          </button>
-                        ) : null
-                      )}
-                    </div>
-
-                    <label className="interruptor">
-                      <input type="checkbox" checked={mono} onChange={(e) => setMono(e.target.checked)} />
-                      Ver el perfil en un solo color
-                    </label>
-                  </>
-                )}
-
-                {modo === 'zonas' && tieneFC && (
-                  <>
-                    <div className="chips">
-                      <button
-                        aria-pressed={zonaFoco === null}
-                        onClick={() => setZonaFoco(null)}
-                      >
-                        Todas
-                      </button>
-                      {zonas.map((z) => (
-                        <button
-                          key={z.n}
-                          aria-pressed={zonaFoco === z.n}
-                          onClick={() => setZonaFoco(zonaFoco === z.n ? null : z.n)}
-                          style={zonaFoco === z.n ? { background: z.color, borderColor: z.color } : null}
-                        >
-                          <i style={{ background: z.color }} />Z{z.n} {z.nombre}
-                          {reparto && ` · ${num(reparto.porcentaje[z.n - 1], 0)} %`}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="hint" style={{ marginTop: 12, marginBottom: 0 }}>
-                      Selecciona una zona para ver exactamente en qué tramos de la ruta estuviste
-                      en ella. Los límites se configuran en <strong>Tus datos</strong>.
-                    </p>
-                  </>
-                )}
-
+              <div style={{ position: 'relative' }}>
                 {/*
-                  Antes este aviso solo salia estando en un modo distinto de
-                  dureza. Al quitar "Informacion", dureza es el modo de
-                  entrada y zonas esta deshabilitado, asi que nunca se
-                  llegaba a ver: quedaba un boton apagado sin explicacion.
+                  El boton vive encima del propio grafico y no en la
+                  cabecera: es una accion sobre el dibujo (verlo mas grande),
+                  no un modo mas que elegir junto a dureza/velocidad/FC.
                 */}
-                {!tieneFC && (
-                  <div className="callout warn" style={{ marginTop: 16, marginBottom: 0 }}>
-                    Esta salida se registró sin pulsómetro, así que no hay zonas que pintar.
-                    Si la grabaste con el móvil en lugar del Garmin, ahí está la razón.
-                  </div>
-                )}
-              </>
+                <button
+                  className="btn-expandir"
+                  onClick={() => setHorizontal(true)}
+                  title="Ver el perfil en horizontal"
+                  aria-label="Ver el perfil en horizontal"
+                >
+                  <IcoExpandir width="16" height="16" />
+                </button>
+                <Perfil
+                  streams={streams}
+                  puertos={puertos}
+                  nombres={nombresPuertos}
+                  zonas={zonas}
+                  modo={modo}
+                  zonaFoco={zonaFoco}
+                  durezaFoco={durezaFoco}
+                  velFoco={velFoco}
+                  puertoFoco={puertoFoco}
+                  altura={340}
+                />
+              </div>
             )}
+
+            {streams && panelSubmodo(false)}
           </div>
+
+          {/*
+            Overlay a pantalla completa con el perfil rotado 90 grados por
+            CSS. El giro es del contenido, no del telefono: asi funciona
+            aunque nadie gire el movil, que es como se usa esto en la
+            practica (con una mano, de pie junto a la bici).
+          */}
+          {horizontal && streams && (
+            <div className="perfil-horizontal" role="dialog" aria-label="Perfil en horizontal">
+              <div className="perfil-horizontal-girar">
+                <div className="perfil-horizontal-cab">
+                  {chipsPrincipales}
+                  <button
+                    className="btn-cerrar-horizontal"
+                    onClick={() => setHorizontal(false)}
+                    aria-label="Cerrar la vista horizontal"
+                  >
+                    <IcoCerrar width="18" height="18" />
+                  </button>
+                </div>
+
+                <Perfil
+                  streams={streams}
+                  puertos={puertos}
+                  nombres={nombresPuertos}
+                  zonas={zonas}
+                  modo={modo}
+                  zonaFoco={zonaFoco}
+                  durezaFoco={durezaFoco}
+                  velFoco={velFoco}
+                  puertoFoco={puertoFoco}
+                  altura={altoHorizontal}
+                  compacto
+                />
+
+                {panelSubmodo(true)}
+              </div>
+            </div>
+          )}
 
           {/* ---------- puertos ---------- */}
           <h2>Puertos de esta salida</h2>

@@ -61,7 +61,6 @@ function mapearIdx(iOriginal, datos) {
   - modo "velocidad": cada tramo se pinta segun el ritmo al que se rodo
   - zonaFoco:         si hay una zona seleccionada, el resto se atenua
   - durezaFoco/velFoco: lo mismo, para dureza y velocidad
-  - mono:             en dureza y velocidad, pinta todo del mismo color
 */
 export default function Perfil({
   streams,
@@ -72,9 +71,16 @@ export default function Perfil({
   zonaFoco = null,
   durezaFoco = null,
   velFoco = null,
-  mono = false,
   altura = 260,
   puertoFoco = null,
+  /*
+    Modo del overlay horizontal: ahi el alto disponible es el ancho del
+    movil, muy justo. Encoge las fichas de puerto a categoria + pendiente
+    -el nombre completo sigue en la tabla de abajo-, que es lo unico que
+    hace falta que ceda espacio ahi; los interruptores de abajo ya son
+    igual de compactos en todas las vistas.
+  */
+  compacto = false,
 }) {
   const [hover, setHover] = useState(null);
   const [zoom, setZoom] = useState(false);
@@ -149,7 +155,7 @@ export default function Perfil({
     deja sobre la cota maxima. Como su sitio depende de la altura de cada
     cima, se colocan despues de la escala y no antes.
   */
-  const ALTO_FICHA = 44, HUECO_FICHA = 4;
+  const ALTO_FICHA = compacto ? 24 : 44, HUECO_FICHA = 4;
 
   /* Aire entre la cima y la ficha que la nombra. Suficiente para que se
      lean como dos cosas unidas por el hilo, no como una encima de otra. */
@@ -230,8 +236,11 @@ export default function Perfil({
         const cat = categoriaPuerto(p.metros, p.pendiente);
         const nombre = nombres[i] || `Subida ${i + 1}`;
         const anchoCat = cat.nombre.length * 8 + 12;
-        const ancho = Math.max(150,
-          Math.min(6 + anchoCat + 7 + nombre.length * 6.7 + 10, 300));
+        const textoPct = `${num(p.pendiente, 1)} %`;
+        const ancho = compacto
+          ? 6 + anchoCat + 6 + textoPct.length * 6.6 + 8
+          : Math.max(150,
+            Math.min(6 + anchoCat + 7 + nombre.length * 6.7 + 10, 300));
         const x = X(datos.d[k]);
         const xCaja = Math.max(L, Math.min(x - ancho / 2, W - R - ancho));
         const yCima = Y(datos.a[k]);
@@ -250,7 +259,7 @@ export default function Perfil({
         }
         if (yCaja < T0) yCaja = T0;
 
-        cajas.push({ p, i, k, cat, nombre, ancho, anchoCat, x, xCaja, yCaja, yCima });
+        cajas.push({ p, i, k, cat, nombre, textoPct, ancho, anchoCat, x, xCaja, yCaja, yCima });
       });
     /* Se ordenan por indice para que el foco y las claves no bailen. */
     cajas.sort((a, b) => a.i - b.i);
@@ -392,48 +401,33 @@ export default function Perfil({
 
         {modo === 'dureza' ? (
           <>
-            {/*
-              En monocromo se dibuja UN solo path para todo el recorrido.
-              Pintar los tramos por separado con opacidad parcial hacia que
-              las zonas donde dos tramos se solapan sumasen opacidad y
-              apareciesen franjas verticales mas claras: de ahi los dos
-              tonos que se veian en vez de uno.
-            */}
-            {mono ? (
-              <path d={areaPath(0, datos.d.length - 1)} fill="#C8CFD8" opacity="0.55" />
-            ) : (
-              tramos.map((t, i) => {
-                const c = TRAMOS_DUREZA[t.dureza - 1];
-                const atenuado = durezaFoco && t.dureza !== durezaFoco;
-                return (
-                  <path key={i} d={areaPath(t.ini, Math.min(t.fin + 1, datos.d.length - 1))}
-                    fill={c.color} stroke={c.color} strokeWidth="0.6"
-                    shapeRendering="crispEdges"
-                    opacity={atenuado ? 0.12 : 1} />
-                );
-              })
-            )}
+            {tramos.map((t, i) => {
+              const c = TRAMOS_DUREZA[t.dureza - 1];
+              const atenuado = durezaFoco && t.dureza !== durezaFoco;
+              return (
+                <path key={i} d={areaPath(t.ini, Math.min(t.fin + 1, datos.d.length - 1))}
+                  fill={c.color} stroke={c.color} strokeWidth="0.6"
+                  shapeRendering="crispEdges"
+                  opacity={atenuado ? 0.12 : 1} />
+              );
+            })}
             <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#E8EAED"
-              strokeWidth="1.2" strokeLinejoin="round" opacity={mono ? 0.9 : 0.45} />
+              strokeWidth="1.2" strokeLinejoin="round" opacity="0.45" />
           </>
         ) : modo === 'velocidad' && datos.t ? (
           <>
-            {mono ? (
-              <path d={areaPath(0, datos.d.length - 1)} fill="#C8CFD8" opacity="0.55" />
-            ) : (
-              tramos.map((t, i) => {
-                const c = TRAMOS_VELOCIDAD[t.velocidad - 1];
-                const atenuado = velFoco && t.velocidad !== velFoco;
-                return (
-                  <path key={i} d={areaPath(t.ini, Math.min(t.fin + 1, datos.d.length - 1))}
-                    fill={c.color} stroke={c.color} strokeWidth="0.6"
-                    shapeRendering="crispEdges"
-                    opacity={atenuado ? 0.12 : 1} />
-                );
-              })
-            )}
+            {tramos.map((t, i) => {
+              const c = TRAMOS_VELOCIDAD[t.velocidad - 1];
+              const atenuado = velFoco && t.velocidad !== velFoco;
+              return (
+                <path key={i} d={areaPath(t.ini, Math.min(t.fin + 1, datos.d.length - 1))}
+                  fill={c.color} stroke={c.color} strokeWidth="0.6"
+                  shapeRendering="crispEdges"
+                  opacity={atenuado ? 0.12 : 1} />
+              );
+            })}
             <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#E8EAED"
-              strokeWidth="1.2" strokeLinejoin="round" opacity={mono ? 0.9 : 0.45} />
+              strokeWidth="1.2" strokeLinejoin="round" opacity="0.45" />
           </>
         ) : modo === 'zonas' && datos.fc && zonas ? (
           <>
@@ -495,26 +489,52 @@ export default function Perfil({
                     fill="#161C26" stroke={trazo}
                     strokeWidth={f.activo ? 1.6 : 1} opacity=".97" />
 
-                  {/* La categoria, en grande: es lo que se busca de un vistazo. */}
-                  <rect x="6" y="6" width={f.anchoCat} height="19" rx="2"
-                    fill={f.cat.color} />
-                  <text x={6 + f.anchoCat / 2} y="19.5" textAnchor="middle"
-                    fill={f.cat.codigo === 'hc' ? '#FFFFFF' : '#0E1116'}
-                    fontSize="12.5" fontWeight="700"
-                    fontFamily="ui-monospace,Menlo,monospace">
-                    {f.cat.nombre}
-                  </text>
+                  {compacto ? (
+                    <>
+                      {/*
+                        Solo categoria y pendiente: en pantalla completa una
+                        ruta con muchos puertos llenaba el perfil de nombres
+                        que tapaban el propio dibujo. El nombre completo
+                        sigue disponible en la tabla de abajo.
+                      */}
+                      <rect x="4" y={(f.alto - 16) / 2} width={f.anchoCat} height="16" rx="2"
+                        fill={f.cat.color} />
+                      <text x={4 + f.anchoCat / 2} y={f.alto / 2 + 4} textAnchor="middle"
+                        fill={f.cat.codigo === 'hc' ? '#FFFFFF' : '#0E1116'}
+                        fontSize="11" fontWeight="700"
+                        fontFamily="ui-monospace,Menlo,monospace">
+                        {f.cat.nombre}
+                      </text>
+                      <text x={4 + f.anchoCat + 6} y={f.alto / 2 + 4} fill="#E8EAED"
+                        fontSize="11.5" fontWeight="600"
+                        fontFamily="ui-monospace,Menlo,monospace">
+                        {f.textoPct}
+                      </text>
+                    </>
+                  ) : (
+                    <>
+                      {/* La categoria, en grande: es lo que se busca de un vistazo. */}
+                      <rect x="6" y="6" width={f.anchoCat} height="19" rx="2"
+                        fill={f.cat.color} />
+                      <text x={6 + f.anchoCat / 2} y="19.5" textAnchor="middle"
+                        fill={f.cat.codigo === 'hc' ? '#FFFFFF' : '#0E1116'}
+                        fontSize="12.5" fontWeight="700"
+                        fontFamily="ui-monospace,Menlo,monospace">
+                        {f.cat.nombre}
+                      </text>
 
-                  <text x={6 + f.anchoCat + 7} y="19.5" fill="#E8EAED"
-                    fontSize="11.5" fontWeight="600"
-                    fontFamily="ui-monospace,Menlo,monospace">
-                    {f.nombre}
-                  </text>
-                  <text x="7" y="35" fill="#9BA5B4" fontSize="10.5"
-                    fontFamily="ui-monospace,Menlo,monospace">
-                    {num(f.p.metros / 1000, 1)} km · {num(f.p.pendiente, 1)} % ·{' '}
-                    +{num(f.p.desnivel, 0)} m
-                  </text>
+                      <text x={6 + f.anchoCat + 7} y="19.5" fill="#E8EAED"
+                        fontSize="11.5" fontWeight="600"
+                        fontFamily="ui-monospace,Menlo,monospace">
+                        {f.nombre}
+                      </text>
+                      <text x="7" y="35" fill="#9BA5B4" fontSize="10.5"
+                        fontFamily="ui-monospace,Menlo,monospace">
+                        {num(f.p.metros / 1000, 1)} km · {num(f.p.pendiente, 1)} % ·{' '}
+                        +{num(f.p.desnivel, 0)} m
+                      </text>
+                    </>
+                  )}
                 </g>
               </g>
               );
@@ -619,38 +639,29 @@ export default function Perfil({
       </svg>
 
       {(zoomUtil || puertos.length > 0 || paradas.length > 0) && (
-        <div className="interruptores">
+        /*
+          Botones dentro de "chips" -el mismo bloque que ya usan los modos
+          y las zonas- en vez de checkboxes con una frase explicativa al
+          lado: el par pulsado/sin pulsar ya dice lo que hace cada uno, y
+          alineados asi se leen como un grupo. Antes esto solo se aplicaba
+          en el overlay horizontal (compacto); ahora es el mismo diseño en
+          todas partes, tambien en la vista normal y en escritorio.
+        */
+        <div className="chips" style={{ marginTop: 'var(--e4)' }}>
           {puertos.length > 0 && (
-            <label className="interruptor">
-              <input type="checkbox" checked={verNombres}
-                onChange={(e) => setVerNombres(e.target.checked)} />
+            <button aria-pressed={verNombres} onClick={() => setVerNombres(!verNombres)}>
               Nombres de las subidas
-              <span className="apunte">
-                — {puertos.length === 1 ? 'la subida detectada' : `las ${puertos.length} subidas detectadas`},
-                con su categoría, sobre el perfil
-              </span>
-            </label>
+            </button>
           )}
           {paradas.length > 0 && (
-            <label className="interruptor">
-              <input type="checkbox" checked={verParadas}
-                onChange={(e) => setVerParadas(e.target.checked)} />
+            <button aria-pressed={verParadas} onClick={() => setVerParadas(!verParadas)}>
               Paradas
-              <span className="apunte">
-                — {paradas.length === 1 ? 'la parada detectada' : `las ${paradas.length} paradas detectadas`},
-                con su duración al pasar el cursor
-              </span>
-            </label>
+            </button>
           )}
           {zoomUtil && (
-            <label className="interruptor">
-              <input type="checkbox" checked={zoom}
-                onChange={(e) => setZoom(e.target.checked)} />
+            <button aria-pressed={zoom} onClick={() => setZoom(!zoom)}>
               Ampliar el relieve
-              <span className="apunte">
-                — el perfil se dibuja con menos aire, para ver la forma del terreno de cerca
-              </span>
-            </label>
+            </button>
           )}
         </div>
       )}

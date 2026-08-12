@@ -243,7 +243,6 @@ export default function Rutas({ salidas, cache, excluidas, cfg, zonas }) {
 function DetalleRuta({ ruta, datos, cargando, ref_, cfg, zonas }) {
   const [modo, setModo] = useState('relieve');
   const [durezaFoco, setDurezaFoco] = useState(null);
-  const [mono, setMono] = useState(false);
   const [puerto, setPuerto] = useState(null);
 
   const an = useMemo(
@@ -331,7 +330,7 @@ function DetalleRuta({ ruta, datos, cargando, ref_, cfg, zonas }) {
       <div className="panel">
         <Perfil streams={datos.streams} zonas={zonas} modo={modo}
           puertos={an.puertos} nombres={an.puertos.map(nombrePuerto)}
-          durezaFoco={durezaFoco} mono={mono} altura={330} />
+          durezaFoco={durezaFoco} altura={330} />
 
         <div className="chips" style={{ marginTop: 14 }}>
           <button aria-pressed={modo === 'relieve'}
@@ -365,11 +364,6 @@ function DetalleRuta({ ruta, datos, cargando, ref_, cfg, zonas }) {
                 ) : null
               )}
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 14,
-              fontSize: 13.5, color: 'var(--ink2)', cursor: 'pointer' }}>
-              <input type="checkbox" checked={mono} onChange={(e) => setMono(e.target.checked)} />
-              Ver el perfil en un solo color
-            </label>
           </>
         )}
       </div>

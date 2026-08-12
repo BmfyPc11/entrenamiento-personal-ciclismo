@@ -96,6 +96,17 @@ export const IcoCerrar = (p) => (
   </svg>
 );
 
+/* Expandir: las cuatro esquinas abriendose, para pasar un grafico a
+   pantalla completa. */
+export const IcoExpandir = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 9V4h5" />
+    <path d="M20 9V4h-5" />
+    <path d="M4 15v5h5" />
+    <path d="M20 15v5h-5" />
+  </svg>
+);
+
 /* Aviso: el triangulo de precaucion, para avisos junto a un callout. */
 export const IcoAviso = (p) => (
   <svg {...base} {...p}>
