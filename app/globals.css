@@ -619,6 +619,16 @@ h1{font-size:clamp(26px,3.4vw,34px)}
 .btn-expandir:hover{background:var(--card2);color:var(--ink)}
 
 /*
+  Girar el grafico 90 grados solo tiene sentido en un movil: es lo que
+  aprovecha el largo de una pantalla estrecha. En escritorio el perfil ya
+  tiene ancho de sobra, y el mismo giro ahi solo estorbaria -mismo corte
+  que separa el menu de hamburguesa del lateral fijo.
+*/
+@media(min-width:901px){
+  .btn-expandir{display:none}
+}
+
+/*
   Vista horizontal del perfil: un overlay a pantalla completa con el
   contenido girado 90 grados por CSS. El movil se queda como esta -en
   vertical, en la mano- y es el dibujo el que gira para aprovechar el
