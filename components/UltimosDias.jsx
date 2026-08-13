@@ -36,7 +36,7 @@ export default function UltimosDias({ dias }) {
           );
         })}
       </div>
-      <div className="legend legend-30dias">
+      <div className="legend">
         <span><i style={{ background: COLORES_TIPO.llano }} />Llano</span>
         <span><i style={{ background: COLORES_TIPO.mixto }} />Colina</span>
         <span><i style={{ background: COLORES_TIPO.puerto }} />Montaña</span>

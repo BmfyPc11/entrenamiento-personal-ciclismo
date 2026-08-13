@@ -100,13 +100,14 @@ export default function PerfilPuerto({ streams, puerto, indice, cfg, zonas, nomb
     <div className="panel" style={{ marginTop: 4 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between',
         alignItems: 'baseline', flexWrap: 'wrap', gap: 8, marginBottom: 4 }}>
-        <h3 style={{ margin: 0, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <h3 style={{ margin: 0, display: 'flex', alignItems: 'baseline', gap: 8,
+          fontFamily: 'var(--sans)' }}>
           {nombre || `Subida ${indice + 1}`}
           {/* La categoria va con el color de su dureza: de un vistazo se
               ve si el puerto es un tramite o un asunto serio. */}
           <span style={{ color: cat.color, fontFamily: 'var(--mono)',
             fontSize: 13, fontWeight: 500,
-            border: `1px solid ${cat.color}`, borderRadius: 5,
+            border: `1px solid ${cat.color}`, borderRadius: 8,
             padding: '1px 7px' }}>
             {cat.nombre}
           </span>

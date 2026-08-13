@@ -328,7 +328,12 @@ export default function Entrenamientos({
         <div className="top">
           <div>
             <p className="eyebrow">Análisis de una salida</p>
-            <h1>Entrenamientos</h1>
+            <h1>
+              <button type="button" className="titulo-clic"
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                Entrenamientos
+              </button>
+            </h1>
           </div>
         </div>
         <p className="hint">No hay salidas en bicicleta para mostrar.</p>
@@ -347,7 +352,12 @@ export default function Entrenamientos({
       <div className="top">
         <div>
           <p className="eyebrow">Análisis de una salida</p>
-          <h1>Entrenamientos</h1>
+          <h1>
+            <button type="button" className="titulo-clic"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+              Entrenamientos
+            </button>
+          </h1>
         </div>
         <div className="sel-salida">
           <label htmlFor="salida">Salida analizada</label>
@@ -549,7 +559,7 @@ export default function Entrenamientos({
                               <span className="cat" title={`Coeficiente ${num(c.coef, 0)}`}
                                 style={{ background: c.color,
                                   color: c.codigo === 'hc' ? '#FFFFFF' : '#0A0C0F' }}>
-                                {c.nombre.replace(' cat', '')}
+                                {c.nombre}
                               </span>
                               {nombresPuertos[i]}
                             </span>

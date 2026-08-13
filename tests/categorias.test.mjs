@@ -31,11 +31,11 @@ test('los puertos duros conocidos salen HC', () => {
 });
 
 test('cada tramo de la escala cae en su categoria', () => {
-  assert.equal(categoriaPuerto(1000, 5).nombre, '4ª cat');     // 25
-  assert.equal(categoriaPuerto(4000, 5).nombre, '3ª cat');     // 100
-  assert.equal(categoriaPuerto(12000, 5).nombre, '2ª cat');    // 300
-  assert.equal(categoriaPuerto(24000, 5).nombre, '1ª cat');    // 600
-  assert.equal(categoriaPuerto(12400, 10.5).nombre, 'HC');     // 1367
+  assert.equal(categoriaPuerto(1000, 5).nombre, '4ª');     // 25
+  assert.equal(categoriaPuerto(4000, 5).nombre, '3ª');     // 100
+  assert.equal(categoriaPuerto(12000, 5).nombre, '2ª');    // 300
+  assert.equal(categoriaPuerto(24000, 5).nombre, '1ª');    // 600
+  assert.equal(categoriaPuerto(12400, 10.5).nombre, 'HC'); // 1367
 });
 
 test('los limites exactos caen en la categoria baja', () => {

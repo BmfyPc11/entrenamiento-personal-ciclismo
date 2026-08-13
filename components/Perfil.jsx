@@ -81,6 +81,16 @@ export default function Perfil({
     igual de compactos en todas las vistas.
   */
   compacto = false,
+  /*
+    Vista minima para sitios donde el perfil es solo una referencia
+    visual -la fila desplegada de "Tus salidas"-, no la herramienta de
+    analisis completa: sin cursor interactivo, sin paradas, sin los
+    botones de abajo, y el relieve entero en el amarillo que ya se usaba
+    solo para las subidas, en vez del gris neutro. La categoria de cada
+    puerto se conserva porque es justo el dato que se queria a simple
+    vista.
+  */
+  simple = false,
 }) {
   const [hover, setHover] = useState(null);
   const [zoom, setZoom] = useState(false);
@@ -109,7 +119,7 @@ export default function Perfil({
     despues, mapeando el indice original al reducido con mapearIdx, igual
     que hacen las fichas de puerto.
   */
-  const paradas = useMemo(() => detectarParadas(streams), [streams]);
+  const paradas = useMemo(() => (simple ? [] : detectarParadas(streams)), [streams, simple]);
 
   const datos = useMemo(() => {
     const { distancia: d, altitud: a, fc, tiempo: t } = streams || {};
@@ -380,14 +390,18 @@ export default function Perfil({
       <svg
         viewBox={`0 0 ${W} ${H}`}
         width="100%"
-        onMouseMove={onMove}
-        onMouseLeave={() => setHover(null)}
-        style={{ cursor: 'crosshair', touchAction: 'pan-y' }}
+        onMouseMove={simple ? undefined : onMove}
+        onMouseLeave={simple ? undefined : () => setHover(null)}
+        style={{ cursor: simple ? 'default' : 'crosshair', touchAction: 'pan-y' }}
       >
         <defs>
           <linearGradient id="relieve" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#4A5563" stopOpacity=".55" />
             <stop offset="100%" stopColor="#4A5563" stopOpacity=".05" />
+          </linearGradient>
+          <linearGradient id="relieveAmarillo" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#E0A82E" stopOpacity=".55" />
+            <stop offset="100%" stopColor="#E0A82E" stopOpacity=".05" />
           </linearGradient>
         </defs>
 
@@ -445,8 +459,10 @@ export default function Perfil({
           </>
         ) : (
           <>
-            <path d={areaPath(0, datos.d.length - 1)} fill="url(#relieve)" />
-            <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#C8CFD8"
+            <path d={areaPath(0, datos.d.length - 1)}
+              fill={simple ? 'url(#relieveAmarillo)' : 'url(#relieve)'} />
+            <path d={lineaPath(0, datos.d.length - 1)} fill="none"
+              stroke={simple ? '#E0A82E' : '#C8CFD8'}
               strokeWidth="1.7" strokeLinejoin="round" />
           </>
         )}
@@ -497,7 +513,7 @@ export default function Perfil({
                         que tapaban el propio dibujo. El nombre completo
                         sigue disponible en la tabla de abajo.
                       */}
-                      <rect x="4" y={(f.alto - 16) / 2} width={f.anchoCat} height="16" rx="2"
+                      <rect x="4" y={(f.alto - 16) / 2} width={f.anchoCat} height="16" rx="4"
                         fill={f.cat.color} />
                       <text x={4 + f.anchoCat / 2} y={f.alto / 2 + 4} textAnchor="middle"
                         fill={f.cat.codigo === 'hc' ? '#FFFFFF' : '#0E1116'}
@@ -514,7 +530,7 @@ export default function Perfil({
                   ) : (
                     <>
                       {/* La categoria, en grande: es lo que se busca de un vistazo. */}
-                      <rect x="6" y="6" width={f.anchoCat} height="19" rx="2"
+                      <rect x="6" y="6" width={f.anchoCat} height="19" rx="4"
                         fill={f.cat.color} />
                       <text x={6 + f.anchoCat / 2} y="19.5" textAnchor="middle"
                         fill={f.cat.codigo === 'hc' ? '#FFFFFF' : '#0E1116'}
@@ -525,7 +541,7 @@ export default function Perfil({
 
                       <text x={6 + f.anchoCat + 7} y="19.5" fill="#E8EAED"
                         fontSize="11.5" fontWeight="600"
-                        fontFamily="ui-monospace,Menlo,monospace">
+                        fontFamily='"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif'>
                         {f.nombre}
                       </text>
                       <text x="7" y="35" fill="#9BA5B4" fontSize="10.5"
@@ -559,7 +575,7 @@ export default function Perfil({
           (mouseenter) crece con el punto y no es fija, para que un circulo
           grande no obligue a acertar el mismo pixel exacto que uno pequeno.
         */}
-        {verParadas && paradasMapeadas.map((p) => (
+        {!simple && verParadas && paradasMapeadas.map((p) => (
           <g key={`p${p.i}`}>
             <circle cx={p.x} cy={p.y} r={p.radio + 6} fill="transparent"
               onMouseEnter={() => setParadaFoco(p.i)}
@@ -572,7 +588,7 @@ export default function Perfil({
           </g>
         ))}
 
-        {verParadas && paradaFoco != null && (() => {
+        {!simple && verParadas && paradaFoco != null && (() => {
           const p = paradasMapeadas.find((x) => x.i === paradaFoco);
           if (!p) return null;
           return (
@@ -592,7 +608,7 @@ export default function Perfil({
           );
         })()}
 
-        {hover != null && paradaFoco == null && (
+        {!simple && hover != null && paradaFoco == null && (
           <g pointerEvents="none">
             <line x1={X(datos.d[hover])} y1={T} x2={X(datos.d[hover])} y2={H - B}
               stroke="#9BA5B4" strokeWidth="1" strokeDasharray="3 3" opacity=".55" />
@@ -638,7 +654,7 @@ export default function Perfil({
         )}
       </svg>
 
-      {(zoomUtil || puertos.length > 0 || paradas.length > 0) && (
+      {!simple && (zoomUtil || puertos.length > 0 || paradas.length > 0) && (
         /*
           Botones dentro de "chips" -el mismo bloque que ya usan los modos
           y las zonas- en vez de checkboxes con una frase explicativa al

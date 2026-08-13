@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import Entrenamientos from './Entrenamientos';
+import Perfil from './Perfil';
 import Datos from './Datos';
 import Objetivos from './Objetivos';
 import Ascensiones from './Ascensiones';
@@ -279,7 +280,12 @@ export default function Dashboard({ atleta }) {
       {pestana !== 'entrenamientos' && (
         <div className="top">
           <div>
-            <h1>{IconoTitulo && <IconoTitulo className="icono-titulo" />}{titulo}</h1>
+            <h1>
+              <button type="button" className="titulo-clic"
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                {IconoTitulo && <IconoTitulo className="icono-titulo" />}{titulo}
+              </button>
+            </h1>
           </div>
         </div>
       )}
@@ -296,7 +302,7 @@ export default function Dashboard({ atleta }) {
       {pestana === 'resumen' && (
         <Resumen salidas={activas} cfg={cfg} umbral={umbral} masaTotal={masaTotal}
           excluidas={excluidas} setExcluidas={setExcluidas} enRango={enRango}
-          cache={cache} dias={dias} />
+          cache={cache} dias={dias} pedirStreams={pedirStreams} irASalida={irASalida} />
       )}
       {pestana === 'entrenamientos' && (
         <Entrenamientos salidas={salidas} cfg={cfg} zonas={zonas} umbral={umbral} cache={cache}
@@ -402,11 +408,9 @@ function Estadisticas({ salidas, cfg, umbral, enRango, rango, setRango, velMaxLl
 
       {salidas.length > 0 && (
         <div className="grid centrado" style={{ marginBottom: 'var(--e4)' }}>
-          <Dato k="Distancia total" v={num(suma(km), 0)} u="km" dEnHover
-            d={`${num(suma(km) / salidas.length, 1)} km de media`} />
+          <Dato k="Distancia total" v={num(suma(km), 0)} u="km" />
           <Dato k="Desnivel acumulado" v={num(suma((s) => s.desnivel), 0)} u="m" />
-          <Dato k="Horas totales" v={num(suma((s) => s.tiempoMovimiento) / 3600, 1)} u="h" dEnHover
-            d="tiempo en movimiento" />
+          <Dato k="Horas totales" v={num(suma((s) => s.tiempoMovimiento) / 3600, 1)} u="h" />
           <Dato k="Número de salidas" v={salidas.length} />
           <Dato k="Salida más larga" v={masLarga ? num(km(masLarga), 1) : '—'} u="km" dEnHover
             d={masLarga ? (
@@ -439,7 +443,7 @@ function ValorTabla({ max, children }) {
 }
 
 function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
-  enRango, cache, dias }) {
+  enRango, cache, dias, pedirStreams, irASalida }) {
 
   /* Máximos de cada columna para resaltar */
   const maximos = useMemo(() => ({
@@ -448,6 +452,25 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
     desn: salidas.length ? Math.max(...salidas.map((s) => s.desnivel)) : 0,
     vel: salidas.length ? Math.max(...salidas.map(kmh)) : 0,
   }), [salidas]);
+
+  /*
+    Fila desplegada con el perfil de la salida. Solo una a la vez: abrir
+    otra cierra la anterior, igual que las fichas de puerto en
+    Entrenamientos. Si las series no estan en cache todavia (la carga en
+    segundo plano no ha llegado ahi), se piden al abrir en vez de esperar
+    a que le toque el turno.
+  */
+  const [salidaAbierta, setSalidaAbierta] = useState(null);
+  const [cargandoPerfil, setCargandoPerfil] = useState(false);
+
+  const alternarFila = (s) => {
+    if (salidaAbierta === s.id) { setSalidaAbierta(null); return; }
+    setSalidaAbierta(s.id);
+    if (!cache[s.id]) {
+      setCargandoPerfil(true);
+      pedirStreams(s.id).catch(() => {}).finally(() => setCargandoPerfil(false));
+    }
+  };
   /*
     La frecuencia cardiaca queda deliberadamente fuera de los maximos. Las
     demas columnas miden rendimiento y su mayor valor es un logro; la FC
@@ -499,15 +522,27 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
                     const fcVal = s.fcMedia;
                     const insignia = TIPO_INSIGNIA[tipoRuta(s)];
 
+                    const abierta = salidaAbierta === s.id;
+                    const streamsFila = cache[s.id];
+                    const puertosFila = streamsFila ? detectarPuertos(streamsFila) : [];
+
                     return (
-                      <tr key={s.id} style={{ opacity: dentro ? 1 : 0.35 }}>
+                      <Fragment key={s.id}>
+                      <tr onClick={() => alternarFila(s)}
+                        style={{ opacity: dentro ? 1 : 0.35, cursor: 'pointer',
+                          background: abierta ? 'var(--card2)' : undefined }}>
                         <td className="col-tipo">
                           <span className="cat" style={{ background: insignia.fondo, color: insignia.tinta }}>
                             {insignia.codigo}
                           </span>
                         </td>
                         <td className="col-fecha">{fechaDDMMAA(s.fecha)}</td>
-                        <td className="col-nombre">{s.nombre}</td>
+                        <td className="col-nombre">
+                          <span className="fila-puerto">
+                            <span className="flecha">{abierta ? '▾' : '▸'}</span>
+                            {s.nombre}
+                          </span>
+                        </td>
                         <td>
                           <ValorTabla max={Math.abs(distVal - maximos.dist) < 0.01}>
                             {num(distVal, 1)}
@@ -529,7 +564,7 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
                           </ValorTabla>
                         </td>
                         <td>{fcVal ? num(fcVal, 0) : '—'}</td>
-                        <td>
+                        <td onClick={(e) => e.stopPropagation()}>
                           <input type="checkbox" checked={dentro}
                             onChange={() => {
                               const n = new Set(excluidas);
@@ -538,6 +573,31 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
                             }} />
                         </td>
                       </tr>
+
+                      {abierta && (
+                        <tr className="fila-detalle">
+                          <td colSpan={9}>
+                            {streamsFila ? (
+                              <div className="perfil-mini">
+                                <div className="perfil-mini-grafico">
+                                  <Perfil streams={streamsFila} puertos={puertosFila}
+                                    modo="relieve" compacto simple altura={190} />
+                                </div>
+                                <button className="btn-analisis"
+                                  onClick={() => irASalida(s.id)}>
+                                  Analizar
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="perfil-mini-cargando">
+                                {cargandoPerfil && <span className="spin" />}
+                                {cargandoPerfil ? 'Cargando el perfil…' : 'Sin perfil disponible.'}
+                              </p>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </tbody>

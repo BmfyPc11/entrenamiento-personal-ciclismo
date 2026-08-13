@@ -35,6 +35,7 @@
   --r:8px; --r-s:5px; --r-l:12px;
 
   --lateral:232px;
+  --barra-movil-h:53px;
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:var(--bg)}
@@ -96,13 +97,26 @@ body{color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6;
 }
 
 /* ---------- cabecera ---------- */
+/* El titulo grande de cada seccion es tambien lo que se queda fijo
+   arriba al hacer scroll -no hay una barra nueva y compacta aparte-, asi
+   que .top entero se ancla en vez de solo el h1: en Entrenamientos eso
+   incluye el selector de salida, que va justo al lado del titulo. En
+   movil se ancla por debajo de la barra que abre el menu, que ya estaba
+   fija antes que esto. */
 .top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;
-  padding:44px 0 28px;flex-wrap:wrap}
+  padding:44px 0 28px;flex-wrap:wrap;position:sticky;top:0;z-index:15;
+  background:var(--bg)}
+@media(max-width:900px){.top{top:var(--barra-movil-h)}}
 .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
   color:var(--ink3);margin:0 0 12px}
 h1{font-size:clamp(32px,5vw,46px);line-height:1.04;letter-spacing:-.03em;margin:0;
   font-weight:700;text-transform:uppercase}
 h1 em{font-style:normal;color:var(--acento)}
+/* El titulo es tambien el boton que vuelve arriba de la pagina: se
+   resetea el boton para que se vea identico al h1 que sustituye. */
+.titulo-clic{all:unset;cursor:pointer;display:inline-flex;align-items:center;
+  color:inherit;font:inherit;text-transform:inherit;letter-spacing:inherit}
+.titulo-clic:hover{color:var(--acento)}
 
 .usuario{display:flex;align-items:center;gap:11px;background:var(--card);
   border:1px solid var(--line);border-radius:var(--r);padding:9px 14px}
@@ -178,7 +192,7 @@ h3{font-family:var(--mono);font-size:11px;letter-spacing:.15em;text-transform:up
 .consejo.aviso{border-left-color:var(--orange)}
 .consejo .tag{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;
   color:var(--ink3);display:block;margin-bottom:9px}
-.consejo .tit{font-size:19px;font-weight:500;margin:0 0 9px;letter-spacing:-.01em}
+.consejo .tit{font-size:19px;font-weight:700;color:#FFFFFF;margin:0 0 9px;letter-spacing:-.01em}
 .consejo p{margin:0;color:var(--ink2);font-size:14.5px;line-height:1.68}
 
 /* ---------- formularios ---------- */
@@ -215,7 +229,7 @@ tbody tr:hover td{background:var(--card2)}
 
 svg{display:block;max-width:100%;height:auto}
 .chart{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px}
-.legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--sans);font-size:11px;
   color:var(--ink3);margin-top:14px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;
   vertical-align:-1px}
@@ -533,7 +547,7 @@ h1{font-size:clamp(26px,3.4vw,34px)}
 /* Insignia de categoria del puerto. El color lo pone el componente,
    que es quien conoce la escala. */
 .cat{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:700;
-  line-height:1;padding:4px 6px;border-radius:var(--r-s);min-width:30px;
+  line-height:1;padding:4px 6px;border-radius:var(--r);min-width:30px;
   text-align:center}
 
 .fila-puerto{display:inline-flex;align-items:center;gap:8px}
@@ -725,8 +739,32 @@ h1 .icono-titulo{display:inline-block;width:1em;height:1em;
    mas entrar. */
 h2.titulo-resumen{margin-top:var(--e5)}
 
-/* La leyenda de Ultimos 30 dias, en la tipografia principal de la
-   pagina en vez de la monoespaciada que usa .legend en el resto de
-   sitios (Datos, Entrenamientos, Zonas...): no se toca la regla
-   compartida para no arrastrar el cambio a esas otras leyendas. */
-.legend-30dias{font-family:var(--sans)}
+/*
+  Perfil desplegado bajo una fila de "Tus salidas". El grafico ocupa
+  todo el ancho disponible y el boton de ir al analisis completo se
+  queda a la derecha, fuera de su camino: es una salida hacia otra
+  pantalla, no parte del propio dibujo.
+*/
+.perfil-mini{display:flex;align-items:center;gap:var(--e4)}
+.perfil-mini-grafico{flex:1;min-width:0}
+.btn-analisis{flex:0 0 auto;background:var(--acento);border-color:var(--acento);
+  color:var(--acento-ink);font-weight:600;padding:10px 20px}
+.btn-analisis:hover{background:var(--acento);border-color:var(--acento);opacity:.88}
+.perfil-mini-cargando{font-family:var(--mono);font-size:12.5px;color:var(--ink3);
+  padding:var(--e3) 0}
+
+/*
+  Todo el texto de la barra lateral en negrita: la marca (".marca .nom"
+  ya lo estaba), el subtitulo, las ocho secciones -tanto en reposo como
+  la activa, que hasta ahora iba mas fina que el resto-, el nombre del
+  atleta y "via Strava", y los botones de Actualizar/Salir. Cada
+  selector añade ".lateral" delante del original solo para ganarle en
+  especificidad sin tocar esas reglas compartidas, que siguen sirviendo
+  a otras pantallas (el boton generico, por ejemplo).
+*/
+.lateral .marca .sub,
+.lateral .secciones button,
+.lateral .secciones button[aria-current="page"],
+.lateral .usuario b,
+.lateral .usuario span,
+.lateral .pie-lateral button{font-weight:700}
