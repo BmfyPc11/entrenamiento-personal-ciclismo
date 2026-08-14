@@ -114,8 +114,14 @@ h1{font-size:clamp(32px,5vw,46px);line-height:1.04;letter-spacing:-.03em;margin:
 h1 em{font-style:normal;color:var(--acento)}
 /* El titulo es tambien el boton que vuelve arriba de la pagina: se
    resetea el boton para que se vea identico al h1 que sustituye. */
+/* ".titulo-clic:hover" solo tocaba el color; el fondo gris de
+   "button:hover" (mas especifico que el "all:unset" de la base, porque
+   ese es de la regla sin :hover) se colaba igual detras del texto y se
+   veia como un contorno. Aqui se fuerza a transparente para las dos
+   pseudo-clases que pueden disparar ese fondo generico. */
 .titulo-clic{all:unset;cursor:pointer;display:inline-flex;align-items:center;
   color:inherit;font:inherit;text-transform:inherit;letter-spacing:inherit}
+.titulo-clic:hover,.titulo-clic:focus,.titulo-clic:active{background:none}
 .titulo-clic:hover{color:var(--acento)}
 
 .usuario{display:flex;align-items:center;gap:11px;background:var(--card);
@@ -262,10 +268,14 @@ svg{display:block;max-width:100%;height:auto}
   padding:20px;margin-bottom:12px}
 .goal .top2{display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap}
 .goal .name{font-size:16px;font-weight:500}
+.goal .name .siguiente-nombre{display:inline-flex;align-items:center;gap:3px;
+  margin-left:7px;font-weight:400;font-size:.85em;color:var(--ink3)}
+.goal .name .siguiente-nombre svg{width:11px;height:11px;flex:0 0 auto}
 .goal .pct{font-family:var(--mono);font-size:15px;font-weight:500}
 .bar{height:6px;background:var(--bg2);border-radius:99px;margin:13px 0 10px;overflow:hidden}
 .bar i{display:block;height:100%;border-radius:99px;transition:width .8s cubic-bezier(.2,.8,.2,1)}
 .goal .note{font-size:13.5px;color:var(--ink2);margin:0;line-height:1.6}
+.goal .note .diferencia{color:var(--red);font-family:var(--mono)}
 
 /* ---------- selectores ---------- */
 .chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px}
@@ -467,58 +477,18 @@ h1{font-size:clamp(26px,3.4vw,34px)}
    ============================================================ */
 
 /*
-  Tarjetas de dato en version compacta.
-
-  En Entrenamientos son seis y encabezan la pestana, pero no son el
-  contenido: lo que se viene a mirar es el perfil y la tabla de puertos.
-  A tamano normal se comian la primera pantalla entera y empujaban el
-  grafico por debajo del pliegue.
-
-  Se reducen a la mitad de superficie conservando la proporcion: el ancho
-  minimo de columna baja de 165 a 118 px y el alto encoge en la misma
-  medida via relleno y cuerpo de letra. Los tamanos no se dividen entre
-  dos literalmente —una etiqueta de 5 px no se lee— sino lo justo para
-  que el conjunto ocupe la mitad y siga siendo legible.
-
-  Es una variante y no un cambio de .stat porque en Resumen esas mismas
-  tarjetas SI son el contenido, y ahi el tamano grande esta bien.
-*/
-/*
-  auto-FILL y no auto-fit, que es la diferencia entre pedir el tamano y
-  obtenerlo. Con auto-fit, la columna que sobra al no llegar a llenar la
-  fila se colapsa a cero y su ancho se reparte entre las demas: las seis
-  tarjetas se estiraban a 146 px pidiendo 118, y la proporcion se iba a
-  1,6 de ancho por alto en vez de mantener el 1,25 original. Con
-  auto-fill la columna vacia se conserva y cada tarjeta se queda donde se
-  le ha dicho.
-*/
-.grid.compacta{gap:var(--e2);grid-template-columns:repeat(auto-fill,minmax(118px,1fr))}
-/* Centrado. A tamano grande el alineado a la izquierda crea una columna
-   que guia la lectura de arriba abajo; a este tamano, con etiquetas que
-   ocupan dos lineas de anchos muy distintos, el borde izquierdo deja de
-   ordenar nada y el centro equilibra mejor la caja. */
-.grid.compacta .stat{padding:0 0 12px;text-align:center}
-.grid.compacta .stat .k{font-size:8.5px;font-weight:700;letter-spacing:.1em;padding:6px 11px;margin-bottom:6px}
-.grid.compacta .stat .v{font-size:17px;padding:0 11px}
-.grid.compacta .stat .v small{font-size:9.5px}
-
-/*
   Variante de las tarjetas de dato a tamano base: centrada y con el
   titulo en negrita y un punto mas grande (10px -> 11.5px). Nacio en
-  "Tus estadisticas" y ahora la llevan las cuatro secciones que usan
-  .stat a este tamano -Resumen, Carga y forma, Analizar GPX, Rutas-, asi
-  que hoy no queda ninguna excepcion real. Sigue siendo una clase aparte
-  y no un cambio directo en .stat por si el dia de manana una seccion
-  nueva quiere las tarjetas de siempre sin este tratamiento; mientras
-  eso no pase, .centrado es lo que ve todo el mundo. La unica variante
-  de verdad distinta es .compacta, en Entrenamientos, que ademas achica
-  las tarjetas: esa es una decision de tamano, no de esta.
+  "Tus estadisticas" y ahora la llevan las cinco secciones que usan
+  .stat -Resumen, Entrenamientos, Carga y forma, Analizar GPX, Rutas-,
+  asi que hoy no queda ninguna excepcion: todas las tarjetas de dato de
+  la app comparten este mismo tamano y formato.
 
   El letter-spacing baja de .13em a .06em en el mismo golpe: al agrandar
   la letra sin tocarlo, las etiquetas mas largas -"Desnivel acumulado",
   "Vel. punta en llano"- se partian en dos lineas y esas tarjetas
   quedaban mas altas que el resto de la fila. Comprobado a mano contra
-  las etiquetas reales de las cuatro secciones: por debajo de .06em
+  las etiquetas reales de las cinco secciones: por debajo de .06em
   vuelven a caber todas en una linea a este tamano.
 */
 .grid.centrado .stat{text-align:center}
@@ -775,3 +745,90 @@ h2.titulo-resumen{margin-top:var(--e5)}
 .lateral .usuario b,
 .lateral .usuario span,
 .lateral .pie-lateral button{font-weight:700}
+
+/* ============================================================
+   Logros — escala de rangos.
+
+   Cada logro (Ruta unica, y los que vengan despues) enseña una fila de
+   division/subdivision actual con su barra hacia la siguiente, y
+   debajo la escala completa agrupada por division para ver de un
+   vistazo cuanto falta para el resto. A partir de siete bloques
+   apilarlos de uno en uno dejaba casi toda la pagina en blanco a los
+   lados; en dos columnas se reparte el ancho disponible y cada tarjeta
+   sigue leyendose de un vistazo. "align-items:start" evita que abrir el
+   desplegable de una tarjeta estire la de al lado a su misma altura. */
+/* Cabecera de presentacion: avatar + rango medio a la izquierda, radar
+   hexagonal a la derecha. En movil el radar baja debajo del avatar en
+   vez de encogerse hasta ser ilegible. */
+.resumen-logros{display:flex;align-items:center;gap:var(--e6);flex-wrap:wrap;margin-bottom:var(--e5)}
+.resumen-usuario{display:flex;align-items:center;gap:var(--e4);flex:1 1 280px;min-width:260px}
+.resumen-avatar{width:64px;height:64px;border-radius:50%;object-fit:cover;flex:0 0 auto}
+.resumen-avatar.ini{display:flex;align-items:center;justify-content:center;
+  background:var(--card2);color:var(--ink2);font-size:24px;font-weight:600}
+.resumen-usuario .bar{max-width:320px}
+
+/* El radar es un dato -el desglose de progreso por categoria-, no
+   cromo de interfaz: usa --blue, el mismo azul con el que Carga y
+   forma ya pinta "Condicion", y no --acento. Los anillos y ejes son
+   solo guias de lectura, por eso van en tonos de linea y no de dato. */
+.radar-logros{width:200px;height:200px;flex:0 0 auto}
+.radar-anillo{fill:none;stroke:var(--line)}
+.radar-eje{stroke:var(--line)}
+.radar-datos{fill:var(--blue);fill-opacity:.22;stroke:var(--blue);stroke-width:1.6}
+.radar-punto{fill:var(--blue)}
+.radar-etiqueta{font-family:var(--mono);font-size:8px;letter-spacing:.04em;
+  text-transform:uppercase;fill:var(--ink3)}
+
+.logros-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--e3);align-items:start}
+@media(max-width:720px){.logros-grid{grid-template-columns:1fr}}
+
+/* Con siete tarjetas a la vista el bloque original -pensado para una
+   sola, suelta- se comia media pagina de alto. Aqui se aprieta el
+   espaciado vertical (padding del panel, tamaños de letra, margenes
+   entre piezas) sin tocar ".panel"/".goal" en si, que siguen sirviendo
+   a Objetivos y al resto de la app con su tamaño normal. El ancho de
+   columna no cambia, solo la altura de cada ficha. */
+.logros-grid .panel{padding:14px 16px}
+.logros-grid .rango-actual{gap:var(--e3)}
+.logros-grid .rango-actual p:first-child{font-size:16px!important}
+.logros-grid .rango-actual .hint{font-size:12.5px!important;line-height:1.4!important;margin-top:2px!important}
+.logros-grid .rango-toggle{margin-top:12px}
+.logros-grid .goal{padding:12px 14px}
+.logros-grid .goal .name{font-size:13.5px}
+.logros-grid .goal .pct{font-size:12.5px}
+.logros-grid .goal .bar{margin:8px 0 6px}
+.logros-grid .goal .note{font-size:12px}
+.logros-grid .escala{gap:var(--e4);margin-top:var(--e4)}
+
+.rango-actual{display:flex;align-items:center;gap:var(--e4)}
+.insignia-circulo{flex:0 0 auto;width:56px;height:56px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:15px;font-weight:700;
+  color:var(--c,var(--ink3));border:2px solid var(--c,var(--line2));
+  background:color-mix(in srgb, var(--c,var(--line2)) 14%, transparent)}
+.logros-grid .insignia-circulo{width:40px;height:40px;font-size:12px}
+
+/* El boton se resetea entero -all:unset- para no arrastrar el fondo y
+   el borde de "button" por defecto: la caja que se ve es la del propio
+   ".goal" que va dentro, que ya tenia ese aspecto para las barras de
+   Objetivos. Asi el mismo bloque sirve suelto o clicable sin duplicar
+   estilos. */
+.rango-toggle{all:unset;cursor:pointer;display:block;width:100%;margin-top:18px}
+.rango-toggle .goal{margin:0;transition:border-color .15s}
+.rango-toggle:hover .goal{border-color:var(--line2)}
+.rango-toggle .pct{display:inline-flex;align-items:center;gap:4px}
+.rango-toggle .chevron{width:14px;height:14px;transition:transform .2s}
+.rango-toggle[aria-expanded="true"] .chevron{transform:rotate(180deg)}
+
+.escala{display:grid;gap:var(--e5);margin-top:var(--e5)}
+.escala-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.escala-tier{border:1px solid var(--line);border-radius:var(--r-s);padding:8px 4px;
+  text-align:center;opacity:.4}
+.logros-grid .escala-tier{padding:5px 3px}
+.logros-grid .escala-tier .sub{font-size:12px}
+.logros-grid .escala-tier .umbral{font-size:9px}
+.escala-tier.conseguido{opacity:1;border-color:var(--c,var(--line2));
+  background:color-mix(in srgb, var(--c,var(--line2)) 10%, transparent)}
+.escala-tier .sub{display:block;font-weight:700;font-size:14px}
+.escala-tier .umbral{display:block;font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-top:2px}
+.escala-tier.conseguido .umbral{color:var(--ink2)}

@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import Perfil from './Perfil';
 import PerfilPuerto from './PerfilPuerto';
-import { IcoExpandir, IcoCerrar } from './Iconos';
+import { IcoExpandir, IcoCerrar, IcoEntrenamientos } from './Iconos';
 import {
   detectarPuertos, repartoZonas, repartoDureza, repartoVelocidad, valorarEntrenamiento,
   TRAMOS_DUREZA, TRAMOS_VELOCIDAD, vatiosPuerto, vatiosSalida, categoriaPuerto,
@@ -327,10 +327,10 @@ export default function Entrenamientos({
       <div>
         <div className="top">
           <div>
-            <p className="eyebrow">Análisis de una salida</p>
             <h1>
               <button type="button" className="titulo-clic"
                 onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                <IcoEntrenamientos className="icono-titulo" />
                 Entrenamientos
               </button>
             </h1>
@@ -351,10 +351,10 @@ export default function Entrenamientos({
       */}
       <div className="top">
         <div>
-          <p className="eyebrow">Análisis de una salida</p>
           <h1>
             <button type="button" className="titulo-clic"
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+              <IcoEntrenamientos className="icono-titulo" />
               Entrenamientos
             </button>
           </h1>
@@ -385,7 +385,7 @@ export default function Entrenamientos({
             {fechaLarga(salida.fecha)}
           </p>
 
-          <div className="grid compacta">
+          <div className="grid centrado">
             <Dato k="Distancia" v={num(km(salida), 1)} u="km" />
             <Dato k="Desnivel" v={`+${num(salida.desnivel, 0)}`} u="m"
               d={`${num(metrosPorKm(salida), 1)} m por km`} />

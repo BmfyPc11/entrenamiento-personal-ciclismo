@@ -83,6 +83,31 @@ export const IcoGPX = (p) => (
   </svg>
 );
 
+/* Logros: la medalla con su cinta. */
+export const IcoLogros = (p) => (
+  <svg {...base} {...p}>
+    <path d="M8 3l2.5 6.5M16 3l-2.5 6.5" />
+    <circle cx="12" cy="14.5" r="6.5" />
+    <path d="M12 11.2l1.1 2.3 2.5.4-1.8 1.8.4 2.5-2.2-1.2-2.2 1.2.4-2.5-1.8-1.8 2.5-.4z" />
+  </svg>
+);
+
+/* Flecha hacia abajo: abre un desplegable. Gira 180 grados desde CSS
+   cuando el desplegable esta abierto, asi que solo hace falta este
+   sentido -no una pareja arriba/abajo-. */
+export const IcoFlecha = (p) => (
+  <svg {...base} {...p}>
+    <path d="M6 9l6 6 6-6" />
+  </svg>
+);
+
+/* Flechita horizontal: "de esta división a la siguiente". */
+export const IcoFlechaDerecha = (p) => (
+  <svg {...base} {...p}>
+    <path d="M5 12h13M13 6l6 6-6 6" />
+  </svg>
+);
+
 /* Menu de hamburguesa, solo para abrir el cajon en movil. */
 export const IcoMenu = (p) => (
   <svg {...base} {...p}>

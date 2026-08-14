@@ -9,6 +9,7 @@ import Ascensiones from './Ascensiones';
 import Evolucion from './Evolucion';
 import Rutas from './Rutas';
 import AnalizadorGPX from './AnalizadorGPX';
+import Logros from './Logros';
 import UltimosDias from './UltimosDias';
 import Consejo from './Consejo';
 import { IcoAviso } from './Iconos';
@@ -192,6 +193,15 @@ export default function Dashboard({ atleta }) {
     [enRango, excluidas]
   );
 
+  /* Logros de volumen (semanal, mensual, anual, historico...) son
+     records de toda la vida, no del rango de fechas que este mirando
+     "Tus estadisticas" en este momento: usan todo el historial, solo
+     sin las salidas marcadas como no representativas. */
+  const historicas = useMemo(
+    () => (salidas ? salidas.filter((s) => !excluidas.has(s.id)) : []),
+    [salidas, excluidas]
+  );
+
   const umbral = useMemo(() => {
     const todos = Object.entries(cache).flatMap(([id, st]) =>
       excluidas.has(Number(id)) ? [] : detectarPuertos(st, { minMetros: 1000, minDesnivel: 80, minPend: 4 })
@@ -280,11 +290,12 @@ export default function Dashboard({ atleta }) {
       abierto={menuAbierto} setAbierto={setMenuAbierto}>
     <div className="wrap">
       {/*
-        Entrenamientos pinta su propia cabecera porque el selector de salida
-        va junto al titulo. El resto de secciones usa esta generica hasta que
-        les toque su pasada de la fase 3.
+        Entrenamientos y Logros pintan su propia cabecera: Entrenamientos
+        porque el selector de salida va junto al titulo, Logros porque
+        necesita la fila de subpestanas justo debajo. El resto de secciones
+        usa esta generica hasta que les toque su pasada de la fase 3.
       */}
-      {pestana !== 'entrenamientos' && (
+      {pestana !== 'entrenamientos' && pestana !== 'logros' && (
         <div className="top">
           <div>
             <h1>
@@ -344,6 +355,8 @@ export default function Dashboard({ atleta }) {
         <Objetivos salidas={activas} cfg={cfg} cache={cache} excluidas={excluidas}
           masaTotal={masaTotal} objetivos={objetivos} setObjetivos={setObjetivos} />
       )}
+
+      {pestana === 'logros' && <Logros salidas={historicas} cache={cache} cfg={cfg} atleta={atleta} />}
 
     </div>
     </Layout>
