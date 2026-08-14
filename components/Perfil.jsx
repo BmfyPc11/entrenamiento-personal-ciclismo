@@ -17,12 +17,13 @@ function redondearTecho(v) {
 }
 
 /*
-  Aire sobre la cota maxima. El normal es generoso a proposito: con el
-  eje pegado al desnivel real, una subida de doscientos metros se dibuja
-  como un puerto alpino y el perfil miente sobre lo que costo. El
-  ampliado es para mirar la forma del terreno de cerca.
+  Aire sobre la cota maxima. El normal deja un 50 % de margen sobre el
+  rango real (base a cima): con el eje pegado al desnivel exacto, una
+  subida de doscientos metros se dibuja como un puerto alpino y el
+  perfil miente sobre lo que costo. El ampliado es para mirar la forma
+  del terreno de cerca, con solo un 20 % de margen.
 */
-const AIRE_NORMAL = 4;
+const AIRE_NORMAL = 1.5;
 const AIRE_AMPLIADO = 1.2;
 
 /*
@@ -165,7 +166,13 @@ export default function Perfil({
     deja sobre la cota maxima. Como su sitio depende de la altura de cada
     cima, se colocan despues de la escala y no antes.
   */
-  const ALTO_FICHA = compacto ? 24 : 44, HUECO_FICHA = 4;
+  /*
+    La compacta apila categoria y distancia -antes iban lado a lado- para
+    poder estrechar la caja: dos lineas centradas ocupan menos ancho que
+    la misma info en fila, y una caja mas estrecha dificulta menos el
+    hueco disponible cuando hay varios puertos seguidos.
+  */
+  const ALTO_FICHA = compacto ? 46 : 44, HUECO_FICHA = 4;
 
   /* Aire entre la cima y la ficha que la nombra. Suficiente para que se
      lean como dos cosas unidas por el hilo, no como una encima de otra. */
@@ -237,6 +244,25 @@ export default function Perfil({
     aunque eso signifique que dos fichas queden mas juntas de lo ideal.
     Mejor eso que una etiqueta recortada fuera del marco.
   */
+  /*
+    Punto mas alto del relieve -menor Y, que en SVG es "mas arriba"- que
+    cae dentro de un tramo horizontal. Sirve para saber si una ficha, tal
+    y como esta a punto de colocarse, tapa una cresta o cima cercana que
+    no es la suya: el hueco que deja SEPARACION_CIMA sobre su propio pico
+    no dice nada de lo que hay al lado, y una ficha ancha o un relieve
+    quebrado pueden meter otra cima dentro de su misma columna.
+  */
+  const techoRelieve = (xIni, xFin) => {
+    let min = Infinity;
+    for (let idx = 0; idx < datos.d.length; idx += 1) {
+      const x = X(datos.d[idx]);
+      if (x < xIni || x > xFin) continue;
+      const y = Y(datos.a[idx]);
+      if (y < min) min = y;
+    }
+    return min;
+  };
+
   const cajas = [];
   if (verNombres && puertos.length) {
     puertos
@@ -245,10 +271,15 @@ export default function Perfil({
       .forEach(({ p, i, k }) => {
         const cat = categoriaPuerto(p.metros, p.pendiente);
         const nombre = nombres[i] || `Subida ${i + 1}`;
-        const anchoCat = cat.nombre.length * 8 + 12;
-        const textoPct = `${num(p.pendiente, 1)} %`;
+        const anchoCatBase = cat.nombre.length * 8 + 12;
+        /* En la compacta la insignia va sola en su fila -sin la distancia
+           al lado, que hacia de tope- asi que le sobra sitio para ser un
+           poco mas grande sin que la caja se ensanche de mas. */
+        const anchoCat = compacto ? anchoCatBase + 10 : anchoCatBase;
+        const textoDist = `${num(p.metros / 1000, 1)} km`;
+        const anchoTextoDist = textoDist.length * 6.2;
         const ancho = compacto
-          ? 6 + anchoCat + 6 + textoPct.length * 6.6 + 8
+          ? Math.max(anchoCat, anchoTextoDist) + 12
           : Math.max(150,
             Math.min(6 + anchoCat + 7 + nombre.length * 6.7 + 10, 300));
         const x = X(datos.d[k]);
@@ -256,6 +287,16 @@ export default function Perfil({
         const yCima = Y(datos.a[k]);
 
         let yCaja = yCima - SEPARACION_CIMA - ALTO_FICHA;
+
+        /*
+          Primero el relieve, luego las demas fichas: las dos subidas solo
+          empujan hacia arriba (restan de yCaja), asi que hacerlo en este
+          orden no puede deshacer lo que ya se gano con la otra.
+        */
+        const limiteRelieve = techoRelieve(xCaja, xCaja + ancho);
+        if (yCaja + ALTO_FICHA + HUECO_FICHA > limiteRelieve) {
+          yCaja = limiteRelieve - ALTO_FICHA - HUECO_FICHA;
+        }
 
         /* Sube mientras pise a alguna ya colocada que solape en horizontal. */
         for (let vuelta = 0; vuelta < cajas.length + 1; vuelta++) {
@@ -269,7 +310,7 @@ export default function Perfil({
         }
         if (yCaja < T0) yCaja = T0;
 
-        cajas.push({ p, i, k, cat, nombre, textoPct, ancho, anchoCat, x, xCaja, yCaja, yCima });
+        cajas.push({ p, i, k, cat, nombre, textoDist, ancho, anchoCat, x, xCaja, yCaja, yCima });
       });
     /* Se ordenan por indice para que el foco y las claves no bailen. */
     cajas.sort((a, b) => a.i - b.i);
@@ -508,23 +549,28 @@ export default function Perfil({
                   {compacto ? (
                     <>
                       {/*
-                        Solo categoria y pendiente: en pantalla completa una
+                        Solo categoria y distancia: en pantalla completa una
                         ruta con muchos puertos llenaba el perfil de nombres
                         que tapaban el propio dibujo. El nombre completo
                         sigue disponible en la tabla de abajo.
+
+                        Apiladas y centradas en vez de en fila: la caja
+                        aprovecha el ancho del texto mas largo de las dos en
+                        vez de sumar los dos, que es lo que la deja mas
+                        estrecha y dificulta menos hueco en el perfil.
                       */}
-                      <rect x="4" y={(f.alto - 16) / 2} width={f.anchoCat} height="16" rx="4"
+                      <rect x={(f.ancho - f.anchoCat) / 2} y="5" width={f.anchoCat} height="20" rx="4"
                         fill={f.cat.color} />
-                      <text x={4 + f.anchoCat / 2} y={f.alto / 2 + 4} textAnchor="middle"
+                      <text x={f.ancho / 2} y="19.5" textAnchor="middle"
                         fill={f.cat.codigo === 'hc' ? '#FFFFFF' : '#0E1116'}
-                        fontSize="11" fontWeight="700"
+                        fontSize="13" fontWeight="800"
                         fontFamily="ui-monospace,Menlo,monospace">
                         {f.cat.nombre}
                       </text>
-                      <text x={4 + f.anchoCat + 6} y={f.alto / 2 + 4} fill="#E8EAED"
-                        fontSize="11.5" fontWeight="600"
-                        fontFamily="ui-monospace,Menlo,monospace">
-                        {f.textoPct}
+                      <text x={f.ancho / 2} y={f.alto - 6} textAnchor="middle" fill="#E8EAED"
+                        fontSize="11.5" fontWeight="400"
+                        fontFamily='"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif'>
+                        {f.textoDist}
                       </text>
                     </>
                   ) : (

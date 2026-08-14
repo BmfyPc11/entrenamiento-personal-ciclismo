@@ -9,7 +9,7 @@ import Ascensiones from './Ascensiones';
 import Evolucion from './Evolucion';
 import Rutas from './Rutas';
 import AnalizadorGPX from './AnalizadorGPX';
-import Logros from './Logros';
+import Logros, { TopLogros } from './Logros';
 import UltimosDias from './UltimosDias';
 import Consejo from './Consejo';
 import { IcoAviso } from './Iconos';
@@ -315,6 +315,7 @@ export default function Dashboard({ atleta }) {
           enRango={enRango} rango={rango} setRango={setRango} velMaxLlano={velMaxLlano}
           irASalida={irASalida} />
       )}
+      {pestana === 'resumen' && <TopLogros salidas={historicas} cache={cache} cfg={cfg} />}
       {pestana === 'resumen' && <Consejo consejo={consejo} />}
 
       {pestana === 'resumen' && (
@@ -497,13 +498,11 @@ function Estadisticas({ salidas, todas, excluidas, cfg, umbral, enRango, rango, 
 
       {salidas.length > 0 && (
         <div className="grid centrado" style={{ marginBottom: 'var(--e4)' }}>
-          <Dato k="Distancia total" v={num(distTotal, 0)} u="km" dEnHover
-            d={`${num(distTotal / salidas.length, 1)} km de media`}
+          <Dato k="Distancia total" v={num(distTotal, 0)} u="km"
             delta={deltaDist} deltaDecimales={1} deltaUnidad="km" tituloDelta={tituloDelta} />
           <Dato k="Desnivel acumulado" v={num(desnTotal, 0)} u="m"
             delta={deltaDesn} deltaDecimales={0} deltaUnidad="m" tituloDelta={tituloDelta} />
-          <Dato k="Horas totales" v={num(horasTotal, 1)} u="h" dEnHover
-            d="tiempo en movimiento"
+          <Dato k="Horas totales" v={num(horasTotal, 1)} u="h"
             delta={deltaHoras} deltaDecimales={1} deltaUnidad="h" tituloDelta={tituloDelta} />
           <Dato k="Número de salidas" v={salidas.length}
             delta={deltaSalidas} deltaDecimales={0} deltaUnidad="" tituloDelta={tituloDelta} />

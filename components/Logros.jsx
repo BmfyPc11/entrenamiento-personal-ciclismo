@@ -1,19 +1,22 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { IcoLogros, IcoFlecha, IcoFlechaDerecha } from './Iconos';
+import {
+  IcoLogros, IcoFlecha, IcoFlechaDerecha, IcoTriangulo,
+  IcoRodaje, IcoAscensiones, IcoVelocidad, IcoHabitos, IcoExploracion, IcoComunidad,
+} from './Iconos';
 import {
   km, kmh, num, duracionHMS, detectarParadas, detectarPuertos, categoriaPuerto,
   tipoRuta, vatiosSalida, velocidadMaximaLlano, distanciaGeo,
 } from '@/lib/metrics';
 
 const CATEGORIAS = [
-  ['rodaje', 'Rodaje'],
-  ['montana', 'Montaña'],
-  ['velocidad', 'Velocidad'],
-  ['habitos', 'Hábitos'],
-  ['exploracion', 'Exploración'],
-  ['comunidad', 'Comunidad'],
+  ['rodaje', 'Rodaje', IcoRodaje],
+  ['montana', 'Montaña', IcoAscensiones],
+  ['velocidad', 'Velocidad', IcoVelocidad],
+  ['habitos', 'Hábitos', IcoHabitos],
+  ['exploracion', 'Exploración', IcoExploracion],
+  ['comunidad', 'Comunidad', IcoComunidad],
 ];
 
 /*
@@ -334,6 +337,52 @@ const ESCALA_MADRUGADOR = construirEscala([
   200,
 ]);
 
+/* Dias -no salidas- con alguna actividad que empezo despues de las
+   20:00. El reverso nocturno de Madrugador, con la misma cuenta por
+   dia unico. */
+const ESCALA_BUHO = construirEscala([
+  1, 2, 3, 4, 5,
+  6, 8, 10, 12, 14,
+  17, 20, 23, 26, 30,
+  35, 40, 45, 50, 56,
+  63, 70, 78, 86, 95,
+  105, 115, 126, 138, 151,
+  200,
+]);
+
+/* Fines de semana en los que ha salido tanto el sabado como el
+   domingo. Maestro pide 40, casi un año entero de findes completos. */
+const ESCALA_FINDE_PERFECTO = construirEscala([
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+  11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+  21, 22, 24, 26, 28, 30, 32, 34, 36, 38,
+  40,
+]);
+
+/* Racha mas larga de semanas ISO consecutivas con al menos una salida.
+   Mas indulgente que Inquebrantable -un dia flojo no la rompe- pero
+   exige regularidad semana tras semana. Maestro pide 52, un año
+   entero sin fallar ninguna semana. */
+const ESCALA_RACHA_SEMANAL = construirEscala([
+  2, 3, 4, 5, 6,
+  7, 8, 9, 10, 11,
+  12, 13, 14, 16, 18,
+  20, 22, 24, 26, 28,
+  30, 33, 36, 39, 42,
+  45, 47, 49, 50, 51,
+  52,
+]);
+
+/* Meses distintos -no necesariamente seguidos- con cuatro salidas o
+   mas: no premia una racha puntual sino mantener un ritmo alto mes
+   tras mes. Maestro pide 60, cinco años enteros a ese ritmo. */
+const ESCALA_RITMO_CONSTANTE = construirEscala([
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+  11, 12, 13, 14, 15, 16, 18, 20, 22, 24,
+  27, 30, 33, 36, 39, 42, 46, 50, 54, 57,
+  60,
+]);
+
 /* Numero de provincias distintas donde ha empezado alguna salida.
    Maestro pide 50, practicamente todo el mapa de provincias
    españolas. */
@@ -434,32 +483,6 @@ const ESCALA_COMENTADO = construirEscala([
   40, 45, 50, 55, 60,
   70, 80, 90, 100, 115,
   150,
-]);
-
-/* Records personales (pr_count de Strava) sumados de todas las
-   salidas: cada vez que Strava marco un tramo como tu mejor tiempo de
-   siempre en ese segmento, cuenta una vez. */
-const ESCALA_RECORDISTA = construirEscala([
-  1, 2, 3, 4, 5,
-  6, 8, 10, 12, 15,
-  18, 21, 24, 28, 32,
-  37, 42, 48, 54, 60,
-  68, 76, 85, 95, 105,
-  116, 128, 141, 155, 170,
-  200,
-]);
-
-/* Logros de Strava (achievement_count) sumados: ademas de los records
-   personales cuenta entrar en el top 10/KOM de un segmento, asi que el
-   techo es mas alto que el de Recordista para el mismo esfuerzo. */
-const ESCALA_TROFEOS = construirEscala([
-  2, 4, 6, 9, 12,
-  16, 20, 24, 29, 34,
-  40, 46, 53, 60, 68,
-  77, 86, 96, 106, 117,
-  129, 142, 156, 171, 187,
-  205, 224, 244, 266, 290,
-  350,
 ]);
 
 /* Centros aproximados de las provincias españolas (capital de
@@ -573,10 +596,10 @@ function diferenciaMagnitud(valor, siguiente, distanciaKm, unidad, decimales) {
   if (distanciaKm) {
     if (valor <= 0) return null;
     const diffSeg = (distanciaKm / valor) * 3600 - (distanciaKm / siguiente.umbral) * 3600;
-    return diffSeg > 0 ? `−${duracionHMS(diffSeg)}` : null;
+    return diffSeg > 0 ? duracionHMS(diffSeg) : null;
   }
   const diff = siguiente.umbral - valor;
-  return diff > 0 ? `−${num(diff, decimales)}${unidad ? ` ${unidad}` : ''}` : null;
+  return diff > 0 ? `${num(diff, decimales)}${unidad ? ` ${unidad}` : ''}` : null;
 }
 
 function TarjetaRango({ nombre, descripcion, escala, valor, unidad = 'km', decimales = 1, distanciaKm = 0 }) {
@@ -624,7 +647,7 @@ function TarjetaRango({ nombre, descripcion, escala, valor, unidad = 'km', decim
               {formatoMagnitud(valor, distanciaKm, unidad, decimales, false)} / {siguiente
                 ? formatoMagnitud(siguiente.umbral, distanciaKm, unidad, 0)
                 : `${formatoMagnitud(actual?.umbral ?? 0, distanciaKm, unidad, 0)} · rango máximo`}
-              {diferencia && <span className="diferencia"> {diferencia}</span>}
+              {diferencia && <span className="diferencia"> <IcoTriangulo /> {diferencia}</span>}
             </p>
           </div>
         </button>
@@ -763,6 +786,60 @@ function rachaMasLarga(salidas) {
     if (racha > mejor) mejor = racha;
   });
   return mejor;
+}
+
+/* Igual que rachaMasLarga pero a nivel de semana ISO -claveSemana ya
+   normaliza cada fecha al lunes de su semana-, restando 7 dias en vez
+   de 1 para movernos a la semana anterior/siguiente. */
+function rachaSemanalMasLarga(salidas) {
+  const semanas = new Set((salidas || []).map((s) => claveSemana(s.fecha)));
+  let mejor = 0;
+  semanas.forEach((sem) => {
+    const anterior = new Date(`${sem}T00:00:00`);
+    anterior.setDate(anterior.getDate() - 7);
+    if (semanas.has(anterior.toISOString().slice(0, 10))) return;
+
+    let racha = 1;
+    const cursor = new Date(`${sem}T00:00:00`);
+    for (;;) {
+      cursor.setDate(cursor.getDate() + 7);
+      if (!semanas.has(cursor.toISOString().slice(0, 10))) break;
+      racha += 1;
+    }
+    if (racha > mejor) mejor = racha;
+  });
+  return mejor;
+}
+
+/* Fines de semana -clave del sabado, via claveFinDeSemana- en los que
+   hay salida registrada tanto el sabado como el domingo. */
+function findesPerfectos(salidas) {
+  const porFinde = new Map();
+  (salidas || []).forEach((s) => {
+    const clave = claveFinDeSemana(s.fecha);
+    if (clave == null) return;
+    const dia = new Date(`${s.fecha.slice(0, 10)}T00:00:00`).getDay();
+    const entrada = porFinde.get(clave) || { sabado: false, domingo: false };
+    if (dia === 6) entrada.sabado = true; else entrada.domingo = true;
+    porFinde.set(clave, entrada);
+  });
+  let total = 0;
+  porFinde.forEach((e) => { if (e.sabado && e.domingo) total += 1; });
+  return total;
+}
+
+/* Meses -claveMes- que llegan o superan un numero minimo de salidas.
+   A diferencia de las rachas, no exige que los meses sean seguidos:
+   mide ritmo sostenido en el tiempo, no una racha puntual. */
+function mesesConMinimo(salidas, minSalidas) {
+  const porMes = new Map();
+  (salidas || []).forEach((s) => {
+    const clave = claveMes(s.fecha);
+    porMes.set(clave, (porMes.get(clave) || 0) + 1);
+  });
+  let total = 0;
+  porMes.forEach((n) => { if (n >= minSalidas) total += 1; });
+  return total;
 }
 
 /* Celda de 1 km de una rejilla, redondeando lat/lon a kilometros
@@ -946,6 +1023,30 @@ const LOGROS_POR_CATEGORIA = {
         return dias.size;
       },
     },
+    {
+      id: 'buho', nombre: 'Búho', descripcion: 'Días saliendo después de las 20:00 de la tarde.',
+      escala: ESCALA_BUHO, unidad: 'días', decimales: 0,
+      valor: (salidas) => {
+        const dias = new Set();
+        (salidas || []).forEach((s) => { if (new Date(s.fecha).getHours() >= 20) dias.add(claveDia(s.fecha)); });
+        return dias.size;
+      },
+    },
+    {
+      id: 'finde-perfecto', nombre: 'Fin de semana perfecto', descripcion: 'Fines de semana con salida tanto el sábado como el domingo.',
+      escala: ESCALA_FINDE_PERFECTO, unidad: '', decimales: 0,
+      valor: (salidas) => findesPerfectos(salidas),
+    },
+    {
+      id: 'racha-semanal', nombre: 'Racha semanal', descripcion: 'Semanas seguidas con al menos una salida.',
+      escala: ESCALA_RACHA_SEMANAL, unidad: 'semanas', decimales: 0,
+      valor: (salidas) => rachaSemanalMasLarga(salidas),
+    },
+    {
+      id: 'ritmo-constante', nombre: 'Ritmo constante', descripcion: 'Meses distintos con cuatro salidas o más.',
+      escala: ESCALA_RITMO_CONSTANTE, unidad: 'meses', decimales: 0,
+      valor: (salidas) => mesesConMinimo(salidas, 4),
+    },
   ],
   exploracion: [
     {
@@ -1019,16 +1120,6 @@ const LOGROS_POR_CATEGORIA = {
       id: 'comentado', nombre: 'Comentado', descripcion: 'Comentarios recibidos en una sola salida.',
       escala: ESCALA_COMENTADO, unidad: '', decimales: 0,
       valor: (salidas) => (salidas?.length ? Math.max(...salidas.map((s) => s.comentarios || 0)) : 0),
-    },
-    {
-      id: 'recordista', nombre: 'Recordista', descripcion: 'Récords personales de Strava conseguidos en total.',
-      escala: ESCALA_RECORDISTA, unidad: '', decimales: 0,
-      valor: (salidas) => (salidas || []).reduce((a, s) => a + (s.prs || 0), 0),
-    },
-    {
-      id: 'trofeos', nombre: 'Trofeos', descripcion: 'Logros de Strava conseguidos en total (récords y puestos en segmentos).',
-      escala: ESCALA_TROFEOS, unidad: '', decimales: 0,
-      valor: (salidas) => (salidas || []).reduce((a, s) => a + (s.logrosStrava || 0), 0),
     },
   ],
 };
@@ -1116,6 +1207,48 @@ function ResumenLogros({ atleta, resumen }) {
 }
 
 /*
+  Los cinco logros donde el usuario va mas avanzado, de cualquier
+  categoria, para pintar en Resumen. "Mas avanzado" es primero el
+  numero de tramos ya conseguidos (0 a 31) y, a igualdad, el progreso
+  dentro del tramo actual hacia el siguiente -asi dos logros en la
+  misma division no quedan empatados sin mas.
+*/
+export function TopLogros({ salidas, cache, cfg }) {
+  const mejores = useMemo(() => {
+    const todos = [];
+    Object.values(LOGROS_POR_CATEGORIA).forEach((lista) => {
+      lista.forEach((l) => {
+        const valor = l.valor(salidas, cache, cfg);
+        const { actual, siguiente } = estadoEscala(l.escala, valor);
+        const nivel = nivelesConseguidos(l.escala, valor);
+        const pct = siguiente ? Math.min(100, (valor / siguiente.umbral) * 100) : 100;
+        todos.push({ id: l.id, nombre: l.nombre, descripcion: l.descripcion, nivel, pct, actual });
+      });
+    });
+    return todos.sort((a, b) => (b.nivel - a.nivel) || (b.pct - a.pct)).slice(0, 5);
+  }, [salidas, cache, cfg]);
+
+  if (!mejores.length) return null;
+
+  return (
+    <div className="top-logros-grid">
+      {mejores.map((m) => (
+        <div className="top-logro" key={m.id} tabIndex={0}>
+          <div className="insignia-circulo" style={{ '--c': m.actual ? m.actual.color : 'var(--line2)' }}>
+            {m.actual ? (m.actual.sub ?? '★') : '—'}
+          </div>
+          <div>
+            <p className="nombre">{m.nombre}</p>
+            <p className="tier">{m.actual ? nombreTier(m.actual) : 'Todavía sin rango'}</p>
+          </div>
+          <p className="desc">{m.descripcion}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/*
   Panel de insignias por conseguir, en forma de acordeon: cada boton de
   categoria despliega su rejilla de logros debajo y cierra las demas -
   volver a pulsar la que ya esta abierta la cierra-. Encima va el
@@ -1163,9 +1296,10 @@ export default function Logros({ salidas, cache, cfg, atleta }) {
 
       <ResumenLogros atleta={atleta} resumen={resumen} />
 
-      <nav aria-label="Categorías de logros">
-        {CATEGORIAS.map(([id, txt]) => (
+      <nav className="logros-categorias" aria-label="Categorías de logros">
+        {CATEGORIAS.map(([id, txt, Icono]) => (
           <button key={id} aria-selected={cat === id} onClick={() => setCat((c) => (c === id ? null : id))}>
+            <Icono />
             {txt}
           </button>
         ))}

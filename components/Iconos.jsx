@@ -108,6 +108,61 @@ export const IcoFlechaDerecha = (p) => (
   </svg>
 );
 
+/* Triangulo relleno hacia arriba: cuanto le falta al usuario para subir
+   de division. Solido en vez de trazo -distinto del resto de iconos-
+   porque a este tamano un trazo de 1,5 apenas se distingue del hueco. */
+export const IcoTriangulo = (p) => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" {...p}>
+    <path d="M12 5l8 14H4z" />
+  </svg>
+);
+
+/* ---------- categorias de logros ---------- */
+
+/* Rodaje: la bicicleta, sin ciclista -mas legible a este tamano. */
+export const IcoRodaje = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="5.5" cy="17.5" r="3.5" />
+    <circle cx="18.5" cy="17.5" r="3.5" />
+    <path d="M12 17.5V14l-3-3 4-3 2 3h2.5" />
+    <circle cx="15" cy="5" r="1.3" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+/* Velocidad: el cuentakilometros con la aguja alta. */
+export const IcoVelocidad = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 16a8 8 0 1 1 16 0" />
+    <path d="M12 16l4-5" />
+    <circle cx="12" cy="16" r="1.1" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+/* Habitos: la llama de la racha que no se apaga. */
+export const IcoHabitos = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 3c2 3 5 6 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4-.3 1.6.5 2.6 1.5 2.6S12 10 11 8c-1-2 0-4 1-5z" />
+  </svg>
+);
+
+/* Exploracion: el mapa plegado. */
+export const IcoExploracion = (p) => (
+  <svg {...base} {...p}>
+    <path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z" />
+    <path d="M9 4v14M15 6v14" />
+  </svg>
+);
+
+/* Comunidad: el grupo, no una sola persona. */
+export const IcoComunidad = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="8.3" cy="8" r="3" />
+    <circle cx="17" cy="9.2" r="2.5" />
+    <path d="M2.5 20c.6-3.4 3-5.2 5.8-5.2s5.2 1.8 5.8 5.2" />
+    <path d="M14.7 20c.4-2.6 1.8-4.2 3.6-4.2s3.2 1.4 3.6 4.2" />
+  </svg>
+);
+
 /* Menu de hamburguesa, solo para abrir el cajon en movil. */
 export const IcoMenu = (p) => (
   <svg {...base} {...p}>
