@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { MODELOS_ZONAS, NOMBRES_ZONA, PERFILES_BICI, num, duracion } from '@/lib/metrics';
+import { MODELOS_ZONAS, NOMBRES_ZONA, PERFILES_BICI } from '@/lib/metrics';
 
-export default function Datos({ cfg, setCfg, zonas, reparto, fondo }) {
-  const [vista, setVista] = useState('barras');
-
+/*
+  Pestaña de configuracion pura: las constantes que editas y los rangos
+  de cada zona que salen de ellas. El reparto real de tiempo por zona -lo
+  que mides, no lo que defines- vive ahora en Resumen, donde ademas
+  respeta el filtro de fechas en vez de arrastrar todo el historial.
+*/
+export default function Datos({ cfg, setCfg, zonas }) {
   const cambiarModelo = (id) => {
     if (id === 'personalizado') {
       // Al pasar a manual se parte de las zonas actuales, no de cero
@@ -24,14 +27,13 @@ export default function Datos({ cfg, setCfg, zonas, reparto, fondo }) {
 
   const manual = cfg.modeloZonas === 'personalizado';
   const modelo = MODELOS_ZONAS[cfg.modeloZonas];
-  const hayDatos = reparto && reparto.total > 0;
 
   return (
     <>
       <h2>Tus constantes y tus zonas</h2>
       <p className="hint">
         A la izquierda, los cuatro valores que alimentan todos los cálculos del panel. A la
-        derecha, dónde caen tus zonas de pulso y cuánto tiempo has pasado en cada una.
+        derecha, dónde caen tus zonas de pulso.
       </p>
 
       <div className="dos-col">
@@ -101,58 +103,38 @@ export default function Datos({ cfg, setCfg, zonas, reparto, fondo }) {
             </p>
           </div>
 
-          {/*
-            La tabla dice donde estan tus zonas; el donut, cuanto tiempo has
-            pasado en cada una. Son cosas distintas -una es definicion y la
-            otra medicion- pero juntas responden de un vistazo a la pregunta
-            que de verdad importa: si estas entrenando donde querias.
-          */}
-          <div className="tabla-grafico">
-            <div className="scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Zona</th><th>Desde</th><th>Hasta</th><th>% FC máx</th>
+          <div className="scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Zona</th><th>Desde</th><th>Hasta</th><th>% FC máx</th>
+                </tr>
+              </thead>
+              <tbody>
+                {zonas.map((z, i) => (
+                  <tr key={z.n}>
+                    <td>
+                      <span style={{ display: 'inline-block', width: 10, height: 10,
+                        borderRadius: 2, background: z.color, marginRight: 9,
+                        verticalAlign: -1 }} />
+                      Z{z.n} · {z.nombre}
+                    </td>
+                    <td>
+                      {manual ? (
+                        <input type="number" min="30" max="230" value={z.desde}
+                          onChange={(e) => editarLimite(i, +e.target.value)}
+                          style={{ width: 82, padding: '5px 8px', fontSize: 13,
+                            textAlign: 'right' }} />
+                      ) : (
+                        <strong style={{ color: 'var(--ink)' }}>{z.desde} ppm</strong>
+                      )}
+                    </td>
+                    <td>{z.hasta ? `${z.hasta} ppm` : 'máx'}</td>
+                    <td>{z.pct} %</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {zonas.map((z, i) => (
-                    <tr key={z.n}>
-                      <td>
-                        <span style={{ display: 'inline-block', width: 10, height: 10,
-                          borderRadius: 2, background: z.color, marginRight: 9,
-                          verticalAlign: -1 }} />
-                        Z{z.n} · {z.nombre}
-                      </td>
-                      <td>
-                        {manual ? (
-                          <input type="number" min="30" max="230" value={z.desde}
-                            onChange={(e) => editarLimite(i, +e.target.value)}
-                            style={{ width: 82, padding: '5px 8px', fontSize: 13,
-                              textAlign: 'right' }} />
-                        ) : (
-                          <strong style={{ color: 'var(--ink)' }}>{z.desde} ppm</strong>
-                        )}
-                      </td>
-                      <td>{z.hasta ? `${z.hasta} ppm` : 'máx'}</td>
-                      <td>{z.pct} %</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="chart">
-              {hayDatos
-                ? <Pastel zonas={zonas} reparto={reparto} compacto />
-                : (
-                  <p className="hint" style={{ fontSize: 13, margin: 0 }}>
-                    {fondo?.activo
-                      ? 'Trayendo el detalle de tus salidas para calcular el reparto…'
-                      : 'Sin salidas con pulsómetro analizadas todavía, no hay reparto que dibujar.'}
-                  </p>
-                )}
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           <dl className="glosario">
@@ -165,49 +147,6 @@ export default function Datos({ cfg, setCfg, zonas, reparto, fondo }) {
           </dl>
         </section>
       </div>
-
-      <h2>Cómo has repartido tu entrenamiento</h2>
-      <p className="hint">
-        {hayDatos
-          ? `Acumulado de las ${reparto.analizadas} salidas con pulsómetro, ${duracion(reparto.total)} en total.`
-          : fondo?.activo
-            ? 'Trayendo el detalle de tus salidas…'
-            : 'Todavía no hay ninguna salida con pulsómetro analizada.'}
-      </p>
-
-      {!hayDatos && fondo?.activo && (
-        <div className="callout" style={{ marginBottom: 14 }}>
-          Cargando el detalle de tus salidas ({fondo.hechas} de {fondo.total}). El desglose por
-          zonas aparece en cuanto termine; no hace falta que hagas nada.
-        </div>
-      )}
-
-      {hayDatos && (
-        <>
-          <div className="chips" style={{ marginTop: 0, marginBottom: 14 }}>
-            {/* Los sectores ya salen arriba, junto a la tabla de zonas. */}
-            {[['barras', 'Barras'], ['radar', 'Radar']].map(([id, txt]) => (
-              <button key={id} aria-pressed={vista === id} onClick={() => setVista(id)}>
-                {txt}
-              </button>
-            ))}
-          </div>
-
-          <div className="chart">
-            {vista === 'barras' && <Barras zonas={zonas} reparto={reparto} />}
-            {vista === 'radar' && <Radar zonas={zonas} reparto={reparto} />}
-            <div className="legend">
-              {zonas.map((z) => (
-                <span key={z.n}>
-                  <i style={{ background: z.color }} />Z{z.n} {z.nombre} · {num(reparto.porcentaje[z.n - 1], 0)} %
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <Veredicto reparto={reparto} zonas={zonas} />
-        </>
-      )}
     </>
   );
 }
@@ -219,182 +158,3 @@ const DESCRIPCIONES = [
   'El ritmo que puedes sostener una hora. Sube tu techo sostenible.',
   'Series cortas y muy duras. Mejora el consumo máximo de oxígeno.',
 ];
-
-/* ---------- barras horizontales ---------- */
-function Barras({ zonas, reparto }) {
-  const max = Math.max(...reparto.segundos) || 1;
-  return (
-    <svg viewBox="0 0 1000 260" width="100%">
-      {zonas.map((z, i) => {
-        const y = 14 + i * 48;
-        const w = (reparto.segundos[i] / max) * 700;
-        return (
-          <g key={z.n}>
-            <text x="0" y={y + 22} fill="#9BA5B4" fontSize="13" fontFamily="Helvetica,Arial,sans-serif">
-              Z{z.n} {z.nombre}
-            </text>
-            <rect x="170" y={y + 6} width="700" height="22" fill="#151A21" rx="4" />
-            <rect x="170" y={y + 6} width={Math.max(w, 2)} height="22" fill={z.color} rx="4" />
-            <text x="885" y={y + 22} fill="#E8EAED" fontSize="13" fontWeight="500"
-              fontFamily="ui-monospace,Menlo,monospace">
-              {num(reparto.porcentaje[i], 0)} %
-            </text>
-            <text x="1000" y={y + 22} textAnchor="end" fill="#6B7684" fontSize="12"
-              fontFamily="ui-monospace,Menlo,monospace">
-              {duracion(reparto.segundos[i])}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-/* ---------- radar / poligonal ---------- */
-function Radar({ zonas, reparto }) {
-  const cx = 500, cy = 210, R = 165;
-  const max = Math.max(...reparto.porcentaje) || 1;
-  const ang = (i) => (Math.PI * 2 * i) / 5 - Math.PI / 2;
-  const punto = (i, f) => [cx + Math.cos(ang(i)) * R * f, cy + Math.sin(ang(i)) * R * f];
-
-  const anillos = [0.25, 0.5, 0.75, 1];
-  const forma = zonas
-    .map((z, i) => punto(i, Math.max(reparto.porcentaje[i] / max, 0.02)).join(','))
-    .join(' ');
-
-  return (
-    <svg viewBox="0 0 1000 420" width="100%">
-      {anillos.map((f) => (
-        <polygon key={f}
-          points={zonas.map((z, i) => punto(i, f).join(',')).join(' ')}
-          fill="none" stroke="#2A3341" strokeWidth="1" />
-      ))}
-      {zonas.map((z, i) => (
-        <line key={z.n} x1={cx} y1={cy} x2={punto(i, 1)[0]} y2={punto(i, 1)[1]}
-          stroke="#2A3341" strokeWidth="1" />
-      ))}
-
-      <polygon points={forma} fill="#4A90D9" fillOpacity=".18" stroke="#4A90D9" strokeWidth="2" />
-
-      {zonas.map((z, i) => {
-        const [px, py] = punto(i, Math.max(reparto.porcentaje[i] / max, 0.02));
-        const [lx, ly] = punto(i, 1.19);
-        return (
-          <g key={z.n}>
-            <circle cx={px} cy={py} r="5" fill={z.color} stroke="#0E1116" strokeWidth="2" />
-            <text x={lx} y={ly} textAnchor="middle" fill={z.color} fontSize="13" fontWeight="500"
-              fontFamily="Helvetica,Arial,sans-serif">
-              Z{z.n}
-            </text>
-            <text x={lx} y={ly + 16} textAnchor="middle" fill="#6B7684" fontSize="11.5"
-              fontFamily="ui-monospace,Menlo,monospace">
-              {num(reparto.porcentaje[i], 0)} %
-            </text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-/* ---------- sectores ---------- */
-/*
-  En modo compacto el dibujo es el mismo pero encuadrado: al ir al lado de
-  la tabla dispone de un cuadrado estrecho, no de una franja ancha, y con
-  el encuadre de la version grande quedaria diminuto en medio de un mar de
-  hueco.
-*/
-function Pastel({ zonas, reparto, compacto = false }) {
-  const cx = compacto ? 190 : 500, cy = 190, R = 150, r = 82;
-  let acc = -Math.PI / 2;
-
-  const sectores = zonas.map((z, i) => {
-    const frac = reparto.porcentaje[i] / 100;
-    const ini = acc;
-    const fin = acc + frac * Math.PI * 2;
-    acc = fin;
-    if (frac <= 0.0005) return null;
-
-    const grande = fin - ini > Math.PI ? 1 : 0;
-    const P = (a, rad) => [cx + Math.cos(a) * rad, cy + Math.sin(a) * rad];
-    const [x1, y1] = P(ini, R), [x2, y2] = P(fin, R);
-    const [x3, y3] = P(fin, r), [x4, y4] = P(ini, r);
-    const medio = (ini + fin) / 2;
-    const [tx, ty] = P(medio, (R + r) / 2);
-
-    return (
-      <g key={z.n}>
-        <path
-          d={`M ${x1} ${y1} A ${R} ${R} 0 ${grande} 1 ${x2} ${y2} L ${x3} ${y3} A ${r} ${r} 0 ${grande} 0 ${x4} ${y4} Z`}
-          fill={z.color} stroke="var(--card)" strokeWidth="2" />
-        {frac > 0.06 && (
-          <text x={tx} y={ty + 5} textAnchor="middle" fill="var(--bg)" fontSize="14" fontWeight="600"
-            fontFamily="ui-monospace,Menlo,monospace">
-            {num(reparto.porcentaje[i], 0)} %
-          </text>
-        )}
-      </g>
-    );
-  });
-
-  const suave = reparto.porcentaje[0] + reparto.porcentaje[1];
-  return (
-    <svg viewBox={compacto ? '0 0 380 380' : '0 0 1000 380'} width="100%">
-      {sectores}
-      <text x={cx} y={cy - 6} textAnchor="middle" fill="var(--ink)" fontSize="26" fontWeight="500"
-        fontFamily="var(--mono)">
-        {num(suave, 0)} %
-      </text>
-      <text x={cx} y={cy + 16} textAnchor="middle" fill="var(--ink3)" fontSize="12"
-        fontFamily="var(--sans)">
-        en zona 1 y 2
-      </text>
-      <text x={cx} y={cy + 34} textAnchor="middle" fill="var(--ink3)" fontSize="11.5"
-        fontFamily="var(--sans)">
-        {duracion(reparto.total)} analizados
-      </text>
-    </svg>
-  );
-}
-
-/* ---------- lectura del reparto ---------- */
-function Veredicto({ reparto, zonas }) {
-  const suave = reparto.porcentaje[0] + reparto.porcentaje[1];
-  const media = reparto.porcentaje[2];
-  const dura = reparto.porcentaje[3] + reparto.porcentaje[4];
-
-  if (media > 28) {
-    return (
-      <div className="callout warn">
-        <strong>Un {num(media, 0)} % de tu tiempo cae en zona 3.</strong> Es el ritmo que más cansa
-        y menos aporta: demasiado duro para construir base, demasiado suave para subir el umbral. En
-        las salidas de fondo, obligarte a bajar de {zonas[2].desde} ppm aunque tengas que poner un
-        desarrollo ridículo en las rampas.
-      </div>
-    );
-  }
-  if (suave >= 75 && dura >= 10) {
-    return (
-      <div className="callout ok">
-        <strong>Reparto polarizado de manual:</strong> {num(suave, 0)} % en fondo y {num(dura, 0)} %
-        en alta intensidad. Es exactamente lo que buscas. Ahora el margen de mejora está en subir el
-        volumen, no en cambiar el reparto.
-      </div>
-    );
-  }
-  if (dura < 8) {
-    return (
-      <div className="callout">
-        <strong>Solo un {num(dura, 0)} % por encima del umbral.</strong> Tienes base de sobra pero te
-        falta el estímulo que sube el techo. Una sesión dura por semana, sin tocar el resto, cambiaría
-        bastante el panorama.
-      </div>
-    );
-  }
-  return (
-    <div className="callout ok">
-      <strong>{num(suave, 0)} % en fondo, {num(dura, 0)} % en alta intensidad.</strong> El reparto es
-      razonable. Vigila solo que la zona 3 no se vaya creciendo mes a mes.
-    </div>
-  );
-}

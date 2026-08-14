@@ -20,7 +20,7 @@ import {
   vatios, vatiosPuerto, repartoZonas, repartoGlobal,
   calcularZonas, ultimosDias, consejoEntrenador, normalizarAltitud,
   velocidadMaximaLlano, tipoRuta,
-  num, duracionHMS, fechaCorta, fechaDDMMAA, kmh, km,
+  num, duracion, duracionHMS, fechaCorta, fechaDDMMAA, kmh, km,
 } from '@/lib/metrics';
 
 /* Codigo de tres letras y color de cada tipo de terreno, para la
@@ -242,6 +242,13 @@ export default function Dashboard({ atleta }) {
     () => repartoGlobal(cache, zonas, excluidas),
     [cache, zonas, excluidas]
   );
+  /* Mismo reparto por zonas, pero acotado al periodo del filtro de fechas
+     de Resumen -a diferencia de "global", que es todo el historial y
+     alimenta la pestaña Carga. */
+  const repartoResumen = useMemo(
+    () => repartoGlobal(cache, zonas, excluidas, new Set(activas.map((s) => s.id))),
+    [cache, zonas, excluidas, activas]
+  );
 
   if (error && !salidas) {
     return (
@@ -293,7 +300,7 @@ export default function Dashboard({ atleta }) {
       {error && <div className="callout warn">{error}</div>}
 
       {pestana === 'resumen' && (
-        <Estadisticas salidas={activas} cfg={cfg} umbral={umbral}
+        <Estadisticas salidas={activas} todas={salidas} excluidas={excluidas} cfg={cfg} umbral={umbral}
           enRango={enRango} rango={rango} setRango={setRango} velMaxLlano={velMaxLlano}
           irASalida={irASalida} />
       )}
@@ -302,7 +309,8 @@ export default function Dashboard({ atleta }) {
       {pestana === 'resumen' && (
         <Resumen salidas={activas} cfg={cfg} umbral={umbral} masaTotal={masaTotal}
           excluidas={excluidas} setExcluidas={setExcluidas} enRango={enRango}
-          cache={cache} dias={dias} pedirStreams={pedirStreams} irASalida={irASalida} />
+          cache={cache} dias={dias} pedirStreams={pedirStreams} irASalida={irASalida}
+          zonas={zonas} reparto={repartoResumen} />
       )}
       {pestana === 'entrenamientos' && (
         <Entrenamientos salidas={salidas} cfg={cfg} zonas={zonas} umbral={umbral} cache={cache}
@@ -310,7 +318,7 @@ export default function Dashboard({ atleta }) {
           onSalidaInicialConsumida={() => setSaltarASalida(null)} />
       )}
       {pestana === 'datos' && (
-        <Datos cfg={cfg} setCfg={setCfg} zonas={zonas} reparto={global} fondo={fondo} />
+        <Datos cfg={cfg} setCfg={setCfg} zonas={zonas} />
       )}
       {pestana === 'ascensiones' && (
         <Ascensiones salidas={activas} cache={cache} excluidas={excluidas}
@@ -344,11 +352,17 @@ export default function Dashboard({ atleta }) {
 
 /* ============================================================ */
 
-function Dato({ k, v, u, d, cl, dEnHover }) {
+function Dato({ k, v, u, d, cl, dEnHover, delta, deltaDecimales = 0, deltaUnidad, tituloDelta }) {
   return (
     <div className={`stat${dEnHover ? ' con-detalle' : ''}`} tabIndex={dEnHover && d ? 0 : undefined}>
       <div className="k">{k}</div>
       <div className="v">{v} {u && <small>{u}</small>}</div>
+      {delta != null && (
+        <div className={`delta ${delta > 0 ? 'up' : delta < 0 ? 'down' : ''}`} title={tituloDelta}>
+          {delta > 0 ? '▲' : delta < 0 ? '▼' : '–'} {num(Math.abs(delta), deltaDecimales)}
+          {deltaUnidad ? ` ${deltaUnidad}` : ''}
+        </div>
+      )}
       {d && <div className={`d ${cl || ''}`}>{d}</div>}
     </div>
   );
@@ -360,18 +374,37 @@ function Dato({ k, v, u, d, cl, dEnHover }) {
   cifras, porque es lo que decide que periodo resumen: verlo justo antes
   evita tener que buscarlo mas abajo para entender a que corresponden.
 */
-function Estadisticas({ salidas, cfg, umbral, enRango, rango, setRango, velMaxLlano, irASalida }) {
+function Estadisticas({ salidas, todas, excluidas, cfg, umbral, enRango, rango, setRango,
+  velMaxLlano, irASalida }) {
   /* Limites reales del historial, para acotar los selectores de fecha */
   const limites = useMemo(() => {
     if (!enRango.length && !salidas.length) return null;
-    const todas = enRango.length ? enRango : salidas;
-    return { min: todas[0].fecha.slice(0, 10), max: todas[todas.length - 1].fecha.slice(0, 10) };
+    const rango2 = enRango.length ? enRango : salidas;
+    return { min: rango2[0].fecha.slice(0, 10), max: rango2[rango2.length - 1].fecha.slice(0, 10) };
   }, [enRango, salidas]);
 
   const atajo = (dias) => {
     const hoy = new Date();
     const desde = new Date(hoy.getTime() - dias * 864e5);
     setRango({ desde: desde.toISOString().slice(0, 10), hasta: hoy.toISOString().slice(0, 10) });
+  };
+
+  /* Un atajo esta "activo" cuando el rango actual es exactamente el que
+     produciria hoy -asi si tocas las fechas a mano el chip se apaga solo,
+     en vez de quedarse marcado sobre un rango que ya no es el suyo. */
+  const activoAtajo = (dias) => {
+    if (!rango.desde || !rango.hasta) return false;
+    const hoy = new Date();
+    const desdeEsperado = new Date(hoy.getTime() - dias * 864e5).toISOString().slice(0, 10);
+    return rango.desde === desdeEsperado && rango.hasta === hoy.toISOString().slice(0, 10);
+  };
+
+  /* Tocar un atajo ya activo lo quita -vuelve a "Todo el historial"- en
+     vez de dejarlo pulsado sin forma de deshacerlo salvo borrando las
+     fechas a mano. */
+  const toggleAtajo = (dias) => {
+    if (activoAtajo(dias)) setRango({ desde: '', hasta: '' });
+    else atajo(dias);
   };
 
   const suma = (f) => salidas.reduce((a, s) => a + f(s), 0);
@@ -383,6 +416,47 @@ function Estadisticas({ salidas, cfg, umbral, enRango, rango, setRango, velMaxLl
      pasa "activas" a los dos), asi que la salida ganadora siempre esta
      aqui dentro. */
   const salidaVel = velMaxLlano ? salidas.find((s) => s.id === velMaxLlano.salidaId) : null;
+
+  /*
+    Tramo inmediatamente anterior, de la misma duracion que el elegido, para
+    poder comparar "vas a mas o a menos" sin salir de Resumen. Sin fechas
+    elegidas (Todo el historial) no hay un tramo anterior que tenga sentido,
+    asi que no se calcula nada y las flechas no aparecen.
+  */
+  const anterior = useMemo(() => {
+    if (!rango.desde || !rango.hasta) return null;
+    const msDia = 864e5;
+    const ini = new Date(rango.desde), fin = new Date(rango.hasta);
+    const dias = Math.round((fin - ini) / msDia) + 1;
+    const prevFin = new Date(ini.getTime() - msDia);
+    const prevIni = new Date(prevFin.getTime() - (dias - 1) * msDia);
+    return { desde: prevIni.toISOString().slice(0, 10), hasta: prevFin.toISOString().slice(0, 10) };
+  }, [rango]);
+
+  const salidasAnterior = useMemo(() => {
+    if (!anterior || !todas) return [];
+    return todas.filter((s) => {
+      if (excluidas.has(s.id)) return false;
+      const d = s.fecha.slice(0, 10);
+      return d >= anterior.desde && d <= anterior.hasta;
+    });
+  }, [todas, excluidas, anterior]);
+
+  const sumaAnt = (f) => salidasAnterior.reduce((a, s) => a + f(s), 0);
+  /* Diferencia en valor absoluto, no en porcentaje: null solo cuando no
+     hay tramo anterior con el que comparar (Todo el historial). */
+  const diffDelta = (actual, ant) => (anterior ? actual - ant : null);
+
+  const distTotal = suma(km);
+  const desnTotal = suma((s) => s.desnivel);
+  const horasTotal = suma((s) => s.tiempoMovimiento) / 3600;
+
+  const deltaDist = diffDelta(distTotal, sumaAnt(km));
+  const deltaDesn = diffDelta(desnTotal, sumaAnt((s) => s.desnivel));
+  const deltaHoras = diffDelta(horasTotal, sumaAnt((s) => s.tiempoMovimiento) / 3600);
+  const deltaSalidas = diffDelta(salidas.length, salidasAnterior.length);
+  const tituloDelta = anterior
+    ? `vs. ${fechaCorta(anterior.desde)} – ${fechaCorta(anterior.hasta)}` : undefined;
 
   return (
     <>
@@ -400,18 +474,26 @@ function Estadisticas({ salidas, cfg, umbral, enRango, rango, setRango, velMaxLl
             onChange={(e) => setRango({ ...rango, hasta: e.target.value })} />
         </span>
 
-        <button onClick={() => atajo(30)}>Último mes</button>
-        <button onClick={() => atajo(90)}>Últimos 3 meses</button>
-        <button onClick={() => atajo(365)}>Último año</button>
-        <button onClick={() => setRango({ desde: '', hasta: '' })}>Todo el historial</button>
+        <button aria-pressed={activoAtajo(7)} onClick={() => toggleAtajo(7)}>Última semana</button>
+        <button aria-pressed={activoAtajo(30)} onClick={() => toggleAtajo(30)}>Último mes</button>
+        <button aria-pressed={activoAtajo(90)} onClick={() => toggleAtajo(90)}>Últimos 3 meses</button>
+        <button aria-pressed={activoAtajo(365)} onClick={() => toggleAtajo(365)}>Último año</button>
+        <button aria-pressed={!rango.desde && !rango.hasta}
+          onClick={() => setRango({ desde: '', hasta: '' })}>Todo el historial</button>
       </div>
 
       {salidas.length > 0 && (
         <div className="grid centrado" style={{ marginBottom: 'var(--e4)' }}>
-          <Dato k="Distancia total" v={num(suma(km), 0)} u="km" />
-          <Dato k="Desnivel acumulado" v={num(suma((s) => s.desnivel), 0)} u="m" />
-          <Dato k="Horas totales" v={num(suma((s) => s.tiempoMovimiento) / 3600, 1)} u="h" />
-          <Dato k="Número de salidas" v={salidas.length} />
+          <Dato k="Distancia total" v={num(distTotal, 0)} u="km" dEnHover
+            d={`${num(distTotal / salidas.length, 1)} km de media`}
+            delta={deltaDist} deltaDecimales={1} deltaUnidad="km" tituloDelta={tituloDelta} />
+          <Dato k="Desnivel acumulado" v={num(desnTotal, 0)} u="m"
+            delta={deltaDesn} deltaDecimales={0} deltaUnidad="m" tituloDelta={tituloDelta} />
+          <Dato k="Horas totales" v={num(horasTotal, 1)} u="h" dEnHover
+            d="tiempo en movimiento"
+            delta={deltaHoras} deltaDecimales={1} deltaUnidad="h" tituloDelta={tituloDelta} />
+          <Dato k="Número de salidas" v={salidas.length}
+            delta={deltaSalidas} deltaDecimales={0} deltaUnidad="" tituloDelta={tituloDelta} />
           <Dato k="Salida más larga" v={masLarga ? num(km(masLarga), 1) : '—'} u="km" dEnHover
             d={masLarga ? (
               <>
@@ -443,7 +525,7 @@ function ValorTabla({ max, children }) {
 }
 
 function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
-  enRango, cache, dias, pedirStreams, irASalida }) {
+  enRango, cache, dias, pedirStreams, irASalida, zonas, reparto }) {
 
   /* Máximos de cada columna para resaltar */
   const maximos = useMemo(() => ({
@@ -484,6 +566,8 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
     <>
       <h2>Últimos 30 días</h2>
       <UltimosDias dias={dias} />
+
+      <RepartoZonas zonas={zonas} reparto={reparto} />
 
       {salidas.length === 0 ? (
         <div className="callout warn">
@@ -607,6 +691,117 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
         </>
       )}
     </>
+  );
+}
+
+/*
+  El reparto por zonas del periodo filtrado (el mismo rango de fechas que
+  las cajas de arriba), no del historial completo: cambia el filtro y
+  este bloque cambia con el. La lectura textual queda oculta detras de un
+  boton -es la explicacion larga, no hace falta que ocupe sitio siempre.
+*/
+function RepartoZonas({ zonas, reparto }) {
+  const [verInfo, setVerInfo] = useState(false);
+  const hayDatos = reparto && reparto.total > 0;
+
+  if (!hayDatos) return null;
+
+  return (
+    <>
+      <h2>Tus zonas</h2>
+      <p className="hint">
+        Acumulado de las {reparto.analizadas} salidas con pulsómetro en el periodo elegido,{' '}
+        {duracion(reparto.total)} en total.
+      </p>
+      <div className="chart">
+        <BarrasZonas zonas={zonas} reparto={reparto} />
+        <div className="legend">
+          {zonas.map((z) => (
+            <span key={z.n}>
+              <i style={{ background: z.color }} />Z{z.n} {z.nombre} · {num(reparto.porcentaje[z.n - 1], 0)} %
+            </span>
+          ))}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--e3)' }}>
+          <button aria-expanded={verInfo} onClick={() => setVerInfo((v) => !v)}>
+            {verInfo ? 'Ocultar' : 'Qué significa'}
+          </button>
+        </div>
+      </div>
+      {verInfo && <Veredicto reparto={reparto} zonas={zonas} />}
+    </>
+  );
+}
+
+/* ---------- barras horizontales del reparto por zonas ---------- */
+function BarrasZonas({ zonas, reparto }) {
+  const max = Math.max(...reparto.segundos) || 1;
+  return (
+    <svg viewBox="0 0 1000 260" width="100%">
+      {zonas.map((z, i) => {
+        const y = 14 + i * 48;
+        const w = (reparto.segundos[i] / max) * 700;
+        return (
+          <g key={z.n}>
+            <text x="0" y={y + 22} fill="#9BA5B4" fontSize="13" fontFamily="Helvetica,Arial,sans-serif">
+              Z{z.n} {z.nombre}
+            </text>
+            <rect x="170" y={y + 6} width="700" height="22" fill="#151A21" rx="4" />
+            <rect x="170" y={y + 6} width={Math.max(w, 2)} height="22" fill={z.color} rx="4" />
+            <text x="885" y={y + 22} fill="#E8EAED" fontSize="13" fontWeight="500"
+              fontFamily="ui-monospace,Menlo,monospace">
+              {num(reparto.porcentaje[i], 0)} %
+            </text>
+            <text x="1000" y={y + 22} textAnchor="end" fill="#6B7684" fontSize="12"
+              fontFamily="ui-monospace,Menlo,monospace">
+              {duracion(reparto.segundos[i])}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/* ---------- lectura del reparto ---------- */
+function Veredicto({ reparto, zonas }) {
+  const suave = reparto.porcentaje[0] + reparto.porcentaje[1];
+  const media = reparto.porcentaje[2];
+  const dura = reparto.porcentaje[3] + reparto.porcentaje[4];
+
+  if (media > 28) {
+    return (
+      <div className="callout warn">
+        <strong>Un {num(media, 0)} % de tu tiempo cae en zona 3.</strong> Es el ritmo que más cansa
+        y menos aporta: demasiado duro para construir base, demasiado suave para subir el umbral. En
+        las salidas de fondo, obligarte a bajar de {zonas[2].desde} ppm aunque tengas que poner un
+        desarrollo ridículo en las rampas.
+      </div>
+    );
+  }
+  if (suave >= 75 && dura >= 10) {
+    return (
+      <div className="callout ok">
+        <strong>Reparto polarizado de manual:</strong> {num(suave, 0)} % en fondo y {num(dura, 0)} %
+        en alta intensidad. Es exactamente lo que buscas. Ahora el margen de mejora está en subir el
+        volumen, no en cambiar el reparto.
+      </div>
+    );
+  }
+  if (dura < 8) {
+    return (
+      <div className="callout">
+        <strong>Solo un {num(dura, 0)} % por encima del umbral.</strong> Tienes base de sobra pero te
+        falta el estímulo que sube el techo. Una sesión dura por semana, sin tocar el resto, cambiaría
+        bastante el panorama.
+      </div>
+    );
+  }
+  return (
+    <div className="callout ok">
+      <strong>{num(suave, 0)} % en fondo, {num(dura, 0)} % en alta intensidad.</strong> El reparto es
+      razonable. Vigila solo que la zona 3 no se vaya creciendo mes a mes.
+    </div>
   );
 }
 
