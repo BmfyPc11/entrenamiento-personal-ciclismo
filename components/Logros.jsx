@@ -683,7 +683,7 @@ const claveMes = (f) => f.slice(0, 7);
 const claveAnio = (f) => f.slice(0, 4);
 
 function claveSemana(f) {
-  const d = new Date(`${f.slice(0, 10)}T00:00:00`);
+  const d = new Date(`${f.slice(0, 10)}T00:00:00Z`);
   const diaISO = (d.getDay() + 6) % 7; // 0 = lunes
   d.setDate(d.getDate() - diaISO);
   return d.toISOString().slice(0, 10);
@@ -693,7 +693,7 @@ function claveSemana(f) {
    Sabado y domingo del mismo fin de semana comparten la fecha del
    sabado como clave. */
 function claveFinDeSemana(f) {
-  const d = new Date(`${f.slice(0, 10)}T00:00:00`);
+  const d = new Date(`${f.slice(0, 10)}T00:00:00Z`);
   const dia = d.getDay(); // 0 domingo, 6 sabado
   if (dia !== 0 && dia !== 6) return null;
   if (dia === 0) d.setDate(d.getDate() - 1);
@@ -772,12 +772,12 @@ function rachaMasLarga(salidas) {
   const dias = new Set((salidas || []).map((s) => claveDia(s.fecha)));
   let mejor = 0;
   dias.forEach((d) => {
-    const anterior = new Date(`${d}T00:00:00`);
+    const anterior = new Date(`${d}T00:00:00Z`);
     anterior.setDate(anterior.getDate() - 1);
     if (dias.has(anterior.toISOString().slice(0, 10))) return;
 
     let racha = 1;
-    const cursor = new Date(`${d}T00:00:00`);
+    const cursor = new Date(`${d}T00:00:00Z`);
     for (;;) {
       cursor.setDate(cursor.getDate() + 1);
       if (!dias.has(cursor.toISOString().slice(0, 10))) break;
@@ -795,12 +795,12 @@ function rachaSemanalMasLarga(salidas) {
   const semanas = new Set((salidas || []).map((s) => claveSemana(s.fecha)));
   let mejor = 0;
   semanas.forEach((sem) => {
-    const anterior = new Date(`${sem}T00:00:00`);
+    const anterior = new Date(`${sem}T00:00:00Z`);
     anterior.setDate(anterior.getDate() - 7);
     if (semanas.has(anterior.toISOString().slice(0, 10))) return;
 
     let racha = 1;
-    const cursor = new Date(`${sem}T00:00:00`);
+    const cursor = new Date(`${sem}T00:00:00Z`);
     for (;;) {
       cursor.setDate(cursor.getDate() + 7);
       if (!semanas.has(cursor.toISOString().slice(0, 10))) break;
@@ -818,7 +818,7 @@ function findesPerfectos(salidas) {
   (salidas || []).forEach((s) => {
     const clave = claveFinDeSemana(s.fecha);
     if (clave == null) return;
-    const dia = new Date(`${s.fecha.slice(0, 10)}T00:00:00`).getDay();
+    const dia = new Date(`${s.fecha.slice(0, 10)}T00:00:00Z`).getDay();
     const entrada = porFinde.get(clave) || { sabado: false, domingo: false };
     if (dia === 6) entrada.sabado = true; else entrada.domingo = true;
     porFinde.set(clave, entrada);
