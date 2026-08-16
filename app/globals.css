@@ -107,6 +107,15 @@ body{color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6;
   padding:44px 0 28px;flex-wrap:wrap;position:sticky;top:0;z-index:15;
   background:var(--bg)}
 @media(max-width:900px){.top{top:var(--barra-movil-h)}}
+
+/* En Actividades el resumen general (Distancia, Desnivel, Tiempo...) se
+   queda fijo junto con el titulo, no solo el titulo: los dos viven dentro
+   de este mismo bloque anclado. El .top de dentro no necesita su propio
+   sticky aqui -el padre ya se encarga-, asi que se desactiva para que no
+   quede una segunda zona pegajosa dentro de la primera. */
+.cab-fija{position:sticky;top:0;z-index:15;background:var(--bg);padding-bottom:14px}
+.cab-fija .top{position:static;padding-bottom:0}
+@media(max-width:900px){.cab-fija{top:var(--barra-movil-h)}}
 .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
   color:var(--ink3);margin:0 0 12px}
 h1{font-size:clamp(32px,5vw,46px);line-height:1.04;letter-spacing:-.03em;margin:0;
@@ -541,6 +550,43 @@ h1{font-size:clamp(26px,3.4vw,34px)}
 */
 .sel-salida{display:grid;gap:var(--e2);justify-items:end;min-width:0}
 
+/* Fila que agrupa el buscador, el desplegable y las flechas de
+   anterior/siguiente: los tres controles de cambiar de actividad,
+   juntos, a la derecha del titulo. */
+.salida-nav{display:flex;align-items:center;gap:8px;width:100%;min-width:0}
+.salida-nav-flechas{display:flex;align-items:center;gap:4px;flex:0 0 auto}
+.btn-nav-salida{all:unset;box-sizing:border-box;display:flex;align-items:center;
+  justify-content:center;width:34px;height:34px;border-radius:999px;cursor:pointer;
+  color:var(--ink2);border:1px solid var(--line2);background:var(--card2)}
+.btn-nav-salida:hover{background:var(--card);color:var(--ink)}
+.btn-nav-salida:disabled{opacity:.35;cursor:default}
+.btn-nav-salida:disabled:hover{background:var(--card2);color:var(--ink2)}
+
+/* Boton de lupa que abre el buscador por nombre, a la izquierda del
+   desplegable. Mismo tamano y estilo que las flechas de navegacion, para
+   que los tres controles se lean como un solo grupo. */
+.buscador-salida{position:relative;flex:0 0 auto}
+.btn-buscar-salida{all:unset;box-sizing:border-box;display:flex;align-items:center;
+  justify-content:center;width:34px;height:34px;border-radius:999px;cursor:pointer;
+  color:var(--ink2);border:1px solid var(--line2);background:var(--card2)}
+.btn-buscar-salida:hover{background:var(--card);color:var(--ink)}
+.btn-buscar-salida[aria-expanded="true"]{border-color:var(--acento);color:var(--acento)}
+
+.buscador-salida-panel{position:absolute;left:0;top:100%;margin-top:8px;z-index:20;
+  width:min(360px,80vw);background:var(--card2);border:1px solid var(--line2);
+  border-radius:var(--r-l);box-shadow:0 12px 28px rgba(0,0,0,.4);padding:8px}
+.buscador-salida-panel input{all:unset;box-sizing:border-box;width:100%;
+  padding:9px 12px;border-radius:var(--r-s);background:var(--bg2);
+  border:1px solid var(--line2);font-size:13.5px;color:var(--ink)}
+.buscador-salida-panel input:focus{border-color:var(--acento)}
+/* Reutiliza selector-salida-lista (misma fila de cat/fecha/nombre y
+   mismos estados de hover/seleccion), solo que aqui vive dentro del
+   panel en vez de flotar sola: sin posicion absoluta ni ancho propio. */
+.buscador-salida-lista{position:static;right:auto;top:auto;min-width:0;
+  width:auto;max-width:none;margin:8px 0 0;padding:0;max-height:280px;
+  background:none;border:0;box-shadow:none}
+.buscador-salida-vacio{padding:9px 12px;font-size:13px;color:var(--ink3)}
+
 /*
   Sustituye a un <select> nativo: este necesita pintar una insignia de
   color por fila (el tipo de salida) y hacer que solo el nombre vaya en
@@ -548,10 +594,14 @@ h1{font-size:clamp(26px,3.4vw,34px)}
   plano y uniforme. Mismo patron boton-mas-panel que el desplegable de
   escala en Logros.
 */
-.selector-salida{position:relative;width:100%;max-width:min(520px,44vw)}
+.selector-salida{position:relative;width:100%;max-width:min(520px,44vw);
+  flex:1 1 auto;min-width:0}
+/* Mismo alto que los botones de flechas/lupa (34px) -antes el padding
+   vertical propio lo dejaba mas grueso que el resto del grupo de
+   navegacion, y los tres controles se leian de tamanos distintos. */
 .selector-salida-boton{all:unset;box-sizing:border-box;position:relative;
-  display:flex;align-items:center;gap:8px;width:100%;cursor:pointer;
-  padding:10px 40px 10px 16px;border-radius:999px;
+  display:flex;align-items:center;gap:8px;width:100%;height:34px;cursor:pointer;
+  padding:0 40px 0 16px;border-radius:999px;
   border:1px solid var(--acento);
   background:color-mix(in srgb, var(--acento) 14%, var(--bg2))}
 .selector-salida-boton:hover{background:color-mix(in srgb, var(--acento) 22%, var(--bg2))}
@@ -629,6 +679,7 @@ h1{font-size:clamp(26px,3.4vw,34px)}
 @media(max-width:760px){
   .sel-salida{justify-items:start;width:100%}
   .selector-salida{max-width:none}
+  .salida-nav{flex-wrap:wrap}
 }
 
 /*

@@ -65,6 +65,22 @@ function medirTexto(texto, fontCss) {
 const FUENTE_MONO = 'ui-monospace, Menlo, monospace';
 const FUENTE_SANS = '"Helvetica Neue", Helvetica, Arial, "Segoe UI", system-ui, sans-serif';
 
+/* Tiempo transcurrido en formato reloj (00:00), no el "1h 45m" de
+   duracion(): el tooltip del cursor necesita las cifras cortas y de
+   ancho fijo de un cronometro, no una frase. Con horas de por medio se
+   antepone el numero de horas sin ceros -"1:04:12"-, que es como se lee
+   un cronometro real pasada la hora. */
+function tiempoReloj(s) {
+  if (s == null) return null;
+  s = Math.round(s);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const seg = s % 60;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(seg).padStart(2, '0');
+  return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
 /* Posicion de un indice del stream original dentro del array reducido. */
 function mapearIdx(iOriginal, datos) {
   let mejor = 0;
@@ -81,8 +97,8 @@ function mapearIdx(iOriginal, datos) {
   - modo "dureza":    cada tramo se pinta segun su pendiente
   - modo "zonas":     cada tramo se pinta con el color de la zona de FC en la que ibas
   - modo "velocidad": cada tramo se pinta segun el ritmo al que se rodo
-  - zonaFoco:         si hay una zona seleccionada, el resto se atenua
-  - durezaFoco/velFoco: lo mismo, para dureza y velocidad
+  - zonaFoco:         lista de zonas seleccionadas; si no esta vacia, el resto se atenua
+  - durezaFoco/velFoco: lo mismo, para dureza y velocidad -tambien listas-
 */
 export default function Perfil({
   streams,
@@ -90,9 +106,9 @@ export default function Perfil({
   nombres = [],
   zonas,
   modo = 'relieve',
-  zonaFoco = null,
-  durezaFoco = null,
-  velFoco = null,
+  zonaFoco = [],
+  durezaFoco = [],
+  velFoco = [],
   altura = 260,
   puertoFoco = null,
   /*
@@ -132,6 +148,16 @@ export default function Perfil({
     los sitios que no lo tocan no cambian.
   */
   amarillo = simple,
+  /* Avisa hacia fuera del punto (indice del stream completo, no del
+     reducido) bajo el cursor, o null al salir del grafico -asi Mapa
+     puede pintar ahi el mismo punto sin que Perfil sepa que existe un
+     mapa. */
+  onHoverChange,
+  /* Salida clasificada como llana (misma regla que la insignia "LLA":
+     menos de 5 m/km de desnivel). Con esto activo el eje vertical pide
+     mas aire de lo normal, para que los repechos cortos de una etapa
+     llana se disimulen en vez de leerse como un puerto. */
+  llana = false,
 }) {
   const [hover, setHover] = useState(null);
 
@@ -173,6 +199,13 @@ export default function Perfil({
   /* Foco de una parada al pasar el cursor, independiente del hover general
      del perfil: son dos tooltips distintos y no tienen por que ir juntos. */
   const [paradaFoco, setParadaFoco] = useState(null);
+
+  /* Foco de un puerto al pasar el cursor por su ficha, propio de aqui
+     -no llega del padre como puertoFoco (ese lo marca la fila de la
+     tabla de abajo). Con los dos junto en "puertoActivo" el puerto se
+     resalta igual venga el foco de la tabla o de pasar por encima de su
+     propia ficha en el grafico. */
+  const [fichaFoco, setFichaFoco] = useState(null);
 
   /*
     Se detecta sobre el stream completo, no sobre los hasta 900 puntos
@@ -262,8 +295,14 @@ export default function Perfil({
     Al quedarse con el maximo de las dos, cada terreno cae donde debe sin
     tener que clasificarlo: en montana manda el 20 % y en llano manda el
     suelo, que es justo el comportamiento de siempre.
+
+    Las etapas marcadas como llanas (misma regla que la insignia "LLA")
+    piden ademas un 80 % extra de suelo: el rango de siempre ya evita que
+    el temblor del altimetro se lea como una sierra, pero en una etapa
+    realmente llana interesa ir mas alla y disimular tambien los repechos
+    cortos de verdad, no solo el ruido de medida.
   */
-  const rangoMinimo = Math.max(120, Math.min(400, maxD * 6));
+  const rangoMinimo = Math.max(120, Math.min(400, maxD * 6)) * (llana ? 1.8 : 1);
 
   /*
     La base baja hacia el nivel del mar en cuanto la salida ronda esa
@@ -474,14 +513,17 @@ export default function Perfil({
   /* --- posicion de los puertos en el array reducido --- */
   const mapear = (iOriginal) => mapearIdx(iOriginal, datos);
 
+  const puertoActivo = fichaFoco != null ? fichaFoco : puertoFoco;
+
   const onMove = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - r.left) / r.width) * W;
     const kmPos = ((x - L) / (W - L - R)) * maxD;
-    if (kmPos < 0 || kmPos > maxD) return setHover(null);
+    if (kmPos < 0 || kmPos > maxD) { setHover(null); onHoverChange?.(null); return; }
     let mejor = 0, dif = Infinity;
     datos.d.forEach((v, i) => { const dd = Math.abs(v - kmPos); if (dd < dif) { dif = dd; mejor = i; } });
     setHover(mejor);
+    onHoverChange?.(datos.idx[mejor]);
   };
 
   /* Las cajas ya traen sitio y medidas; aqui solo se marca cual esta
@@ -489,7 +531,7 @@ export default function Perfil({
   const fichas = cajas.map((c) => ({
     ...c,
     alto: ALTO_FICHA,
-    activo: puertoFoco === c.i,
+    activo: puertoActivo === c.i,
   }));
 
   return (
@@ -499,7 +541,7 @@ export default function Perfil({
         width={W}
         height={alturaSvg}
         onMouseMove={simple ? undefined : onMove}
-        onMouseLeave={simple ? undefined : () => setHover(null)}
+        onMouseLeave={simple ? undefined : () => { setHover(null); onHoverChange?.(null); }}
         style={{ cursor: simple ? 'default' : 'crosshair', touchAction: 'pan-y' }}
       >
         <defs>
@@ -521,7 +563,7 @@ export default function Perfil({
           <>
             {tramos.map((t, i) => {
               const c = TRAMOS_DUREZA[t.dureza - 1];
-              const atenuado = durezaFoco && t.dureza !== durezaFoco;
+              const atenuado = durezaFoco.length > 0 && !durezaFoco.includes(t.dureza);
               return (
                 <path key={i} d={areaPath(t.ini, Math.min(t.fin + 1, datos.d.length - 1))}
                   fill={c.color} stroke={c.color} strokeWidth="0.6"
@@ -536,7 +578,7 @@ export default function Perfil({
           <>
             {tramos.map((t, i) => {
               const c = TRAMOS_VELOCIDAD[t.velocidad - 1];
-              const atenuado = velFoco && t.velocidad !== velFoco;
+              const atenuado = velFoco.length > 0 && !velFoco.includes(t.velocidad);
               return (
                 <path key={i} d={areaPath(t.ini, Math.min(t.fin + 1, datos.d.length - 1))}
                   fill={c.color} stroke={c.color} strokeWidth="0.6"
@@ -551,7 +593,7 @@ export default function Perfil({
           <>
             {tramos.map((t, i) => {
               const z = zonas.find((x) => x.n === t.zona);
-              const atenuado = zonaFoco && t.zona !== zonaFoco;
+              const atenuado = zonaFoco.length > 0 && !zonaFoco.includes(t.zona);
               return (
                 <path key={i} d={areaPath(t.ini, t.fin)}
                   fill={z ? z.color : '#4A5563'}
@@ -577,6 +619,22 @@ export default function Perfil({
         )}
 
         {/*
+          Marca ligera de la totalidad del puerto -de inicio a cima-, en
+          cualquier modo: al pasar el cursor por su ficha (o su fila en la
+          tabla) se ve de un vistazo cuanto abarca la subida, no solo el
+          punto exacto donde esta la ficha. Va por debajo del subrayado y
+          de la propia ficha, asi que no les quita protagonismo.
+        */}
+        {puertos.map((p, i) => {
+          if (puertoActivo !== i) return null;
+          const a = mapear(p.inicio), b = mapear(p.fin);
+          if (b <= a) return null;
+          return (
+            <path key={`m${i}`} d={areaPath(a, b)} fill="#D14B42" opacity="0.16" pointerEvents="none" />
+          );
+        })}
+
+        {/*
           El subrayado de la subida se queda solo en "Informacion". En los
           otros dos modos el recorrido ya esta pintado con su propio codigo
           de color —la pendiente o la zona de pulso— y una linea amarilla
@@ -587,7 +645,7 @@ export default function Perfil({
         {modo === 'relieve' && puertos.map((p, i) => {
           const a = mapear(p.inicio), b = mapear(p.fin);
           if (b <= a) return null;
-          const activo = puertoFoco === i;
+          const activo = puertoActivo === i;
           return (
             <path key={`s${i}`} d={lineaPath(a, b)} fill="none"
               stroke={activo ? '#D14B42' : '#E0A82E'}
@@ -627,6 +685,8 @@ export default function Perfil({
                 <g transform={`translate(${f.xCaja},${f.yCaja})`}
                   pointerEvents={onPuertoClick ? 'auto' : 'none'}
                   onClick={onPuertoClick ? () => onPuertoClick(f.i) : undefined}
+                  onMouseEnter={onPuertoClick ? () => setFichaFoco(f.i) : undefined}
+                  onMouseLeave={onPuertoClick ? () => setFichaFoco(null) : undefined}
                   style={onPuertoClick ? { cursor: 'pointer' } : undefined}>
                   <rect width={f.ancho} height={f.alto} rx="7"
                     fill="#161C26" stroke={trazo}
@@ -757,41 +817,24 @@ export default function Perfil({
               stroke="#9BA5B4" strokeWidth="1" strokeDasharray="3 3" opacity=".55" />
             <circle cx={X(datos.d[hover])} cy={Y(datos.a[hover])} r="4.5"
               fill="#0E1116" stroke="#E8EAED" strokeWidth="2" />
+            {/* Solo distancia y tiempo transcurrido, en formato reloj: es
+                lo que se busca al pasar el cursor por el perfil -"donde
+                voy" y "cuanto llevo"-, sin la altitud ni la FC/zona que
+                traia antes y que ya se leen en otros sitios (el eje
+                vertical, la leyenda de zonas). */}
             <g transform={`translate(${Math.min(X(datos.d[hover]) + 10, W - 150)},${T + 4})`}>
-              <rect width="140" height={datos.fc || (modo === 'velocidad' && datos.t) ? 50 : 34} rx="2"
+              <rect width="140" height={datos.t ? 34 : 24} rx="2"
                 fill="#212936" stroke="#3A4553" opacity=".97" />
               <text x="9" y="18" fill="#E8EAED" fontSize="11.5"
                 fontFamily="ui-monospace,Menlo,monospace">
-                {num(datos.d[hover], 2)} km · {num(datos.a[hover], 0)} m
+                {num(datos.d[hover], 2)} km
               </text>
-              {/* En modo velocidad la segunda linea es el ritmo, no la FC:
-                  las dos compartian sitio (y="36") y con pulsometro se
-                  escribian una encima de la otra. */}
-              {datos.fc && modo !== 'velocidad' && (
-                <text x="9" y="36" fill="#E8EAED" fontSize="11.5"
+              {datos.t && (
+                <text x="9" y="30" fill="#9BA5B4" fontSize="11"
                   fontFamily="ui-monospace,Menlo,monospace">
-                  {datos.fc[hover] ? `${datos.fc[hover]} ppm · Z${zonaDeFC(datos.fc[hover], zonas).n}` : 'sin FC'}
+                  {tiempoReloj(datos.t[hover])}
                 </text>
               )}
-              {/*
-                Ritmo local en el punto, con una ventanita de +-2 muestras
-                alrededor: el paso suelto entre dos puntos consecutivos es
-                el mismo ruido de GPS que ha dado tanta guerra en toda la
-                app (ver velocidadMaximaLlanoTramo), y aqui no compensa
-                traer todo ese aparato para un tooltip.
-              */}
-              {modo === 'velocidad' && datos.t && (() => {
-                const a = Math.max(0, hover - 2), b = Math.min(datos.t.length - 1, hover + 2);
-                const dist = (datos.d[b] - datos.d[a]) * 1000;
-                const seg = datos.t[b] - datos.t[a];
-                const kmh = seg > 0 ? (dist / seg) * 3.6 : null;
-                return (
-                  <text x="9" y="36" fill="#E8EAED" fontSize="11.5"
-                    fontFamily="ui-monospace,Menlo,monospace">
-                    {kmh != null ? `${num(kmh, 1)} km/h` : '—'}
-                  </text>
-                );
-              })()}
             </g>
           </g>
         )}

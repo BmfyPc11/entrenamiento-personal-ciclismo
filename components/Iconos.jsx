@@ -102,6 +102,14 @@ export const IcoMapa = (p) => (
   </svg>
 );
 
+/* Buscar: la lupa, para el buscador de actividades por nombre. */
+export const IcoBuscar = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="10.5" cy="10.5" r="6.5" />
+    <path d="M20 20l-4.8-4.8" />
+  </svg>
+);
+
 /* Restablecer: flecha circular, para volver el zoom del mapa a su ajuste
    inicial. */
 export const IcoRestablecer = (p) => (

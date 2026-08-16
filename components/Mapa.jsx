@@ -42,7 +42,7 @@ function mapearIdx(iOriginal, idx) {
   meta (bandera de cuadros) que ya tiene el perfil, para que las dos
   vistas de la misma salida se lean como parte del mismo dibujo.
 */
-export default function Mapa({ streams, puertos = [] }) {
+export default function Mapa({ streams, puertos = [], hoverIdx = null }) {
   const svgRef = useRef(null);
   const [vista, setVista] = useState(VISTA_INICIAL);
 
@@ -174,6 +174,18 @@ export default function Mapa({ streams, puertos = [] }) {
   const ultimo = datos.lon.length - 1;
   const xFin = X(datos.lon[ultimo]), yFin = Y(datos.lat[ultimo]);
 
+  /*
+    Punto bajo el cursor en el perfil, traido tal cual (indice del stream
+    completo, no del reducido) para no perder precision buscando el
+    "mas cercano" en el array reducido: latlng ya tiene un valor por cada
+    indice del stream original, asi que se lee directo.
+  */
+  const puntoHover = (() => {
+    const p = hoverIdx != null && streams?.latlng ? streams.latlng[hoverIdx] : null;
+    if (!Array.isArray(p) || (p[0] === 0 && p[1] === 0)) return null;
+    return { x: X(p[1]), y: Y(p[0]) };
+  })();
+
   /* Posicion del cursor en el espacio de coordenadas del SVG (el mismo en
      el que vive el <g> de zoom/paneo), usando la matriz que el propio
      navegador ya calcula para convertir pantalla -> viewBox. */
@@ -186,6 +198,25 @@ export default function Mapa({ streams, puertos = [] }) {
     const t = p.matrixTransform(ctm.inverse());
     return { x: t.x, y: t.y };
   };
+
+  /*
+    Con zoom aplicado, sigue el punto que se recorre en el perfil: cada
+    vez que cambia "hoverIdx" se recoloca la vista para que ese punto
+    caiga en el centro del recuadro, igual que si se hubiera hecho zoom
+    ahi con la rueda. Sin zoom (escala minima) ya se ve toda la ruta, asi
+    que no hay nada que centrar -moverse ahi solo desplazaria la vista
+    sin motivo.
+  */
+  useEffect(() => {
+    if (!puntoHover) return;
+    const centro = { x: vbX + vbW / 2, y: vbY + vbH / 2 };
+    setVista((v) => (
+      v.escala <= ZOOM_MIN
+        ? v
+        : { ...v, x: centro.x - v.escala * puntoHover.x, y: centro.y - v.escala * puntoHover.y }
+    ));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoverIdx]);
 
   /*
     Zoom centrado en el cursor: el punto del mapa que hay bajo el raton se
@@ -322,6 +353,14 @@ export default function Mapa({ streams, puertos = [] }) {
           )
         )))}
       </g>
+
+      {/* Mismo punto que el cursor senala en el perfil, en vivo: un
+          circulo simple, sin ficha ni texto -aqui solo hace falta "donde
+          estas", el detalle ya se lee en el tooltip del propio perfil. */}
+      {puntoHover && (
+        <circle cx={puntoHover.x} cy={puntoHover.y} r="5" fill="#0E1116"
+          stroke="#E8EAED" strokeWidth="2" pointerEvents="none" />
+      )}
       </g>
       </svg>
     </div>
