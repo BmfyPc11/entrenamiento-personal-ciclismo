@@ -17,14 +17,12 @@ function redondearTecho(v) {
 }
 
 /*
-  Aire sobre la cota maxima. El normal deja un 50 % de margen sobre el
-  rango real (base a cima): con el eje pegado al desnivel exacto, una
-  subida de doscientos metros se dibuja como un puerto alpino y el
-  perfil miente sobre lo que costo. El ampliado es para mirar la forma
-  del terreno de cerca, con solo un 20 % de margen.
+  Aire sobre la cota maxima: 50 % de margen sobre el rango real (base a
+  cima). Con el eje pegado al desnivel exacto, una subida de doscientos
+  metros se dibuja como un puerto alpino y el perfil miente sobre lo que
+  costo.
 */
 const AIRE_NORMAL = 1.5;
-const AIRE_AMPLIADO = 1.2;
 
 /*
   Tres tamanos de parada, por duracion: hasta un minuto, de uno a diez, y
@@ -43,6 +41,24 @@ function radioParada(segundos) {
   if (segundos >= PARADA_MEDIA_SEG) return 6;
   return 4;
 }
+
+/*
+  Ancho real de un texto, para las fichas de puerto. Contar caracteres
+  daba cajas mal ajustadas -sobraba margen con nombres de letras
+  estrechas ("liiiiii"), y con nombres de letras anchas ("Parc Mirador
+  Poble Sec...") el texto no cabia y se recortaba contra el borde. Un
+  canvas 1x1 fuera de pantalla mide el texto con la fuente real y da el
+  ancho exacto, sin tener que renderizar nada.
+*/
+let medidorCtx = null;
+function medirTexto(texto, fontCss) {
+  if (typeof document === 'undefined') return texto.length * 7;
+  if (!medidorCtx) medidorCtx = document.createElement('canvas').getContext('2d');
+  medidorCtx.font = fontCss;
+  return medidorCtx.measureText(texto).width;
+}
+const FUENTE_MONO = 'ui-monospace, Menlo, monospace';
+const FUENTE_SANS = '"Helvetica Neue", Helvetica, Arial, "Segoe UI", system-ui, sans-serif';
 
 /* Posicion de un indice del stream original dentro del array reducido. */
 function mapearIdx(iOriginal, datos) {
@@ -92,22 +108,31 @@ export default function Perfil({
     vista.
   */
   simple = false,
+  /*
+    Si llega, la ficha de cada puerto se vuelve clicable y llama a esta
+    funcion con su indice: es como Entrenamientos lleva al usuario de la
+    ficha en el perfil a la fila del puerto en la tabla de abajo, con su
+    altimetria detallada (PerfilPuerto). Sin ella la ficha se queda como
+    estaba, solo informativa -asi las vistas simples (Tus salidas) no
+    cambian.
+  */
+  onPuertoClick = null,
+  /*
+    El relieve "Perfil" (el que no tiene su propio color por metrica) se
+    pinta en el amarillo de marca en vez del gris neutro. Antes esto solo
+    pasaba en simple -la vista minima de Tus salidas-; ahora lo pide
+    tambien Entrenamientos para su pestana "Perfil" completa, asi que se
+    separa del resto de restricciones de simple (sin cursor, sin
+    paradas...) en su propio interruptor. Por defecto seguimos simple, asi
+    los sitios que no lo tocan no cambian.
+  */
+  amarillo = simple,
 }) {
   const [hover, setHover] = useState(null);
-  const [zoom, setZoom] = useState(false);
 
-  /*
-    Los nombres de las subidas ya no son cosa del modo "Informacion".
-    Saber que esa rampa es Vallvesana ayuda igual mirando el color de la
-    pendiente o la zona de pulso en la que ibas, asi que la ficha se
-    conserva en los tres y se puede apagar cuando estorbe.
-  */
-  const [verNombres, setVerNombres] = useState(true);
-
-  /* Mismo patron que verNombres: encendido por defecto, con su propio
-     interruptor para poder apagarlo si en una salida con muchos
-     semaforos los puntos se acumulan y estorban mas de lo que informan. */
-  const [verParadas, setVerParadas] = useState(true);
+  /* Apagado por defecto: son ajustes de vista que se activan cuando hacen
+     falta, no un estado de partida. */
+  const [verParadas, setVerParadas] = useState(false);
 
   /* Foco de una parada al pasar el cursor, independiente del hover general
      del perfil: son dos tooltips distintos y no tienen por que ir juntos. */
@@ -167,12 +192,12 @@ export default function Perfil({
     cima, se colocan despues de la escala y no antes.
   */
   /*
-    La compacta apila categoria y distancia -antes iban lado a lado- para
-    poder estrechar la caja: dos lineas centradas ocupan menos ancho que
-    la misma info en fila, y una caja mas estrecha dificulta menos el
-    hueco disponible cuando hay varios puertos seguidos.
+    Categoria y distancia apiladas -antes iban lado a lado- para poder
+    estrechar la caja: dos lineas centradas ocupan menos ancho que la
+    misma info en fila, y una caja mas estrecha dificulta menos el hueco
+    disponible cuando hay varios puertos seguidos.
   */
-  const ALTO_FICHA = compacto ? 46 : 44, HUECO_FICHA = 4;
+  const ALTO_FICHA = 46, HUECO_FICHA = 4;
 
   /* Aire entre la cima y la ficha que la nombra. Suficiente para que se
      lean como dos cosas unidas por el hilo, no como una encima de otra. */
@@ -214,22 +239,13 @@ export default function Perfil({
     : Math.max(-10, Math.floor((minA - rangoMinimo * 0.15) / 25) * 25);
 
   /*
-    Dos aires posibles sobre la cota maxima. Por defecto se dibuja con el
-    holgado, que deja los puertos pequenos y da la medida real de lo que
-    es una subida; el ampliado sirve para mirar la forma del terreno de
-    cerca.
+    Aire sobre la cota maxima: deja los puertos pequenos y da la medida
+    real de lo que es una subida, en vez de dibujar cada rampa como un
+    puerto alpino.
   */
-  const techoCon = (factor) => redondearTecho(
-    base + Math.max((Math.max(maxA, 1) - base) * factor, rangoMinimo)
+  const techo = redondearTecho(
+    base + Math.max((Math.max(maxA, 1) - base) * AIRE_NORMAL, rangoMinimo)
   );
-  const techo = techoCon(zoom ? AIRE_AMPLIADO : AIRE_NORMAL);
-
-  /*
-    El interruptor solo se ofrece cuando cambia algo. En una salida llana
-    manda el suelo por distancia y los dos factores dan el mismo eje:
-    ensenar ahi un boton que no hace nada solo confunde.
-  */
-  const zoomUtil = techoCon(AIRE_NORMAL) !== techoCon(AIRE_AMPLIADO);
 
   const Y = (v) => H - B - ((v - base) / (techo - base)) * (H - T - B);
 
@@ -264,24 +280,21 @@ export default function Perfil({
   };
 
   const cajas = [];
-  if (verNombres && puertos.length) {
+  if (puertos.length) {
     puertos
       .map((p, i) => ({ p, i, k: mapearIdx(p.fin, datos) }))
       .sort((u, v) => datos.d[u.k] - datos.d[v.k])
       .forEach(({ p, i, k }) => {
         const cat = categoriaPuerto(p.metros, p.pendiente);
-        const nombre = nombres[i] || `Subida ${i + 1}`;
-        const anchoCatBase = cat.nombre.length * 8 + 12;
         /* En la compacta la insignia va sola en su fila -sin la distancia
            al lado, que hacia de tope- asi que le sobra sitio para ser un
            poco mas grande sin que la caja se ensanche de mas. */
-        const anchoCat = compacto ? anchoCatBase + 10 : anchoCatBase;
+        const anchoCatTexto = medirTexto(cat.nombre,
+          `${compacto ? 800 : 700} ${compacto ? 13 : 12.5}px ${FUENTE_MONO}`);
+        const anchoCat = anchoCatTexto + (compacto ? 26 : 18);
         const textoDist = `${num(p.metros / 1000, 1)} km`;
-        const anchoTextoDist = textoDist.length * 6.2;
-        const ancho = compacto
-          ? Math.max(anchoCat, anchoTextoDist) + 12
-          : Math.max(150,
-            Math.min(6 + anchoCat + 7 + nombre.length * 6.7 + 10, 300));
+        const anchoTextoDist = medirTexto(textoDist, `400 11.5px ${FUENTE_SANS}`);
+        const ancho = Math.max(anchoCat, anchoTextoDist) + 14;
         const x = X(datos.d[k]);
         const xCaja = Math.max(L, Math.min(x - ancho / 2, W - R - ancho));
         const yCima = Y(datos.a[k]);
@@ -308,13 +321,25 @@ export default function Perfil({
           if (!choca) break;
           yCaja = choca.yCaja - ALTO_FICHA - HUECO_FICHA;
         }
-        if (yCaja < T0) yCaja = T0;
 
-        cajas.push({ p, i, k, cat, nombre, textoDist, ancho, anchoCat, x, xCaja, yCaja, yCima });
+        cajas.push({ p, i, k, cat, textoDist, ancho, anchoCat, x, xCaja, yCaja, yCima });
       });
     /* Se ordenan por indice para que el foco y las claves no bailen. */
     cajas.sort((a, b) => a.i - b.i);
   }
+
+  /*
+    Antes, si una ficha necesitaba subir mas alla del techo del area de
+    dibujo (T0), se recortaba ahi con un clamp -y ese recorte deshacia el
+    trabajo del bucle de arriba: dos fichas que habian subido a pisos
+    distintos para no pisarse volvian a caer juntas en la misma linea y
+    quedaban una encima de la otra. En vez de recortar, se estira el
+    lienzo hacia arriba lo que haga falta para que quepan todas donde el
+    bucle las coloco: nunca hay que elegir entre solape y ficha cortada.
+  */
+  const desborde = Math.max(0, T0 - Math.min(T0, ...cajas.map((c) => c.yCaja)));
+  const origenY = -desborde;
+  const alturaSvg = H + desborde;
 
   /* --- posicion de las paradas sobre el perfil ya escalado --- */
   const paradasMapeadas = paradas.map((p, i) => {
@@ -429,7 +454,7 @@ export default function Perfil({
   return (
     <div>
       <svg
-        viewBox={`0 0 ${W} ${H}`}
+        viewBox={`0 ${origenY} ${W} ${alturaSvg}`}
         width="100%"
         onMouseMove={simple ? undefined : onMove}
         onMouseLeave={simple ? undefined : () => setHover(null)}
@@ -439,10 +464,6 @@ export default function Perfil({
           <linearGradient id="relieve" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#4A5563" stopOpacity=".55" />
             <stop offset="100%" stopColor="#4A5563" stopOpacity=".05" />
-          </linearGradient>
-          <linearGradient id="relieveAmarillo" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#E0A82E" stopOpacity=".55" />
-            <stop offset="100%" stopColor="#E0A82E" stopOpacity=".05" />
           </linearGradient>
         </defs>
 
@@ -500,10 +521,15 @@ export default function Perfil({
           </>
         ) : (
           <>
+            {/*
+              "Informacion" va solida, sin degradado ni transparencia: es
+              la vista de referencia, sin dar a entender que hay un dato
+              detras del color como en dureza/velocidad/zonas.
+            */}
             <path d={areaPath(0, datos.d.length - 1)}
-              fill={simple ? 'url(#relieveAmarillo)' : 'url(#relieve)'} />
+              fill={amarillo ? '#E0A82E' : 'url(#relieve)'} />
             <path d={lineaPath(0, datos.d.length - 1)} fill="none"
-              stroke={simple ? '#E0A82E' : '#C8CFD8'}
+              stroke={amarillo ? '#E0A82E' : '#C8CFD8'}
               strokeWidth="1.7" strokeLinejoin="round" />
           </>
         )}
@@ -528,79 +554,108 @@ export default function Perfil({
         })}
 
         {fichas.map((f) => {
-              /* Marco y vertical van del color del trazo de la subida, no
-                 del de la categoria: asi la ficha se lee como parte del
-                 mismo dibujo y la vista sigue sola de una a la otra. El
-                 unico color de categoria es el del distintivo. */
-              const trazo = f.activo ? '#D14B42' : '#E0A82E';
+              /*
+                Marco y vertical van del color del trazo de la subida, no
+                del de la categoria: asi la ficha se lee como parte del
+                mismo dibujo y la vista sigue sola de una a la otra. El
+                unico color de categoria es el del distintivo.
+
+                En "Informacion" (relieve o dureza) el fondo del grafico ya
+                es amarillo, y una ficha tambien amarilla se hundia en el;
+                el rojo es lo unico que sigue contrastando ahi. En
+                Velocidad y FC el relieve va de otro color y el amarillo
+                vuelve a funcionar.
+              */
+              const infoActiva = modo === 'relieve' || modo === 'dureza';
+              const trazo = f.activo || infoActiva ? '#D14B42' : '#E0A82E';
               return (
               <g key={`f${f.i}`} pointerEvents="none">
-                <line x1={f.x} y1={f.yCaja + f.alto} x2={f.x} y2={f.yCima}
+                {/*
+                  La linea baja hasta el suelo del grafico, no solo hasta
+                  la cima: asi atraviesa el relieve y se ve a que punto
+                  exacto del recorrido corresponde la ficha, en vez de
+                  quedarse flotando por encima de la montana.
+                */}
+                <line x1={f.x} y1={f.yCaja + f.alto} x2={f.x} y2={H - B}
                   stroke={trazo} strokeWidth={f.activo ? 2 : 1.2}
                   strokeDasharray="4 3" opacity={f.activo ? 0.95 : 0.65} />
                 <circle cx={f.x} cy={f.yCima} r={f.activo ? 4 : 3}
                   fill={trazo} />
 
-                <g transform={`translate(${f.xCaja},${f.yCaja})`}>
-                  <rect width={f.ancho} height={f.alto} rx="3"
+                <g transform={`translate(${f.xCaja},${f.yCaja})`}
+                  pointerEvents={onPuertoClick ? 'auto' : 'none'}
+                  onClick={onPuertoClick ? () => onPuertoClick(f.i) : undefined}
+                  style={onPuertoClick ? { cursor: 'pointer' } : undefined}>
+                  <rect width={f.ancho} height={f.alto} rx="7"
                     fill="#161C26" stroke={trazo}
                     strokeWidth={f.activo ? 1.6 : 1} opacity=".97" />
 
-                  {compacto ? (
-                    <>
-                      {/*
-                        Solo categoria y distancia: en pantalla completa una
-                        ruta con muchos puertos llenaba el perfil de nombres
-                        que tapaban el propio dibujo. El nombre completo
-                        sigue disponible en la tabla de abajo.
-
-                        Apiladas y centradas en vez de en fila: la caja
-                        aprovecha el ancho del texto mas largo de las dos en
-                        vez de sumar los dos, que es lo que la deja mas
-                        estrecha y dificulta menos hueco en el perfil.
-                      */}
-                      <rect x={(f.ancho - f.anchoCat) / 2} y="5" width={f.anchoCat} height="20" rx="4"
-                        fill={f.cat.color} />
-                      <text x={f.ancho / 2} y="19.5" textAnchor="middle"
-                        fill={f.cat.codigo === 'hc' ? '#FFFFFF' : '#0E1116'}
-                        fontSize="13" fontWeight="800"
-                        fontFamily="ui-monospace,Menlo,monospace">
-                        {f.cat.nombre}
-                      </text>
-                      <text x={f.ancho / 2} y={f.alto - 6} textAnchor="middle" fill="#E8EAED"
-                        fontSize="11.5" fontWeight="400"
-                        fontFamily='"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif'>
-                        {f.textoDist}
-                      </text>
-                    </>
-                  ) : (
-                    <>
-                      {/* La categoria, en grande: es lo que se busca de un vistazo. */}
-                      <rect x="6" y="6" width={f.anchoCat} height="19" rx="4"
-                        fill={f.cat.color} />
-                      <text x={6 + f.anchoCat / 2} y="19.5" textAnchor="middle"
-                        fill={f.cat.codigo === 'hc' ? '#FFFFFF' : '#0E1116'}
-                        fontSize="12.5" fontWeight="700"
-                        fontFamily="ui-monospace,Menlo,monospace">
-                        {f.cat.nombre}
-                      </text>
-
-                      <text x={6 + f.anchoCat + 7} y="19.5" fill="#E8EAED"
-                        fontSize="11.5" fontWeight="600"
-                        fontFamily='"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif'>
-                        {f.nombre}
-                      </text>
-                      <text x="7" y="35" fill="#9BA5B4" fontSize="10.5"
-                        fontFamily="ui-monospace,Menlo,monospace">
-                        {num(f.p.metros / 1000, 1)} km · {num(f.p.pendiente, 1)} % ·{' '}
-                        +{num(f.p.desnivel, 0)} m
-                      </text>
-                    </>
-                  )}
+                  {/*
+                    Solo categoria y distancia -como la insignia de "Tus
+                    salidas" en Resumen-, siempre visibles: es el dato que
+                    se busca de un vistazo, sin nombre ni pendiente/desnivel
+                    detallados que ya estan en la tabla de abajo.
+                  */}
+                  <rect x={(f.ancho - f.anchoCat) / 2} y="5" width={f.anchoCat} height="20" rx="6"
+                    fill={f.cat.color} />
+                  <text x={f.ancho / 2} y="19.5" textAnchor="middle"
+                    fill={f.cat.codigo === 'hc' ? '#FFFFFF' : '#0E1116'}
+                    fontSize={compacto ? 13 : 12.5} fontWeight="800"
+                    fontFamily="ui-monospace,Menlo,monospace">
+                    {f.cat.nombre}
+                  </text>
+                  <text x={f.ancho / 2} y={f.alto - 6} textAnchor="middle" fill="#E8EAED"
+                    fontSize="11.5" fontWeight="400"
+                    fontFamily='"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif'>
+                    {f.textoDist}
+                  </text>
                 </g>
               </g>
               );
             })}
+
+        {/*
+          Salida y meta: una linea discontinua desde el punto 0 y desde el
+          ultimo punto, rematada en un icono -play para la salida, bandera
+          de cuadros para la meta- para que se lean como el arranque y el
+          final de la etapa sin tener que fijarse en el eje X.
+        */}
+        {(() => {
+          /* Suben hasta el limite del lienzo -el mismo techo que usan las
+             fichas de puerto (origenY, que ya se estira si hace falta)-,
+             no una distancia fija sobre el suelo: asi quedan siempre lo
+             mas arriba que la grafica permite, en vez de a una altura que
+             en un puerto se ve baja y en un llano se ve exagerada. */
+          const yTope = origenY + 14;
+          const xIni = X(datos.d[0]);
+          const ySueloIni = Y(datos.a[0]);
+          const yIconoIni = Math.min(yTope, ySueloIni - 14);
+          const xFin = X(datos.d[datos.d.length - 1]);
+          const ySueloFin = Y(datos.a[datos.a.length - 1]);
+          const yIconoFin = Math.min(yTope, ySueloFin - 14);
+          return (
+            <>
+              <line x1={xIni} y1={ySueloIni} x2={xIni} y2={yIconoIni}
+                stroke="#E8EAED" strokeWidth="1.2" strokeDasharray="4 3" opacity="0.65" />
+              <g transform={`translate(${xIni},${yIconoIni})`}>
+                <circle r="9" fill="#F2C230" />
+                <path d="M -3,-5 L 6,0 L -3,5 Z" fill="#0E1116" />
+              </g>
+
+              <line x1={xFin} y1={ySueloFin} x2={xFin} y2={yIconoFin}
+                stroke="#E8EAED" strokeWidth="1.2" strokeDasharray="4 3" opacity="0.65" />
+              <g transform={`translate(${xFin},${yIconoFin})`}>
+                <circle r="9" fill="#F2C230" />
+                {[0, 1, 2, 3].flatMap((col) => [0, 1].map((fila) => (
+                  (col + fila) % 2 === 0 && (
+                    <rect key={`${col}-${fila}`} x={-6 + col * 3} y={-4 + fila * 4}
+                      width="3" height="4" fill="#0E1116" />
+                  )
+                )))}
+              </g>
+            </>
+          );
+        })()}
 
         <line x1={L} y1={H - B} x2={W - R} y2={H - B} stroke="#2A3341" strokeWidth="1" />
         {[0, 0.25, 0.5, 0.75, 1].map((f) => (
@@ -700,31 +755,26 @@ export default function Perfil({
         )}
       </svg>
 
-      {!simple && (zoomUtil || puertos.length > 0 || paradas.length > 0) && (
+      {!simple && paradas.length > 0 && (
         /*
-          Botones dentro de "chips" -el mismo bloque que ya usan los modos
-          y las zonas- en vez de checkboxes con una frase explicativa al
-          lado: el par pulsado/sin pulsar ya dice lo que hace cada uno, y
-          alineados asi se leen como un grupo. Antes esto solo se aplicaba
-          en el overlay horizontal (compacto); ahora es el mismo diseño en
-          todas partes, tambien en la vista normal y en escritorio.
+          Casilla simple en vez de un boton "chip" de los modos: es un
+          ajuste de vista, no una eleccion entre opciones -el par
+          marcado/sin marcar ya lo dice sin necesitar el mismo peso visual
+          que Perfil/Desnivel/Velocidad/FC.
+
+          La leyenda del submodo activo (Desnivel, Velocidad, FC) ya no va
+          aqui dentro: vive en Entrenamientos, en el mismo sitio para los
+          tres, para que la caja del perfil mida siempre lo mismo cambie
+          lo que cambie la pestana.
         */
-        <div className="chips" style={{ marginTop: 'var(--e4)' }}>
-          {puertos.length > 0 && (
-            <button aria-pressed={verNombres} onClick={() => setVerNombres(!verNombres)}>
-              Nombres de las subidas
-            </button>
-          )}
-          {paradas.length > 0 && (
-            <button aria-pressed={verParadas} onClick={() => setVerParadas(!verParadas)}>
+        <div className="perfil-opciones" style={{ marginLeft: `${(L / W) * 100}%` }}>
+          <div className="perfil-opciones-fila">
+            <label className="perfil-check">
+              <input type="checkbox" checked={verParadas}
+                onChange={() => setVerParadas(!verParadas)} />
               Paradas
-            </button>
-          )}
-          {zoomUtil && (
-            <button aria-pressed={zoom} onClick={() => setZoom(!zoom)}>
-              Ampliar el relieve
-            </button>
-          )}
+            </label>
+          </div>
         </div>
       )}
     </div>

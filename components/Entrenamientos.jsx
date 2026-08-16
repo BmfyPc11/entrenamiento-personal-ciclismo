@@ -1,13 +1,13 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import Perfil from './Perfil';
 import PerfilPuerto from './PerfilPuerto';
-import { IcoExpandir, IcoCerrar, IcoEntrenamientos } from './Iconos';
+import { IcoExpandir, IcoCerrar, IcoActividades, IcoFlecha } from './Iconos';
 import {
   detectarPuertos, repartoZonas, repartoDureza, repartoVelocidad, valorarEntrenamiento,
   TRAMOS_DUREZA, TRAMOS_VELOCIDAD, vatiosPuerto, vatiosSalida, categoriaPuerto,
-  num, duracion, fechaLarga, kmh, km, metrosPorKm,
+  num, duracion, fechaLarga, fechaDDMMAA, kmh, km, metrosPorKm, tipoRuta, TIPO_INSIGNIA,
 } from '@/lib/metrics';
 import {
   emparejarSegmento, buscarNombre, guardarNombre, leerCache, escribirCache,
@@ -36,18 +36,19 @@ export default function Entrenamientos({
      vez de la mas reciente. */
   useEffect(() => { onSalidaInicialConsumida?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   /*
-    Se arranca en dureza. Habia un tercer modo, "Informacion", que pintaba
-    el relieve en gris con las subidas subrayadas; desde que las fichas con
-    el nombre y la categoria salen en los tres, ese modo se quedo sin nada
-    propio que aportar y solo obligaba a un clic mas para llegar al color.
-    La vista sigue existiendo en Perfil.jsx, que la usa la pestana de Rutas.
+    Se arranca en "Informacion" (relieve amarillo, sin colorear por
+    pendiente): es la vista de referencia, y Dureza es ahora una casilla
+    que el usuario enciende si la quiere, no el punto de partida.
   */
-  const [modo, setModo] = useState('dureza');
+  const [modo, setModo] = useState('relieve');
   const [zonaFoco, setZonaFoco] = useState(null);
   const [durezaFoco, setDurezaFoco] = useState(null);
   const [velFoco, setVelFoco] = useState(null);
   const [puertoFoco, setPuertoFoco] = useState(null);
   const [puertoAbierto, setPuertoAbierto] = useState(null);
+  /* Una fila de la tabla por puerto, para poder llevar la vista hasta ella
+     cuando se pulsa su ficha en el perfil (ver irAPuerto mas abajo). */
+  const filaPuertoRefs = useRef([]);
   const [criterio, setCriterio] = useState({ minMetros: 500, minDesnivel: 30, minPend: 3 });
   const [cargando, setCargando] = useState(false);
   const [fallo, setFallo] = useState(null);
@@ -61,6 +62,19 @@ export default function Entrenamientos({
   */
   const [horizontal, setHorizontal] = useState(false);
   const [altoHorizontal, setAltoHorizontal] = useState(420);
+
+  /*
+    Pulsar la ficha de un puerto en el perfil abre su fila en la tabla de
+    abajo (la misma que ya se abre al pulsar la fila) y lleva la vista
+    hasta ahi. Si se pulsa desde el overlay horizontal, primero hay que
+    cerrarlo -la tabla vive en la pagina normal, no dentro del dialogo
+    rotado.
+  */
+  const irAPuerto = (i) => {
+    setHorizontal(false);
+    setPuertoAbierto(i);
+    filaPuertoRefs.current[i]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
 
   useEffect(() => {
     if (!horizontal) return;
@@ -213,10 +227,16 @@ export default function Entrenamientos({
   const chipsPrincipales = (
     <div className="chips">
       <button
+        aria-pressed={modo === 'relieve'}
+        onClick={() => { setModo('relieve'); setZonaFoco(null); setVelFoco(null); setDurezaFoco(null); }}
+      >
+        Perfil
+      </button>
+      <button
         aria-pressed={modo === 'dureza'}
         onClick={() => { setModo('dureza'); setZonaFoco(null); setVelFoco(null); }}
       >
-        Dureza
+        Desnivel
       </button>
       <button
         aria-pressed={modo === 'velocidad'}
@@ -239,84 +259,72 @@ export default function Entrenamientos({
      zona..." y el aviso de "sin pulsometro"): en el overlay rotado el alto
      disponible es el ancho del movil, y ese texto es justo lo que sobra
      para dejarle mas sitio al grafico. */
+  /*
+    Las leyendas de los tres submodos (Desnivel, Velocidad, FC) viven aqui,
+    todas en el mismo sitio y con el mismo contenedor de altura minima: asi
+    la caja del perfil mide siempre lo mismo tenga o no tenga leyenda la
+    pestana activa (Perfil, la vista base, no tiene ninguna), y cambiar de
+    pestana no da el salto de tamano que daba antes.
+  */
   const panelSubmodo = (compacto) => (
-    <>
-      {modo === 'dureza' && dureza && (
-        <>
-          <div className="chips">
-            <button aria-pressed={durezaFoco === null} onClick={() => setDurezaFoco(null)}>Todo</button>
-            {TRAMOS_DUREZA.map((t, i) =>
-              dureza.porcentaje[i] > 0.4 ? (
-                <button
-                  key={t.n}
-                  aria-pressed={durezaFoco === t.n}
-                  onClick={() => setDurezaFoco(durezaFoco === t.n ? null : t.n)}
-                  style={durezaFoco === t.n
-                    ? { background: t.color, borderColor: t.color, color: t.n === 6 ? '#E8EAED' : '#0A0C0F' }
-                    : null}
-                >
-                  <i style={{ background: t.color }} />{t.nombre} · {num(dureza.porcentaje[i], 0)} %
-                </button>
-              ) : null
-            )}
-          </div>
-        </>
+    <div className="perfil-leyenda-hueco">
+      {modo === 'dureza' && (
+        /* marginLeft: mismo 4.4 % (L/W = 44/1000) que usa Perfil para
+           alinear sus propios controles con el eje del grafico. Sin el %
+           de la etapa que cubre cada color -eso ya se ve pintado en el
+           propio perfil, aqui solo hace falta saber que pendiente
+           representa cada color. */
+        <div className="perfil-leyenda" style={{ marginLeft: '4.4%' }}>
+          {TRAMOS_DUREZA.map((t) => (
+            <button key={t.n} type="button"
+              aria-pressed={durezaFoco === t.n}
+              style={durezaFoco === t.n
+                ? { borderBottomColor: t.color, background: `${t.color}26` } : null}
+              onClick={() => setDurezaFoco(durezaFoco === t.n ? null : t.n)}>
+              <i style={{ background: t.color }} />{t.nombre}
+            </button>
+          ))}
+        </div>
       )}
 
       {modo === 'velocidad' && velocidad && (
-        <>
-          <div className="chips">
-            <button aria-pressed={velFoco === null} onClick={() => setVelFoco(null)}>Todo</button>
-            {TRAMOS_VELOCIDAD.map((t, i) =>
-              velocidad.porcentaje[i] > 0.4 ? (
-                <button
-                  key={t.n}
-                  aria-pressed={velFoco === t.n}
-                  onClick={() => setVelFoco(velFoco === t.n ? null : t.n)}
-                  style={velFoco === t.n
-                    ? { background: t.color, borderColor: t.color, color: '#0A0C0F' }
-                    : null}
-                >
-                  <i style={{ background: t.color }} />{t.nombre} · {num(velocidad.porcentaje[i], 0)} %
-                </button>
-              ) : null
-            )}
-          </div>
-        </>
+        <div className="perfil-leyenda" style={{ marginLeft: '4.4%' }}>
+          {TRAMOS_VELOCIDAD.map((t, i) =>
+            velocidad.porcentaje[i] > 0.4 ? (
+              <button key={t.n} type="button"
+                aria-pressed={velFoco === t.n}
+                style={velFoco === t.n
+                  ? { borderBottomColor: t.color, background: `${t.color}26` } : null}
+                onClick={() => setVelFoco(velFoco === t.n ? null : t.n)}>
+                <i style={{ background: t.color }} />{t.nombre} · {num(velocidad.porcentaje[i], 0)} %
+              </button>
+            ) : null
+          )}
+        </div>
       )}
 
       {modo === 'zonas' && tieneFC && (
-        <>
-          <div className="chips">
-            <button aria-pressed={zonaFoco === null} onClick={() => setZonaFoco(null)}>Todas</button>
-            {zonas.map((z) => (
-              <button
-                key={z.n}
-                aria-pressed={zonaFoco === z.n}
-                onClick={() => setZonaFoco(zonaFoco === z.n ? null : z.n)}
-                style={zonaFoco === z.n ? { background: z.color, borderColor: z.color } : null}
-              >
-                <i style={{ background: z.color }} />Z{z.n} {z.nombre}
-                {reparto && ` · ${num(reparto.porcentaje[z.n - 1], 0)} %`}
-              </button>
-            ))}
-          </div>
-          {!compacto && (
-            <p className="hint" style={{ marginTop: 12, marginBottom: 0 }}>
-              Selecciona una zona para ver exactamente en qué tramos de la ruta estuviste
-              en ella. Los límites se configuran en <strong>Tus datos</strong>.
-            </p>
-          )}
-        </>
+        <div className="perfil-leyenda" style={{ marginLeft: '4.4%' }}>
+          {zonas.map((z) => (
+            <button key={z.n} type="button"
+              aria-pressed={zonaFoco === z.n}
+              style={zonaFoco === z.n
+                ? { borderBottomColor: z.color, background: `${z.color}26` } : null}
+              onClick={() => setZonaFoco(zonaFoco === z.n ? null : z.n)}>
+              <i style={{ background: z.color }} />Z{z.n} {z.nombre}
+              {reparto && ` · ${num(reparto.porcentaje[z.n - 1], 0)} %`}
+            </button>
+          ))}
+        </div>
       )}
 
-      {!tieneFC && !compacto && (
-        <div className="callout warn" style={{ marginTop: 16, marginBottom: 0 }}>
+      {modo === 'zonas' && !tieneFC && !compacto && (
+        <div className="callout warn" style={{ marginTop: 0 }}>
           Esta salida se registró sin pulsómetro, así que no hay zonas que pintar.
           Si la grabaste con el móvil en lugar del Garmin, ahí está la razón.
         </div>
       )}
-    </>
+    </div>
   );
 
   /* Sin salidas tambien hay que pintar la cabecera: desde que esta seccion
@@ -330,8 +338,8 @@ export default function Entrenamientos({
             <h1>
               <button type="button" className="titulo-clic"
                 onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-                <IcoEntrenamientos className="icono-titulo" />
-                Entrenamientos
+                <IcoActividades className="icono-titulo" />
+                Actividades
               </button>
             </h1>
           </div>
@@ -354,26 +362,13 @@ export default function Entrenamientos({
           <h1>
             <button type="button" className="titulo-clic"
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-              <IcoEntrenamientos className="icono-titulo" />
-              Entrenamientos
+              <IcoActividades className="icono-titulo" />
+              Actividades
             </button>
           </h1>
         </div>
         <div className="sel-salida">
-          <label htmlFor="salida">Salida analizada</label>
-          <select
-            id="salida"
-            value={sel ?? ''}
-            onChange={(e) => setSel(Number(e.target.value))}
-          >
-            {ordenadas.map((s) => (
-              <option key={s.id} value={s.id}>
-                {new Date(s.fecha).toLocaleDateString('es-ES')} · {s.nombre} · {num(km(s), 1)} km
-                {s.desnivel > 0 ? ` · +${num(s.desnivel, 0)} m` : ''}
-                {s.fcMedia ? ' · con FC' : ''}
-              </option>
-            ))}
-          </select>
+          <SelectorSalida ordenadas={ordenadas} sel={sel} setSel={setSel} />
         </div>
       </div>
 
@@ -409,7 +404,7 @@ export default function Entrenamientos({
               hay que mirar primero que vista hay, y eso se mira arriba.
             */}
             <div className="cab-panel">
-              <span className="rotulo">Perfil de altimetría</span>
+              <span className="rotulo rotulo-nombre-salida">{salida.nombre}</span>
               {streams && chipsPrincipales}
             </div>
 
@@ -441,6 +436,8 @@ export default function Entrenamientos({
                   velFoco={velFoco}
                   puertoFoco={puertoFoco}
                   altura={340}
+                  amarillo
+                  onPuertoClick={irAPuerto}
                 />
               </div>
             )}
@@ -479,7 +476,9 @@ export default function Entrenamientos({
                   velFoco={velFoco}
                   puertoFoco={puertoFoco}
                   altura={altoHorizontal}
+                  amarillo
                   compacto
+                  onPuertoClick={irAPuerto}
                 />
 
                 {panelSubmodo(true)}
@@ -547,6 +546,7 @@ export default function Entrenamientos({
                       return (
                         <Fragment key={i}>
                         <tr
+                          ref={(el) => (filaPuertoRefs.current[i] = el)}
                           onMouseEnter={() => setPuertoFoco(i)}
                           onMouseLeave={() => setPuertoFoco(null)}
                           onClick={() => setPuertoAbierto(puertoAbierto === i ? null : i)}
@@ -721,6 +721,71 @@ function Valoracion({ salida, streams, reparto, dureza, puertos, cfg, zonas, umb
   en un movil con dedos no hay title que valga, y ahi ese detalle deja
   de estar disponible.
 */
+/*
+  Reemplaza al <select> nativo porque este necesita la insignia de color
+  del tipo de salida (LLA/COL/MON), la misma que ya usa la tabla de "Tus
+  salidas" en Resumen -algo que un <option> no puede pintar, solo texto
+  plano. Mismo patron de boton-mas-panel que el desplegable de escala en
+  Logros: un boton que alterna un panel absoluto debajo, y un listener
+  de click fuera para cerrarlo.
+*/
+function SelectorSalida({ ordenadas, sel, setSel }) {
+  const [abierto, setAbierto] = useState(false);
+  const raiz = useRef(null);
+
+  useEffect(() => {
+    if (!abierto) return undefined;
+    const fuera = (e) => {
+      if (raiz.current && !raiz.current.contains(e.target)) setAbierto(false);
+    };
+    document.addEventListener('mousedown', fuera);
+    return () => document.removeEventListener('mousedown', fuera);
+  }, [abierto]);
+
+  const actual = ordenadas.find((s) => s.id === sel) || null;
+
+  return (
+    <div className="selector-salida" ref={raiz}>
+      <button type="button" className="selector-salida-boton" aria-expanded={abierto}
+        onClick={() => setAbierto((a) => !a)}>
+        {actual && (
+          <>
+            <span className="cat" style={{
+              background: TIPO_INSIGNIA[tipoRuta(actual)].fondo,
+              color: TIPO_INSIGNIA[tipoRuta(actual)].tinta,
+            }}>
+              {TIPO_INSIGNIA[tipoRuta(actual)].codigo}
+            </span>
+            <span className="fecha">{fechaDDMMAA(actual.fecha)}</span>
+            <span className="nombre">{actual.nombre}</span>
+          </>
+        )}
+        <IcoFlecha className="chevron" />
+      </button>
+
+      {abierto && (
+        <ul className="selector-salida-lista" role="listbox">
+          {ordenadas.map((s) => {
+            const insignia = TIPO_INSIGNIA[tipoRuta(s)];
+            return (
+              <li key={s.id}>
+                <button type="button" role="option" aria-selected={s.id === sel}
+                  onClick={() => { setSel(s.id); setAbierto(false); }}>
+                  <span className="cat" style={{ background: insignia.fondo, color: insignia.tinta }}>
+                    {insignia.codigo}
+                  </span>
+                  <span className="fecha">{fechaDDMMAA(s.fecha)}</span>
+                  <span className="nombre">{s.nombre}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function Dato({ k, v, u, d }) {
   return (
     <div className="stat" title={d || undefined}>

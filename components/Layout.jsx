@@ -2,14 +2,14 @@
 
 import { useEffect, useRef } from 'react';
 import {
-  IcoResumen, IcoDatos, IcoEntrenamientos, IcoAscensiones,
+  IcoResumen, IcoDatos, IcoActividades, IcoAscensiones,
   IcoCarga, IcoObjetivos, IcoRutas, IcoGPX, IcoLogros, IcoMenu, IcoCerrar,
 } from './Iconos';
 
 export const SECCIONES = [
   ['resumen', 'Resumen', IcoResumen],
   ['datos', 'Tus datos', IcoDatos],
-  ['entrenamientos', 'Entrenamientos', IcoEntrenamientos],
+  ['entrenamientos', 'Actividades', IcoActividades],
   ['ascensiones', 'Mis ascensiones', IcoAscensiones],
   ['carga', 'Carga y forma', IcoCarga],
   ['objetivos', 'Objetivos', IcoObjetivos],

@@ -363,6 +363,46 @@ h3{letter-spacing:.01em}
 
 .chips button{transition:background .14s,border-color .14s,color .14s}
 
+/* Los botones del perfil (modos, expandir, cerrar horizontal) van lo mas
+   redondeados posible, en Helvetica y en bold: es la interfaz de un
+   instrumento, y asi se distingue de un vistazo del resto de chips de la
+   app (filtros de fecha, etc.), que se quedan como estaban. */
+.chart .chips button,
+.perfil-horizontal-girar .chips button{border-radius:999px;font-weight:700;
+  font-family:"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif}
+.chart .chips button[aria-pressed="true"],
+.perfil-horizontal-girar .chips button[aria-pressed="true"]{font-weight:700}
+
+/* Paradas y Dureza son ajustes de vista, no una eleccion entre modos: una
+   casilla con su etiqueta pesa menos que un chip pulsado/sin pulsar y deja
+   claro que son dos interruptores independientes, no un grupo exclusivo. */
+.perfil-opciones{display:flex;flex-direction:column;gap:0;margin-top:var(--e2)}
+.perfil-opciones-fila{display:flex;flex-direction:row;flex-wrap:wrap;gap:20px}
+.perfil-check{display:flex;align-items:center;gap:8px;cursor:pointer;width:fit-content;
+  font-family:"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif;
+  font-weight:700;font-size:13px;color:var(--ink2);text-transform:none;letter-spacing:normal}
+.perfil-check input{accent-color:var(--acento);margin:0;width:13px;height:13px}
+
+/* Reserva la altura de una fila de leyenda aunque la pestana activa no
+   tenga ninguna (Perfil, la vista base): asi la caja del perfil no cambia
+   de tamano al cambiar entre Perfil/Desnivel/Velocidad/FC. */
+.perfil-leyenda-hueco{min-height:22px}
+
+/* Leyenda compacta de un submodo (Desnivel, Velocidad, Frecuencia
+   cardiaca): el color de cada tramo con su nombre, mucho mas ligera que
+   los chips de modo -aqui es un matiz dentro de la vista activa, no una
+   eleccion con el mismo peso. El resalte del tramo activo es un
+   subrayado de su propio color mas un tinte de fondo, para que se
+   distinga a simple vista sin ensanchar el boton. */
+.perfil-leyenda{display:flex;flex-wrap:wrap;gap:7px 16px}
+.perfil-leyenda button{display:flex;align-items:center;gap:5px;cursor:pointer;
+  background:none;border:none;border-radius:4px;padding:3px 6px;margin:-3px -6px;
+  font-family:"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif;
+  font-weight:600;font-size:11px;color:var(--ink2);
+  border-bottom:2px solid transparent;transition:background .14s,color .14s,border-color .14s}
+.perfil-leyenda button i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.perfil-leyenda button[aria-pressed="true"]{color:var(--ink1);font-weight:700}
+
 .fields{gap:14px}
 label{margin-bottom:7px;display:block}
 
@@ -500,9 +540,48 @@ h1{font-size:clamp(26px,3.4vw,34px)}
   Manda sobre todo lo que hay debajo, asi que se lee antes que nada.
 */
 .sel-salida{display:grid;gap:var(--e2);justify-items:end;min-width:0}
-.sel-salida label{font-family:var(--mono);font-size:10px;letter-spacing:.13em;
-  text-transform:uppercase;color:var(--ink3);margin:0}
-.sel-salida select{max-width:min(520px,44vw);font-size:13.5px;padding:10px 12px}
+
+/*
+  Sustituye a un <select> nativo: este necesita pintar una insignia de
+  color por fila (el tipo de salida) y hacer que solo el nombre vaya en
+  negrita, dos cosas que un <option> no puede hacer -solo admite texto
+  plano y uniforme. Mismo patron boton-mas-panel que el desplegable de
+  escala en Logros.
+*/
+.selector-salida{position:relative;width:100%;max-width:min(520px,44vw)}
+.selector-salida-boton{all:unset;box-sizing:border-box;position:relative;
+  display:flex;align-items:center;gap:8px;width:100%;cursor:pointer;
+  padding:10px 40px 10px 16px;border-radius:999px;
+  border:1px solid var(--acento);
+  background:color-mix(in srgb, var(--acento) 14%, var(--bg2))}
+.selector-salida-boton:hover{background:color-mix(in srgb, var(--acento) 22%, var(--bg2))}
+.selector-salida-boton .fecha{font-family:var(--mono);font-size:12.5px;
+  color:var(--ink2);white-space:nowrap;flex:0 0 auto}
+.selector-salida-boton .nombre{font-size:13.5px;font-weight:700;color:var(--ink);
+  flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* A la misma distancia del borde derecho que el texto tiene del izquierdo
+   (16px los dos), para que el boton se lea simetrico. */
+.selector-salida-boton .chevron{position:absolute;right:16px;top:50%;
+  transform:translateY(-50%);width:14px;height:14px;color:var(--ink2);
+  transition:transform .2s}
+.selector-salida-boton[aria-expanded="true"] .chevron{transform:translateY(-50%) rotate(180deg)}
+
+.selector-salida-lista{list-style:none;margin:8px 0 0;padding:6px;
+  position:absolute;right:0;top:100%;min-width:100%;width:max-content;
+  max-width:min(520px,80vw);max-height:340px;overflow-y:auto;
+  background:var(--card2);border:1px solid var(--line2);border-radius:var(--r-l);
+  box-shadow:0 12px 28px rgba(0,0,0,.4);z-index:20}
+.selector-salida-lista li+li{margin-top:2px}
+.selector-salida-lista button{all:unset;box-sizing:border-box;display:flex;
+  align-items:center;gap:8px;width:100%;padding:9px 12px;
+  border-radius:var(--r-s);cursor:pointer}
+.selector-salida-lista button:hover{background:var(--card)}
+.selector-salida-lista button[aria-selected="true"]{
+  background:color-mix(in srgb, var(--acento) 16%, transparent)}
+.selector-salida-lista .fecha{font-family:var(--mono);font-size:12px;
+  color:var(--ink2);white-space:nowrap;flex:0 0 auto}
+.selector-salida-lista .nombre{font-size:13px;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /*
   Cabecera de panel: rotulo a la izquierda, controles a la derecha, y una
@@ -516,6 +595,12 @@ h1{font-size:clamp(26px,3.4vw,34px)}
 
 .rotulo{font-family:var(--mono);font-size:10px;letter-spacing:.13em;
   text-transform:uppercase;color:var(--ink3)}
+
+/* El nombre de la salida sustituye al rotulo generico "Perfil de
+   altimetria": es un titulo, no una etiqueta de seccion, asi que rompe con
+   el resto de .rotulo (mono, mayusculas, gris tenue) en vez de heredarlo. */
+.rotulo-nombre-salida{font-family:"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif;
+  font-size:17px;font-weight:700;letter-spacing:normal;text-transform:none;color:var(--ink1)}
 
 /* Rotulo y pista sobre una tabla, en la misma linea y sin marco: la
    tabla ya trae el suyo justo debajo. */
@@ -543,7 +628,7 @@ h1{font-size:clamp(26px,3.4vw,34px)}
 
 @media(max-width:760px){
   .sel-salida{justify-items:start;width:100%}
-  .sel-salida select{max-width:none}
+  .selector-salida{max-width:none}
 }
 
 /*

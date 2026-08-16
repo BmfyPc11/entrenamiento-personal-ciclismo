@@ -1298,7 +1298,7 @@ export default function Logros({ salidas, cache, cfg, atleta }) {
 
       <nav className="logros-categorias" aria-label="Categorías de logros">
         {CATEGORIAS.map(([id, txt, Icono]) => (
-          <button key={id} aria-selected={cat === id} onClick={() => setCat((c) => (c === id ? null : id))}>
+          <button key={id} aria-selected={cat === id} onClick={() => setCat(id)}>
             <Icono />
             {txt}
           </button>

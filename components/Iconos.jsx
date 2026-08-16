@@ -31,11 +31,13 @@ export const IcoDatos = (p) => (
   </svg>
 );
 
-/* Entrenamientos: el perfil de una salida. */
-export const IcoEntrenamientos = (p) => (
+/* Actividades: la bicicleta, cada actividad es una salida en ella. */
+export const IcoActividades = (p) => (
   <svg {...base} {...p}>
-    <path d="M3 18l4.5-7 3.5 4L15 8l6 10" />
-    <path d="M3 21h18" />
+    <circle cx="5.5" cy="17" r="3.4" />
+    <circle cx="18.5" cy="17" r="3.4" />
+    <path d="M5.5 17l4-9h3l-2 4h3.5l4.5 5" />
+    <path d="M9.5 8h4" />
   </svg>
 );
 
