@@ -1,10 +1,15 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   zonaDeFC, tramoDureza, TRAMOS_DUREZA, tramoVelocidad, TRAMOS_VELOCIDAD,
   categoriaPuerto, detectarParadas, num, duracion,
 } from '@/lib/metrics';
+
+/* Margen izquierdo del eje, en pixeles reales -Entrenamientos lo reusa
+   para alinear sus propias leyendas de submodo con el eje del perfil sin
+   tener que adivinarlo (ver MARGEN_EJE mas abajo). */
+export const MARGEN_EJE = 44;
 
 /*
   Redondea el techo del eje a una cifra que quede bien en la etiqueta.
@@ -130,6 +135,37 @@ export default function Perfil({
 }) {
   const [hover, setHover] = useState(null);
 
+  /*
+    Ancho real del contenedor, medido con ResizeObserver. Antes el SVG se
+    dibujaba en un espacio de coordenadas ficticio de 1000 unidades y se
+    escalaba entero (texto, iconos, trazos, todo junto) al ancho real
+    disponible con "width: 100%" -asi, cuando el perfil comparte fila con
+    el mapa y pierde ancho, el escalado tambien encogia el alto (viewBox
+    con relacion de aspecto fija) y, si se forzaba el alto aparte con
+    preserveAspectRatio="none", el resultado quedaba aplastado en el eje
+    que no se tocaba.
+
+    Midiendo el ancho real y usandolo directamente como unidad de dibujo
+    (en vez de un viewBox reescalado) los dos problemas desaparecen: el
+    alto (alturaSvg) es un numero fijo en pixeles reales, ajeno al ancho,
+    y el ancho disponible solo decide cuanto sitio tiene el eje de
+    distancia para repartir el recorrido -ni el texto ni los iconos se
+    deforman nunca, porque nunca se escalan, se dibujan directamente al
+    tamano final.
+  */
+  const contRef = useRef(null);
+  const [ancho, setAncho] = useState(0);
+  useEffect(() => {
+    const el = contRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect?.width;
+      if (w) setAncho(Math.round(w));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   /* Apagado por defecto: son ajustes de vista que se activan cuando hacen
      falta, no un estado de partida. */
   const [verParadas, setVerParadas] = useState(false);
@@ -168,9 +204,14 @@ export default function Perfil({
     };
   }, [streams]);
 
-  if (!datos) return <p className="hint">Esta salida no tiene perfil de altimetría registrado.</p>;
+  if (!datos) {
+    return <div ref={contRef}><p className="hint">Esta salida no tiene perfil de altimetría registrado.</p></div>;
+  }
+  /* Aun sin medir (primer render, antes de que el ResizeObserver dispare):
+     no hay ancho fiable con el que dibujar nada todavia. */
+  if (!ancho) return <div ref={contRef} />;
 
-  const W = 1000, L = 44, R = 14, B = 30, T0 = 18;
+  const W = ancho, L = MARGEN_EJE, R = 14, B = 30, T0 = 18;
   const maxA = Math.max(...datos.a);
   const minA = Math.min(...datos.a);
   const maxD = datos.d[datos.d.length - 1];
@@ -452,10 +493,11 @@ export default function Perfil({
   }));
 
   return (
-    <div>
+    <div ref={contRef}>
       <svg
         viewBox={`0 ${origenY} ${W} ${alturaSvg}`}
-        width="100%"
+        width={W}
+        height={alturaSvg}
         onMouseMove={simple ? undefined : onMove}
         onMouseLeave={simple ? undefined : () => setHover(null)}
         style={{ cursor: simple ? 'default' : 'crosshair', touchAction: 'pan-y' }}
@@ -767,7 +809,7 @@ export default function Perfil({
           tres, para que la caja del perfil mida siempre lo mismo cambie
           lo que cambie la pestana.
         */
-        <div className="perfil-opciones" style={{ marginLeft: `${(L / W) * 100}%` }}>
+        <div className="perfil-opciones" style={{ marginLeft: L }}>
           <div className="perfil-opciones-fila">
             <label className="perfil-check">
               <input type="checkbox" checked={verParadas}

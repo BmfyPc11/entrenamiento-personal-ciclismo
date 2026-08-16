@@ -94,6 +94,23 @@ export const IcoLogros = (p) => (
   </svg>
 );
 
+/* Mapa: el pin de ubicacion, para el boton que muestra el trazado. */
+export const IcoMapa = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 21s7-7.5 7-12a7 7 0 1 0-14 0c0 4.5 7 12 7 12z" />
+    <circle cx="12" cy="9" r="2.3" />
+  </svg>
+);
+
+/* Restablecer: flecha circular, para volver el zoom del mapa a su ajuste
+   inicial. */
+export const IcoRestablecer = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 12a8 8 0 1 1 2.5 5.8" />
+    <path d="M4 17v-5h5" />
+  </svg>
+);
+
 /* Flecha hacia abajo: abre un desplegable. Gira 180 grados desde CSS
    cuando el desplegable esta abierto, asi que solo hace falta este
    sentido -no una pareja arriba/abajo-. */

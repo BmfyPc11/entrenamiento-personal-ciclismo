@@ -97,6 +97,13 @@ export default function Dashboard({ atleta }) {
      estado: cambia con cada peticion y no debe disparar un re-render. */
   const limiteRef = useRef(null);
 
+  /* Copia siempre al dia de "cache", para leerla dentro del bucle de
+     fondo sin que su efecto tenga que depender de ella (ver mas abajo:
+     si dependiera de cache, cada salida que va llegando reiniciaria el
+     propio bucle que la esta rellenando). */
+  const cacheRef = useRef({});
+  useEffect(() => { cacheRef.current = cache; }, [cache]);
+
   /*
     Enlace desde una tarjeta de "Tus estadisticas" (salida mas larga, vel.
     punta...) hasta esa salida concreta en Entrenamientos. Como esa pestana
@@ -140,6 +147,11 @@ export default function Dashboard({ atleta }) {
     salidas mas antiguas -las mas recientes son las que de verdad se
     consultan a menudo- y si ni asi cabe, la cache sigue funcionando en
     memoria para esta sesion, solo que no sobrevive a la siguiente recarga.
+
+    El recorte subio de 15 a 40: con 15, cualquiera con mas actividades
+    que eso volvia a pagar la descarga completa de las salidas mas viejas
+    en cada visita -era el propio recorte el que causaba trafico de mas,
+    no solo la falta de cache.
   */
   useEffect(() => {
     const ids = Object.keys(cache);
@@ -152,7 +164,7 @@ export default function Dashboard({ atleta }) {
       const recientes = (salidas || [])
         .map((s) => String(s.id))
         .filter((id) => cache[id])
-        .slice(-15);
+        .slice(-40);
       const recortada = Object.fromEntries(recientes.map((id) => [id, cache[id]]));
       localStorage.setItem('streams_ciclismo', JSON.stringify(recortada));
     } catch {
@@ -263,12 +275,25 @@ export default function Dashboard({ atleta }) {
     Este efecto rellena la cache solo, de una en una para no saturar a
     Strava, nada mas tener la lista de salidas. Si ya estaba en cache
     (por ejemplo tras un "Actualizar") no la vuelve a pedir.
+
+    Dos ajustes mas sobre la version original:
+
+    - Va de la salida mas reciente a la mas antigua ("salidas" llega
+      ordenado al reves, de la mas vieja a la mas nueva): es mas probable
+      que sea una salida reciente la que se abra a mano mientras esto
+      sigue trabajando detras, y asi le toca antes su turno.
+
+    - Antes de pedir cada una, mira cacheRef por si ya llego mientras
+      tanto por otro camino -normalmente porque el usuario abrio esa
+      salida en Entrenamientos y eso la pidio directamente-. Sin esta
+      comprobacion se acababa pidiendo dos veces la misma salida: una
+      vez la que la abriste tu, y otra cuando le tocaba el turno aqui.
   */
   const [fondo, setFondo] = useState({ activo: false, hechas: 0, total: 0 });
 
   useEffect(() => {
     if (!salidas || !salidas.length) return;
-    const pendientes = salidas.filter((s) => !cache[s.id]);
+    const pendientes = salidas.filter((s) => !cache[s.id]).slice().reverse();
     if (!pendientes.length) return;
 
     let cancelado = false;
@@ -283,9 +308,15 @@ export default function Dashboard({ atleta }) {
           hace saltar el 429 para el resto de la app (o para manana).
         */
         if (cercaDelLimite(limiteRef.current)) break;
-        try { await pedirStreams(pendientes[i].id); } catch { /* una salida rota no debe frenar el resto */ }
+        if (!cacheRef.current[pendientes[i].id]) {
+          try { await pedirStreams(pendientes[i].id); } catch { /* una salida rota no debe frenar el resto */ }
+          /* Deja un respiro mayor entre peticiones -antes eran 200 ms-
+             para que este barrido de fondo compita menos por red y CPU
+             con lo que el usuario este haciendo justo despues de cargar
+             la pagina. */
+          if (!cancelado) await new Promise((r) => setTimeout(r, 400));
+        }
         if (!cancelado) setFondo({ activo: true, hechas: i + 1, total: pendientes.length });
-        await new Promise((r) => setTimeout(r, 200));
       }
       if (!cancelado) setFondo((f) => ({ ...f, activo: false }));
     })();

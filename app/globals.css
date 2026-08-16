@@ -378,9 +378,9 @@ h3{letter-spacing:.01em}
    claro que son dos interruptores independientes, no un grupo exclusivo. */
 .perfil-opciones{display:flex;flex-direction:column;gap:0;margin-top:var(--e2)}
 .perfil-opciones-fila{display:flex;flex-direction:row;flex-wrap:wrap;gap:20px}
-.perfil-check{display:flex;align-items:center;gap:8px;cursor:pointer;width:fit-content;
+.perfil-check{display:flex;align-items:center;gap:5px;cursor:pointer;width:fit-content;
   font-family:"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif;
-  font-weight:700;font-size:13px;color:var(--ink2);text-transform:none;letter-spacing:normal}
+  font-weight:700;font-size:11px;color:var(--ink2);text-transform:none;letter-spacing:normal}
 .perfil-check input{accent-color:var(--acento);margin:0;width:13px;height:13px}
 
 /* Reserva la altura de una fila de leyenda aunque la pestana activa no
@@ -759,6 +759,16 @@ h1{font-size:clamp(26px,3.4vw,34px)}
 @media(min-width:901px){
   .btn-expandir{display:none}
 }
+
+/* Restablecer el zoom del mapa: mismo tratamiento visual que btn-expandir
+   (boton flotante translucido sobre el dibujo), pero sin el limite a
+   movil -aqui hace falta en cualquier tamano de pantalla, se ve solo
+   cuando hay zoom aplicado. */
+.btn-reset-mapa{position:absolute;top:10px;right:10px;z-index:2;
+  width:30px;height:30px;display:flex;align-items:center;justify-content:center;
+  padding:0;border-radius:50%;background:rgba(22,27,35,.85);
+  border:1px solid var(--line2);color:var(--ink2)}
+.btn-reset-mapa:hover{background:var(--card2);color:var(--ink)}
 
 /*
   Vista horizontal del perfil: un overlay a pantalla completa con el

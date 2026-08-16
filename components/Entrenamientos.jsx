@@ -1,9 +1,10 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import Perfil from './Perfil';
+import Perfil, { MARGEN_EJE } from './Perfil';
+import Mapa from './Mapa';
 import PerfilPuerto from './PerfilPuerto';
-import { IcoExpandir, IcoCerrar, IcoActividades, IcoFlecha } from './Iconos';
+import { IcoExpandir, IcoCerrar, IcoActividades, IcoFlecha, IcoMapa } from './Iconos';
 import {
   detectarPuertos, repartoZonas, repartoDureza, repartoVelocidad, valorarEntrenamiento,
   TRAMOS_DUREZA, TRAMOS_VELOCIDAD, vatiosPuerto, vatiosSalida, categoriaPuerto,
@@ -41,6 +42,10 @@ export default function Entrenamientos({
     que el usuario enciende si la quiere, no el punto de partida.
   */
   const [modo, setModo] = useState('relieve');
+  /* El mapa no es un modo mas del perfil -no cambia de que color se pinta
+     el relieve-, es un panel aparte que se abre al lado: por eso es un
+     interruptor propio y no una opcion de "modo". */
+  const [verMapa, setVerMapa] = useState(false);
   const [zonaFoco, setZonaFoco] = useState(null);
   const [durezaFoco, setDurezaFoco] = useState(null);
   const [velFoco, setVelFoco] = useState(null);
@@ -252,6 +257,20 @@ export default function Entrenamientos({
       >
         Frecuencia cardíaca
       </button>
+      {/*
+        No es un modo mas -no cambia el color del perfil-, es un panel que
+        se abre al lado (ver verMapa mas abajo): por eso alterna con su
+        propio interruptor en vez de mover "modo" como los de la
+        izquierda.
+      */}
+      <button
+        aria-pressed={verMapa}
+        onClick={() => setVerMapa((v) => !v)}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+      >
+        <IcoMapa width="14" height="14" />
+        Mapa
+      </button>
     </div>
   );
 
@@ -269,12 +288,12 @@ export default function Entrenamientos({
   const panelSubmodo = (compacto) => (
     <div className="perfil-leyenda-hueco">
       {modo === 'dureza' && (
-        /* marginLeft: mismo 4.4 % (L/W = 44/1000) que usa Perfil para
-           alinear sus propios controles con el eje del grafico. Sin el %
-           de la etapa que cubre cada color -eso ya se ve pintado en el
+        /* marginLeft: mismo margen (MARGEN_EJE, importado de Perfil) que
+           usa el propio perfil para alinear sus controles con el eje del
+           grafico. Sin el % de la etapa que cubre cada color -eso ya se ve pintado en el
            propio perfil, aqui solo hace falta saber que pendiente
            representa cada color. */
-        <div className="perfil-leyenda" style={{ marginLeft: '4.4%' }}>
+        <div className="perfil-leyenda" style={{ marginLeft: MARGEN_EJE }}>
           {TRAMOS_DUREZA.map((t) => (
             <button key={t.n} type="button"
               aria-pressed={durezaFoco === t.n}
@@ -288,7 +307,7 @@ export default function Entrenamientos({
       )}
 
       {modo === 'velocidad' && velocidad && (
-        <div className="perfil-leyenda" style={{ marginLeft: '4.4%' }}>
+        <div className="perfil-leyenda" style={{ marginLeft: MARGEN_EJE }}>
           {TRAMOS_VELOCIDAD.map((t, i) =>
             velocidad.porcentaje[i] > 0.4 ? (
               <button key={t.n} type="button"
@@ -304,7 +323,7 @@ export default function Entrenamientos({
       )}
 
       {modo === 'zonas' && tieneFC && (
-        <div className="perfil-leyenda" style={{ marginLeft: '4.4%' }}>
+        <div className="perfil-leyenda" style={{ marginLeft: MARGEN_EJE }}>
           {zonas.map((z) => (
             <button key={z.n} type="button"
               aria-pressed={zonaFoco === z.n}
@@ -396,8 +415,14 @@ export default function Entrenamientos({
               d={salida.vatiosReales ? 'de tu medidor' : 'calculada desde peso y desnivel'} />
           </div>
 
-          {/* ---------- perfil ---------- */}
-          <div className="chart" style={{ marginTop: 26 }}>
+          {/*
+            ---------- perfil ----------
+            paddingBottom mas ajustado que el resto de .chart de la app
+            (20px por defecto): entre el texto de la leyenda y el borde
+            de la caja sobraba aire que aqui no hace falta -la leyenda ya
+            trae su propio hueco arriba (perfil-leyenda-hueco).
+          */}
+          <div className="chart" style={{ marginTop: 26, paddingBottom: 12 }}>
             {/*
               Los modos suben a la cabecera del panel. Debajo del grafico
               estaban en el sitio donde menos se buscan: para cambiar de vista
@@ -411,34 +436,54 @@ export default function Entrenamientos({
             {cargando && <p className="cargando"><span className="spin" />Cargando el perfil…</p>}
             {fallo && <div className="callout warn">No se pudo cargar el perfil: {fallo}</div>}
             {streams && (
-              <div style={{ position: 'relative' }}>
-                {/*
-                  El boton vive encima del propio grafico y no en la
-                  cabecera: es una accion sobre el dibujo (verlo mas grande),
-                  no un modo mas que elegir junto a dureza/velocidad/FC.
-                */}
-                <button
-                  className="btn-expandir"
-                  onClick={() => setHorizontal(true)}
-                  title="Ver el perfil en horizontal"
-                  aria-label="Ver el perfil en horizontal"
-                >
-                  <IcoExpandir width="16" height="16" />
-                </button>
-                <Perfil
-                  streams={streams}
-                  puertos={puertos}
-                  nombres={nombresPuertos}
-                  zonas={zonas}
-                  modo={modo}
-                  zonaFoco={zonaFoco}
-                  durezaFoco={durezaFoco}
-                  velFoco={velFoco}
-                  puertoFoco={puertoFoco}
-                  altura={340}
-                  amarillo
-                  onPuertoClick={irAPuerto}
-                />
+              /*
+                El perfil ahora se dibuja de verdad a su ancho reducido
+                (60 %) en vez de dibujarse entero y comprimirse con un
+                scaleX: as textos, iconos y trazos conservan sus
+                proporciones, solo que a un tamano menor -escalados de
+                verdad, no aplastados.
+
+                alignItems: 'stretch' (el valor por defecto, pero puesto a
+                proposito) hace que el mapa tome la altura que le queda al
+                perfil una vez reducido, en vez de tener la suya propia.
+              */
+              <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
+                <div style={{ position: 'relative', flex: verMapa ? '0 0 60%' : '1 1 100%', minWidth: 0 }}>
+                  {/*
+                    El boton vive encima del propio grafico y no en la
+                    cabecera: es una accion sobre el dibujo (verlo mas
+                    grande), no un modo mas que elegir junto a
+                    dureza/velocidad/FC.
+                  */}
+                  <button
+                    className="btn-expandir"
+                    onClick={() => setHorizontal(true)}
+                    title="Ver el perfil en horizontal"
+                    aria-label="Ver el perfil en horizontal"
+                  >
+                    <IcoExpandir width="16" height="16" />
+                  </button>
+                  <Perfil
+                    streams={streams}
+                    puertos={puertos}
+                    nombres={nombresPuertos}
+                    zonas={zonas}
+                    modo={modo}
+                    zonaFoco={zonaFoco}
+                    durezaFoco={durezaFoco}
+                    velFoco={velFoco}
+                    puertoFoco={puertoFoco}
+                    altura={340}
+                    amarillo
+                    onPuertoClick={irAPuerto}
+                  />
+                </div>
+
+                {verMapa && (
+                  <div style={{ flex: '0 0 40%', minWidth: 0 }}>
+                    <Mapa streams={streams} puertos={puertos} />
+                  </div>
+                )}
               </div>
             )}
 
