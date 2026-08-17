@@ -31,11 +31,13 @@ export const IcoDatos = (p) => (
   </svg>
 );
 
-/* Entrenamientos: el perfil de una salida. */
-export const IcoEntrenamientos = (p) => (
+/* Actividades: la bicicleta, cada actividad es una salida en ella. */
+export const IcoActividades = (p) => (
   <svg {...base} {...p}>
-    <path d="M3 18l4.5-7 3.5 4L15 8l6 10" />
-    <path d="M3 21h18" />
+    <circle cx="5.5" cy="17" r="3.4" />
+    <circle cx="18.5" cy="17" r="3.4" />
+    <path d="M5.5 17l4-9h3l-2 4h3.5l4.5 5" />
+    <path d="M9.5 8h4" />
   </svg>
 );
 
@@ -89,6 +91,31 @@ export const IcoLogros = (p) => (
     <path d="M8 3l2.5 6.5M16 3l-2.5 6.5" />
     <circle cx="12" cy="14.5" r="6.5" />
     <path d="M12 11.2l1.1 2.3 2.5.4-1.8 1.8.4 2.5-2.2-1.2-2.2 1.2.4-2.5-1.8-1.8 2.5-.4z" />
+  </svg>
+);
+
+/* Mapa: el pin de ubicacion, para el boton que muestra el trazado. */
+export const IcoMapa = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 21s7-7.5 7-12a7 7 0 1 0-14 0c0 4.5 7 12 7 12z" />
+    <circle cx="12" cy="9" r="2.3" />
+  </svg>
+);
+
+/* Buscar: la lupa, para el buscador de actividades por nombre. */
+export const IcoBuscar = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="10.5" cy="10.5" r="6.5" />
+    <path d="M20 20l-4.8-4.8" />
+  </svg>
+);
+
+/* Restablecer: flecha circular, para volver el zoom del mapa a su ajuste
+   inicial. */
+export const IcoRestablecer = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 12a8 8 0 1 1 2.5 5.8" />
+    <path d="M4 17v-5h5" />
   </svg>
 );
 

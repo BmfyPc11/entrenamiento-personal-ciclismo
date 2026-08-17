@@ -9,6 +9,5 @@ export async function GET() {
   if (!s) return NextResponse.json({ error: 'sin_sesion' }, { status: 401 });
 
   const salidas = await listarSalidas();
-  
   return NextResponse.json({ salidas, atleta: s.atleta });
 }

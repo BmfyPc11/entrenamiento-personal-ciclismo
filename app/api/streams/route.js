@@ -9,8 +9,8 @@ export async function GET(req) {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'falta_id' }, { status: 400 });
 
-  const { streams, error } = await traerStreams(id);
-  if (error) return NextResponse.json({ error }, { status: 502 });
+  const { streams, error, limite } = await traerStreams(id);
+  if (error) return NextResponse.json({ error, limite }, { status: 502 });
 
-  return NextResponse.json({ streams });
+  return NextResponse.json({ streams, limite });
 }

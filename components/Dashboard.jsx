@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Entrenamientos from './Entrenamientos';
 import Perfil from './Perfil';
 import Datos from './Datos';
@@ -20,21 +20,9 @@ import {
   PERFILES_BICI, detectarPuertos, serieCarga, umbralEstimado,
   vatios, vatiosPuerto, repartoZonas, repartoGlobal,
   calcularZonas, ultimosDias, consejoEntrenador, normalizarAltitud,
-  velocidadMaximaLlano, tipoRuta,
+  velocidadMaximaLlano, tipoRuta, TIPO_INSIGNIA,
   num, duracion, duracionHMS, fechaCorta, fechaDDMMAA, kmh, km,
 } from '@/lib/metrics';
-
-/* Codigo de tres letras y color de cada tipo de terreno, para la
-   insignia de la tabla de salidas. No son los mismos colores que usa
-   COLORES_TIPO en el calendario de Ultimos 30 dias: alli el naranja de
-   "mixto" tiene que distinguirse del ambar de la zona 3 de FC en el
-   mismo golpe de vista, y aqui la insignia va sola en su columna, sin
-   esa colision. */
-const TIPO_INSIGNIA = {
-  llano: { codigo: 'LLA', fondo: 'var(--green)', tinta: '#0A0C0F' },
-  mixto: { codigo: 'COL', fondo: 'var(--amber)', tinta: '#0A0C0F' },
-  puerto: { codigo: 'MON', fondo: 'var(--red)', tinta: '#FFFFFF' },
-};
 
 /* La lista de secciones vive en Layout, que es quien la pinta. */
 
@@ -43,10 +31,38 @@ const CFG_INICIAL = {
   modeloZonas: 'clasico', zonasPropias: null,
 };
 
+/*
+  Lee la cache de streams guardada en el navegador de una carga anterior.
+  Perezoso (se pasa como funcion a useState) para no tocar localStorage en
+  cada render, solo una vez al montar. Si el JSON esta corrupto o no hay
+  nada guardado, arranca vacio -exactamente como arrancaba siempre antes
+  de este cambio.
+*/
+function leerCacheStreams() {
+  if (typeof window === 'undefined') return {};
+  try {
+    return JSON.parse(localStorage.getItem('streams_ciclismo')) || {};
+  } catch {
+    return {};
+  }
+}
+
+/*
+  Strava manda en cada respuesta cuanto llevas gastado de tus dos topes.
+  Se copia esta funcion de lib/strava.js en vez de importarla porque ese
+  archivo tambien usa next/headers (cookies), que no se puede empaquetar
+  en un componente de cliente -aunque solo se use una funcion pura suya.
+*/
+function cercaDelLimite(limite) {
+  if (!limite) return false;
+  return limite.corto.usado / limite.corto.tope > 0.9
+    || limite.dia.usado / limite.dia.tope > 0.9;
+}
+
 export default function Dashboard({ atleta }) {
   const [salidas, setSalidas] = useState(null);
   const [error, setError] = useState(null);
-  const [cache, setCache] = useState({});
+  const [cache, setCache] = useState(leerCacheStreams);
   const [pestana, setPestana] = useState('resumen');
   const [cfg, setCfg] = useState(CFG_INICIAL);
   const [excluidas, setExcluidas] = useState(new Set());
@@ -54,6 +70,18 @@ export default function Dashboard({ atleta }) {
   const [objetivos, setObjetivos] = useState({ ...OBJETIVOS_INICIALES });
   const [refrescando, setRefrescando] = useState(false);
   const [menuAbierto, setMenuAbierto] = useState(false);
+
+  /* Ultimo uso de la API que Strava ha informado, para poder frenar la
+     sincronizacion de fondo antes de chocar con el limite. Un ref y no un
+     estado: cambia con cada peticion y no debe disparar un re-render. */
+  const limiteRef = useRef(null);
+
+  /* Copia siempre al dia de "cache", para leerla dentro del bucle de
+     fondo sin que su efecto tenga que depender de ella (ver mas abajo:
+     si dependiera de cache, cada salida que va llegando reiniciaria el
+     propio bucle que la esta rellenando). */
+  const cacheRef = useRef({});
+  useEffect(() => { cacheRef.current = cache; }, [cache]);
 
   /*
     Enlace desde una tarjeta de "Tus estadisticas" (salida mas larga, vel.
@@ -84,7 +112,46 @@ export default function Dashboard({ atleta }) {
     try { localStorage.setItem('excluidas_ciclismo', JSON.stringify([...excluidas])); } catch {}
   }, [excluidas]);
 
-  /* --- carga de actividades --- */
+  /*
+    La cache de streams tambien se guarda en el navegador. Sin esto, cada
+    F5 la vaciaba y el efecto de mas abajo volvia a pedir a Strava el
+    detalle de TODAS las salidas otra vez -33 peticiones por cada recarga,
+    aunque no hubiera ninguna salida nueva. Es justo lo que agoto el
+    limite de la API: ver PROYECTO.md.
+
+    Un stream ya grabado no cambia, asi que no hace falta ninguna
+    caducidad: solo se vuelve a pedir si "Actualizar" trae una salida que
+    no estaba antes. Si el navegador se queda sin cuota (localStorage
+    ronda los 5 MB y el historial solo crece), se descartan aqui las
+    salidas mas antiguas -las mas recientes son las que de verdad se
+    consultan a menudo- y si ni asi cabe, la cache sigue funcionando en
+    memoria para esta sesion, solo que no sobrevive a la siguiente recarga.
+
+    El recorte subio de 15 a 40: con 15, cualquiera con mas actividades
+    que eso volvia a pagar la descarga completa de las salidas mas viejas
+    en cada visita -era el propio recorte el que causaba trafico de mas,
+    no solo la falta de cache.
+  */
+  useEffect(() => {
+    const ids = Object.keys(cache);
+    if (!ids.length) return;
+    try {
+      localStorage.setItem('streams_ciclismo', JSON.stringify(cache));
+      return;
+    } catch {}
+    try {
+      const recientes = (salidas || [])
+        .map((s) => String(s.id))
+        .filter((id) => cache[id])
+        .slice(-40);
+      const recortada = Object.fromEntries(recientes.map((id) => [id, cache[id]]));
+      localStorage.setItem('streams_ciclismo', JSON.stringify(recortada));
+    } catch {
+      // Sin espacio ni para eso: se sigue solo en memoria, como antes de este cambio.
+    }
+  }, [cache, salidas]);
+
+  /* --- carga de actividades, desde la base de datos --- */
   const cargar = useCallback(async () => {
     setError(null);
     try {
@@ -103,8 +170,8 @@ export default function Dashboard({ atleta }) {
   }, [atleta, cfg.peso]);
 
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, []);
-  
-    /* --- sincronizacion con Strava, a mano desde "Actualizar" --- */
+
+  /* --- sincronizacion con Strava, a mano desde "Actualizar" --- */
   const sincronizar = useCallback(async () => {
     setRefrescando(true);
     setError(null);
@@ -131,8 +198,16 @@ export default function Dashboard({ atleta }) {
   /* --- streams bajo demanda, con cache --- */
   const pedirStreams = useCallback(async (id) => {
     const r = await fetch(`/api/streams?id=${id}`, { cache: 'no-store' });
+    /*
+      El cuerpo se lee siempre, aunque la respuesta sea un error: es ahi
+      donde viaja el "limite" que necesita el bucle de fondo para saber
+      cuando parar. Leerlo solo en el camino feliz (como antes) perdia
+      justo el dato que hacia falta cuando mas hacia falta -al borde del
+      limite, que es cuando empiezan a llegar los 502.
+    */
+    const j = await r.json().catch(() => ({}));
+    if (j.limite) limiteRef.current = j.limite;
     if (!r.ok) throw new Error(r.status === 502 ? 'Strava no devolvió el detalle' : 'Error de conexión');
-    const j = await r.json();
     if (j.error) throw new Error(j.error);
     /*
       Una respuesta sin series utiles no se guarda en la cache. Si se
@@ -162,12 +237,25 @@ export default function Dashboard({ atleta }) {
     Este efecto rellena la cache solo, de una en una para no saturar a
     Strava, nada mas tener la lista de salidas. Si ya estaba en cache
     (por ejemplo tras un "Actualizar") no la vuelve a pedir.
+
+    Dos ajustes mas sobre la version original:
+
+    - Va de la salida mas reciente a la mas antigua ("salidas" llega
+      ordenado al reves, de la mas vieja a la mas nueva): es mas probable
+      que sea una salida reciente la que se abra a mano mientras esto
+      sigue trabajando detras, y asi le toca antes su turno.
+
+    - Antes de pedir cada una, mira cacheRef por si ya llego mientras
+      tanto por otro camino -normalmente porque el usuario abrio esa
+      salida en Entrenamientos y eso la pidio directamente-. Sin esta
+      comprobacion se acababa pidiendo dos veces la misma salida: una
+      vez la que la abriste tu, y otra cuando le tocaba el turno aqui.
   */
   const [fondo, setFondo] = useState({ activo: false, hechas: 0, total: 0 });
 
   useEffect(() => {
     if (!salidas || !salidas.length) return;
-    const pendientes = salidas.filter((s) => !cache[s.id]);
+    const pendientes = salidas.filter((s) => !cache[s.id]).slice().reverse();
     if (!pendientes.length) return;
 
     let cancelado = false;
@@ -175,9 +263,22 @@ export default function Dashboard({ atleta }) {
       setFondo({ activo: true, hechas: 0, total: pendientes.length });
       for (let i = 0; i < pendientes.length; i++) {
         if (cancelado) break;
-        try { await pedirStreams(pendientes[i].id); } catch { /* una salida rota no debe frenar el resto */ }
+        /*
+          Si Strava ya avisa que vamos por encima del 90 % de cualquiera
+          de los dos topes, se corta aqui: mejor dejar salidas sin
+          detalle hasta la proxima carga que ser la peticion de mas que
+          hace saltar el 429 para el resto de la app (o para manana).
+        */
+        if (cercaDelLimite(limiteRef.current)) break;
+        if (!cacheRef.current[pendientes[i].id]) {
+          try { await pedirStreams(pendientes[i].id); } catch { /* una salida rota no debe frenar el resto */ }
+          /* Deja un respiro mayor entre peticiones -antes eran 200 ms-
+             para que este barrido de fondo compita menos por red y CPU
+             con lo que el usuario este haciendo justo despues de cargar
+             la pagina. */
+          if (!cancelado) await new Promise((r) => setTimeout(r, 400));
+        }
         if (!cancelado) setFondo({ activo: true, hechas: i + 1, total: pendientes.length });
-        await new Promise((r) => setTimeout(r, 200));
       }
       if (!cancelado) setFondo((f) => ({ ...f, activo: false }));
     })();
