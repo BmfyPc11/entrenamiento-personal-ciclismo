@@ -86,7 +86,6 @@ export default function Dashboard({ atleta }) {
 
   /* --- carga de actividades --- */
   const cargar = useCallback(async () => {
-    setRefrescando(true);
     setError(null);
     try {
       const r = await fetch('/api/activities', { cache: 'no-store' });
@@ -94,25 +93,40 @@ export default function Dashboard({ atleta }) {
       const j = await r.json();
       if (j.error) throw new Error(j.error);
       setSalidas(j.salidas);
-      if (j.aviso === 'limite_alcanzado') {
-        setError('Strava ha limitado las peticiones por unos minutos. Se muestran las salidas que dio tiempo a leer.');
-      }
-      // si Strava tiene tu peso, lo usamos la primera vez
+      // si Strava tiene tu peso, se usa la primera vez
       if (atleta?.peso && cfg.peso === CFG_INICIAL.peso) {
         setCfg((c) => ({ ...c, peso: Math.round(atleta.peso) }));
       }
     } catch (e) {
-      setError(
-        e.message === 'limite_alcanzado'
-          ? 'Strava ha alcanzado su límite de peticiones. Espera unos 15 minutos y vuelve a intentarlo.'
-          : 'No se pudieron leer tus actividades. Prueba a recargar la página.'
-      );
-    } finally {
-      setRefrescando(false);
+      setError('No se pudieron leer tus actividades. Prueba a recargar la página.');
     }
   }, [atleta, cfg.peso]);
 
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, []);
+  
+    /* --- sincronizacion con Strava, a mano desde "Actualizar" --- */
+  const sincronizar = useCallback(async () => {
+    setRefrescando(true);
+    setError(null);
+    try {
+      const r = await fetch('/api/sync', { method: 'POST', cache: 'no-store' });
+      if (r.status === 401) { window.location.reload(); return; }
+      const j = await r.json();
+      if (j.error) throw new Error(j.error);
+      if (j.aviso === 'limite_alcanzado') {
+        setError('Strava ha limitado las peticiones por unos minutos. Se sincronizó lo que dio tiempo.');
+      }
+      await cargar();
+    } catch (e) {
+      setError(
+        e.message === 'limite_alcanzado'
+          ? 'Strava ha alcanzado su límite de peticiones. Espera unos 15 minutos y vuelve a intentarlo.'
+          : 'No se pudo sincronizar con Strava. Prueba de nuevo en un momento.'
+      );
+    } finally {
+      setRefrescando(false);
+    }
+  }, [cargar]);
 
   /* --- streams bajo demanda, con cache --- */
   const pedirStreams = useCallback(async (id) => {
@@ -286,7 +300,7 @@ export default function Dashboard({ atleta }) {
 
   return (
     <Layout seccion={pestana} setSeccion={setPestana} atleta={atleta}
-      onActualizar={cargar} refrescando={refrescando}
+      onActualizar={sincronizar} refrescando={refrescando}
       abierto={menuAbierto} setAbierto={setMenuAbierto}>
     <div className="wrap">
       {/*
