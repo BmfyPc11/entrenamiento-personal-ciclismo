@@ -11,7 +11,7 @@ export async function POST() {
 	const { salidas, error } = await traerActividades();
 	if (error && !salidas?.length) return NextResponse.json({ error }, { status: 502 });
 
-	await guardarSalidas(salidas);
+	await guardarSalidas(salidas, s.atleta?.id);
 	
 	let limite = null;
 	for (const salida of salidas) {

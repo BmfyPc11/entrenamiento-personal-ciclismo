@@ -8,6 +8,6 @@ export async function GET() {
   const s = leerSesion();
   if (!s) return NextResponse.json({ error: 'sin_sesion' }, { status: 401 });
 
-  const salidas = await listarSalidas();
+  const salidas = await listarSalidas(s.atleta?.id);
   return NextResponse.json({ salidas, atleta: s.atleta });
 }

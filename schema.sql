@@ -4,6 +4,7 @@
 -- Tabla de salidas (actividades de Strava)
 CREATE TABLE IF NOT EXISTS salidas (
   id BIGINT PRIMARY KEY,
+  athlete_id BIGINT NOT NULL,
   nombre VARCHAR(255) NOT NULL,
   tipo VARCHAR(50),
   fecha TIMESTAMP NOT NULL,
@@ -71,6 +72,7 @@ CREATE TABLE IF NOT EXISTS logros (
 );
 
 -- Índices para búsquedas frecuentes
+CREATE INDEX IF NOT EXISTS idx_salidas_athlete_id ON salidas(athlete_id);
 CREATE INDEX IF NOT EXISTS idx_salidas_fecha ON salidas(fecha);
 CREATE INDEX IF NOT EXISTS idx_segmentos_salida_id ON segmentos(salida_id);
 CREATE INDEX IF NOT EXISTS idx_nombres_cima_location ON nombres_cima(lat, lon);
