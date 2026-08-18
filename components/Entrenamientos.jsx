@@ -9,10 +9,10 @@ import {
   detectarPuertos, repartoZonas, repartoDureza, repartoVelocidad, valorarEntrenamiento,
   TRAMOS_DUREZA, TRAMOS_VELOCIDAD, vatiosPuerto, vatiosSalida, categoriaPuerto,
   num, duracion, fechaLarga, fechaDDMMAA, kmh, km, metrosPorKm, tipoRuta, TIPO_INSIGNIA,
+  distanciaGeo,
 } from '@/lib/metrics';
-import {
-  emparejarSegmento, buscarNombre, guardarNombre, leerCache, escribirCache,
-} from '@/lib/nombres';
+import { emparejarSegmento, buscarNombre, guardarNombre, RADIO_NOMBRE } from '@/lib/nombres';
+import { useCacheNombres, escribirCache } from '@/lib/nombresCache';
 
 export default function Entrenamientos({
   salidas, cfg, zonas, umbral, cache, pedirStreams,
@@ -176,7 +176,7 @@ export default function Entrenamientos({
 
   /* ---------- nombres reales de las subidas ---------- */
 
-  const [cacheNombres, setCacheNombres] = useState(() => leerCache());
+  const [cacheNombres, setCacheNombres] = useCacheNombres();
   const [segmentos, setSegmentos] = useState({});   // id de salida -> efforts
 
   /*
@@ -214,6 +214,26 @@ export default function Entrenamientos({
       return deStrava || guardado?.nombre || `Subida ${i + 1}`;
     });
   }, [puertos, segmentos, sel, streams, cacheNombres]);
+
+  /* ---------- renombrado manual, igual que en Mis ascensiones ---------- */
+
+  const [editandoPuerto, setEditandoPuerto] = useState(null);
+  const [borradorPuerto, setBorradorPuerto] = useState('');
+
+  /* Guardar vacio equivale a volver al nombre automatico. */
+  const guardarManualPuerto = (p, i) => {
+    const cima = streams?.latlng ? streams.latlng[p.fin] : null;
+    if (!cima) { setEditandoPuerto(null); return; }
+    const limpio = borradorPuerto.trim();
+    const nueva = limpio
+      ? guardarNombre(cacheNombres, cima, limpio, 'manual')
+      : cacheNombres.filter(
+          (e) => !(e.fuente === 'manual' && distanciaGeo([e.lat, e.lon], cima) < RADIO_NOMBRE)
+        );
+    setCacheNombres(nueva);
+    escribirCache(nueva);
+    setEditandoPuerto(null);
+  };
 
   /*
     Se guardan para que el resto de pestanas los aprovechen sin volver a
@@ -689,7 +709,41 @@ export default function Entrenamientos({
                                   color: c.codigo === 'hc' ? '#FFFFFF' : '#0A0C0F' }}>
                                 {c.nombre}
                               </span>
-                              {nombresPuertos[i]}
+                              {editandoPuerto === i ? (
+                                <input
+                                  autoFocus
+                                  value={borradorPuerto}
+                                  onChange={(e) => setBorradorPuerto(e.target.value)}
+                                  onBlur={() => guardarManualPuerto(p, i)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') guardarManualPuerto(p, i);
+                                    if (e.key === 'Escape') setEditandoPuerto(null);
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  placeholder="Vacío para volver al automático"
+                                  style={{ width: '100%', maxWidth: 220 }}
+                                />
+                              ) : (
+                                <span
+                                  onClick={(e) => {
+                                    /* La fila entera despliega el detalle: sin
+                                       esto, editar el nombre lo abriria a la vez. */
+                                    e.stopPropagation();
+                                    const cima = streams?.latlng ? streams.latlng[p.fin] : null;
+                                    if (!cima) return;
+                                    setEditandoPuerto(i);
+                                    setBorradorPuerto(
+                                      buscarNombre(cacheNombres, cima)?.nombre || ''
+                                    );
+                                  }}
+                                  title={streams?.latlng?.[p.fin]
+                                    ? 'Pulsa para renombrar' : 'Sin coordenadas: no se puede nombrar'}
+                                  style={{ cursor: streams?.latlng?.[p.fin] ? 'text' : 'default',
+                                    borderBottom: streams?.latlng?.[p.fin]
+                                      ? '1px dotted var(--line2)' : undefined }}>
+                                  {nombresPuertos[i]}
+                                </span>
+                              )}
                             </span>
                           </td>
                           <td>{num(p.kmInicio, 1)}–{num(p.kmFin, 1)}</td>

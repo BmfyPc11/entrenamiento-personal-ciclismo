@@ -133,8 +133,8 @@ test('sin entradas no encuentra nada', () => {
 
 test('encuentra una cima dentro del radio', () => {
   const e = guardarNombre([], MONTJUIC, 'Montjuïc', 'strava');
-  // unos 90 m mas al norte
-  const r = buscarNombre(e, [41.3647, 2.1655]);
+  // unos 30 m mas al norte
+  const r = buscarNombre(e, [41.36417, 2.1655]);
   assert.equal(r.nombre, 'Montjuïc');
   assert.equal(r.fuente, 'strava');
 });

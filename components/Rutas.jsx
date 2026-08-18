@@ -7,9 +7,8 @@ import { parseGPX, referenciasCiclista, analizarRuta } from '@/lib/gpx';
 import {
   distanciaEquivalente, nivelDificultad, TRAMOS_DUREZA, num, categoriaPuerto,
 } from '@/lib/metrics';
-import {
-  buscarNombre, guardarNombre, leerCache, escribirCache,
-} from '@/lib/nombres';
+import { buscarNombre, guardarNombre } from '@/lib/nombres';
+import { useCacheNombres, escribirCache } from '@/lib/nombresCache';
 
 /*
   Traduce el codigo de error del servidor a algo accionable.
@@ -250,7 +249,7 @@ function DetalleRuta({ ruta, datos, cargando, ref_, cfg, zonas }) {
     [datos, ref_, cfg]
   );
 
-  const [cacheNombres, setCacheNombres] = useState(() => leerCache());
+  const [cacheNombres, setCacheNombres] = useCacheNombres();
 
   /*
     Una ruta guardada no se ha rodado, asi que no hay segmentos de

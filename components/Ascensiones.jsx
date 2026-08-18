@@ -6,9 +6,8 @@ import {
   agruparAscensiones, distanciaEquivalente, nivelDificultadPuerto,
   vatiosPuerto, num, duracion, fechaCorta, distanciaGeo, categoriaPuerto,
 } from '@/lib/metrics';
-import {
-  buscarNombre, guardarNombre, leerCache, escribirCache,
-} from '@/lib/nombres';
+import { buscarNombre, guardarNombre, RADIO_NOMBRE } from '@/lib/nombres';
+import { useCacheNombres, escribirCache } from '@/lib/nombresCache';
 
 export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, pedirStreams }) {
   const [abierta, setAbierta] = useState(null);
@@ -16,7 +15,7 @@ export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, ped
   const [progreso, setProgreso] = useState({ hechas: 0, total: 0 });
   const [cargando, setCargando] = useState(false);
   const [orden, setOrden] = useState('dificultad');
-  const [cacheNombres, setCacheNombres] = useState(() => leerCache());
+  const [cacheNombres, setCacheNombres] = useCacheNombres();
   const [editando, setEditando] = useState(null);
   const [borrador, setBorrador] = useState('');
 
@@ -111,7 +110,7 @@ export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, ped
     const nueva = limpio
       ? guardarNombre(cacheNombres, g.cima, limpio, 'manual')
       : cacheNombres.filter(
-          (e) => !(e.fuente === 'manual' && distanciaGeo([e.lat, e.lon], g.cima) < 250)
+          (e) => !(e.fuente === 'manual' && distanciaGeo([e.lat, e.lon], g.cima) < RADIO_NOMBRE)
         );
     setCacheNombres(nueva);
     escribirCache(nueva);

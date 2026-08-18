@@ -5,9 +5,8 @@ import Perfil from './Perfil';
 import PerfilPuerto from './PerfilPuerto';
 import { parseGPX, referenciasCiclista, analizarRuta } from '@/lib/gpx';
 import { TRAMOS_DUREZA, num, categoriaPuerto } from '@/lib/metrics';
-import {
-  buscarNombre, guardarNombre, leerCache, escribirCache,
-} from '@/lib/nombres';
+import { buscarNombre, guardarNombre } from '@/lib/nombres';
+import { useCacheNombres, escribirCache } from '@/lib/nombresCache';
 
 export default function AnalizadorGPX({ salidas, cache, excluidas, cfg, zonas }) {
   const [datos, setDatos] = useState(null);
@@ -27,7 +26,7 @@ export default function AnalizadorGPX({ salidas, cache, excluidas, cfg, zonas })
     [datos, ref, cfg]
   );
 
-  const [cacheNombres, setCacheNombres] = useState(() => leerCache());
+  const [cacheNombres, setCacheNombres] = useCacheNombres();
 
   /*
     Un GPX subido no se ha rodado con Strava, asi que no hay segmentos
