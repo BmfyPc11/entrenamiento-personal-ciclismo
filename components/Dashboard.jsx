@@ -48,27 +48,6 @@ function leerCacheStreams() {
 }
 
 /*
-  La lista de salidas tambien se guarda con una fecha. Mientras no pase
-  TTL_SALIDAS_MS desde la ultima vez que se leyo de Strava, abrir la app
-  de nuevo (otra pestaña, volver mas tarde el mismo rato) usa esta copia
-  en vez de volver a pedirla -era la otra llamada que se repetia en cada
-  carga sin motivo, aunque no hubiera ninguna salida nueva. "Actualizar"
-  se salta esto siempre: es el gesto explicito de "quiero lo ultimo".
-*/
-const TTL_SALIDAS_MS = 30 * 60 * 1000; // 30 minutos
-
-function leerSalidasCache() {
-  if (typeof window === 'undefined') return null;
-  try {
-    const g = JSON.parse(localStorage.getItem('salidas_ciclismo'));
-    if (!g || !g.ts || !Array.isArray(g.salidas)) return null;
-    return g;
-  } catch {
-    return null;
-  }
-}
-
-/*
   Strava manda en cada respuesta cuanto llevas gastado de tus dos topes.
   Se copia esta funcion de lib/strava.js en vez de importarla porque ese
   archivo tambien usa next/headers (cookies), que no se puede empaquetar
@@ -172,66 +151,49 @@ export default function Dashboard({ atleta }) {
     }
   }, [cache, salidas]);
 
-  /* --- carga de actividades --- */
+  /* --- carga de actividades, desde la base de datos --- */
   const cargar = useCallback(async () => {
-    setRefrescando(true);
     setError(null);
     try {
-      /*
-        athlete_count (personas) no viene en el listado de actividades y
-        Strava obliga a pedirlo actividad por actividad; sin este mapa el
-        servidor lo repetia para las mismas salidas de siempre en cada
-        carga. Se manda lo que ya se sabe de una carga anterior para que
-        solo pida lo nuevo -ver el comentario en lib/strava.js.
-      */
-      let conocidas = null;
-      try {
-        conocidas = JSON.parse(localStorage.getItem('personas_ciclismo')) || null;
-      } catch {}
-
-      const r = await fetch('/api/activities', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conocidas }),
-        cache: 'no-store',
-      });
+      const r = await fetch('/api/activities', { cache: 'no-store' });
       if (r.status === 401) { window.location.reload(); return; }
       const j = await r.json();
-      if (j.limite) limiteRef.current = j.limite;
       if (j.error) throw new Error(j.error);
       setSalidas(j.salidas);
-      try {
-        const mapa = Object.fromEntries(j.salidas.map((s) => [s.id, s.personas]));
-        localStorage.setItem('personas_ciclismo', JSON.stringify(mapa));
-        localStorage.setItem('salidas_ciclismo', JSON.stringify({ ts: Date.now(), salidas: j.salidas }));
-      } catch {}
-      if (j.aviso === 'limite_alcanzado') {
-        setError('Strava ha limitado las peticiones por unos minutos. Se muestran las salidas que dio tiempo a leer.');
-      }
-      // si Strava tiene tu peso, lo usamos la primera vez
+      // si Strava tiene tu peso, se usa la primera vez
       if (atleta?.peso && cfg.peso === CFG_INICIAL.peso) {
         setCfg((c) => ({ ...c, peso: Math.round(atleta.peso) }));
       }
     } catch (e) {
+      setError('No se pudieron leer tus actividades. Prueba a recargar la página.');
+    }
+  }, [atleta, cfg.peso]);
+
+  useEffect(() => { cargar(); /* eslint-disable-next-line */ }, []);
+
+  /* --- sincronizacion con Strava, a mano desde "Actualizar" --- */
+  const sincronizar = useCallback(async () => {
+    setRefrescando(true);
+    setError(null);
+    try {
+      const r = await fetch('/api/sync', { method: 'POST', cache: 'no-store' });
+      if (r.status === 401) { window.location.reload(); return; }
+      const j = await r.json();
+      if (j.error) throw new Error(j.error);
+      if (j.aviso === 'limite_alcanzado') {
+        setError('Strava ha limitado las peticiones por unos minutos. Se sincronizó lo que dio tiempo.');
+      }
+      await cargar();
+    } catch (e) {
       setError(
         e.message === 'limite_alcanzado'
           ? 'Strava ha alcanzado su límite de peticiones. Espera unos 15 minutos y vuelve a intentarlo.'
-          : 'No se pudieron leer tus actividades. Prueba a recargar la página.'
+          : 'No se pudo sincronizar con Strava. Prueba de nuevo en un momento.'
       );
     } finally {
       setRefrescando(false);
     }
-  }, [atleta, cfg.peso]);
-
-  useEffect(() => {
-    const guardado = leerSalidasCache();
-    if (guardado && Date.now() - guardado.ts < TTL_SALIDAS_MS) {
-      setSalidas(guardado.salidas);
-      return;
-    }
-    cargar();
-    // eslint-disable-next-line
-  }, []);
+  }, [cargar]);
 
   /* --- streams bajo demanda, con cache --- */
   const pedirStreams = useCallback(async (id) => {
@@ -439,7 +401,7 @@ export default function Dashboard({ atleta }) {
 
   return (
     <Layout seccion={pestana} setSeccion={setPestana} atleta={atleta}
-      onActualizar={cargar} refrescando={refrescando}
+      onActualizar={sincronizar} refrescando={refrescando}
       abierto={menuAbierto} setAbierto={setMenuAbierto}>
     <div className="wrap">
       {/*
