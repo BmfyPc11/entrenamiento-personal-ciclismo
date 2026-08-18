@@ -16,7 +16,7 @@ import { useCacheNombres, escribirCache } from '@/lib/nombresCache';
 
 export default function Entrenamientos({
   salidas, cfg, zonas, umbral, cache, pedirStreams,
-  salidaInicial, onSalidaInicialConsumida,
+  salidaInicial, onSalidaInicialConsumida, refTerreno,
 }) {
   const ordenadas = useMemo(
     () => [...salidas].sort((a, b) => (a.fecha < b.fecha ? 1 : -1)),
@@ -453,8 +453,8 @@ export default function Entrenamientos({
           </div>
           <div className="sel-salida">
             <div className="salida-nav">
-              <BuscadorSalida ordenadas={ordenadas} sel={sel} setSel={setSel} />
-              <SelectorSalida ordenadas={ordenadas} sel={sel} setSel={setSel} />
+              <BuscadorSalida ordenadas={ordenadas} sel={sel} setSel={setSel} refTerreno={refTerreno} />
+              <SelectorSalida ordenadas={ordenadas} sel={sel} setSel={setSel} refTerreno={refTerreno} />
               <div className="salida-nav-flechas">
                 <button type="button" className="btn-nav-salida"
                   onClick={irASalidaAnterior}
@@ -565,7 +565,7 @@ export default function Entrenamientos({
                     amarillo
                     onPuertoClick={irAPuerto}
                     onHoverChange={verMapa ? setPuntoHover : undefined}
-                    llana={tipoRuta(salida) === 'llano'}
+                    llana={tipoRuta(salida, refTerreno) === 'llano'}
                   />
                 </div>
 
@@ -614,7 +614,7 @@ export default function Entrenamientos({
                   amarillo
                   compacto
                   onPuertoClick={irAPuerto}
-                  llana={tipoRuta(salida) === 'llano'}
+                  llana={tipoRuta(salida, refTerreno) === 'llano'}
                 />
 
                 {panelSubmodo(true)}
@@ -911,7 +911,7 @@ function Valoracion({ salida, streams, reparto, dureza, puertos, cfg, zonas, umb
   (selector-salida-lista) para que las dos formas de elegir salida se lean
   como parte del mismo control.
 */
-function BuscadorSalida({ ordenadas, sel, setSel }) {
+function BuscadorSalida({ ordenadas, sel, setSel, refTerreno }) {
   const [abierto, setAbierto] = useState(false);
   const [texto, setTexto] = useState('');
   const raiz = useRef(null);
@@ -958,7 +958,7 @@ function BuscadorSalida({ ordenadas, sel, setSel }) {
                 <li className="buscador-salida-vacio">Sin resultados</li>
               )}
               {resultados.map((s) => {
-                const insignia = TIPO_INSIGNIA[tipoRuta(s)];
+                const insignia = TIPO_INSIGNIA[tipoRuta(s, refTerreno)];
                 return (
                   <li key={s.id}>
                     <button type="button" role="option" aria-selected={s.id === sel}
@@ -988,7 +988,7 @@ function BuscadorSalida({ ordenadas, sel, setSel }) {
   Logros: un boton que alterna un panel absoluto debajo, y un listener
   de click fuera para cerrarlo.
 */
-function SelectorSalida({ ordenadas, sel, setSel }) {
+function SelectorSalida({ ordenadas, sel, setSel, refTerreno }) {
   const [abierto, setAbierto] = useState(false);
   const raiz = useRef(null);
 
@@ -1010,10 +1010,10 @@ function SelectorSalida({ ordenadas, sel, setSel }) {
         {actual && (
           <>
             <span className="cat" style={{
-              background: TIPO_INSIGNIA[tipoRuta(actual)].fondo,
-              color: TIPO_INSIGNIA[tipoRuta(actual)].tinta,
+              background: TIPO_INSIGNIA[tipoRuta(actual, refTerreno)].fondo,
+              color: TIPO_INSIGNIA[tipoRuta(actual, refTerreno)].tinta,
             }}>
-              {TIPO_INSIGNIA[tipoRuta(actual)].codigo}
+              {TIPO_INSIGNIA[tipoRuta(actual, refTerreno)].codigo}
             </span>
             <span className="fecha">{fechaDDMMAA(actual.fecha)}</span>
             <span className="nombre">{actual.nombre}</span>
@@ -1025,7 +1025,7 @@ function SelectorSalida({ ordenadas, sel, setSel }) {
       {abierto && (
         <ul className="selector-salida-lista" role="listbox">
           {ordenadas.map((s) => {
-            const insignia = TIPO_INSIGNIA[tipoRuta(s)];
+            const insignia = TIPO_INSIGNIA[tipoRuta(s, refTerreno)];
             return (
               <li key={s.id}>
                 <button type="button" role="option" aria-selected={s.id === sel}

@@ -123,10 +123,18 @@ body{color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6;
    achican bastante. */
 .cab-fija .grid.centrado{gap:8px;grid-template-columns:repeat(6,1fr)}
 @media(max-width:640px){.cab-fija .grid.centrado{grid-template-columns:repeat(auto-fit,minmax(80px,1fr))}}
-.cab-fija .grid.centrado .stat{padding-bottom:4px}
-.cab-fija .grid.centrado .stat .k{padding:4px 10px;margin-bottom:0;font-size:9.5px}
-.cab-fija .grid.centrado .stat .v{font-size:15px;padding:1px 10px 3px}
-.cab-fija .grid.centrado .stat .v small{font-size:10px}
+/* La letra sube y engorda, pero la tarjeta no: al crecer el tipo se le
+   quitan a los rellenos los mismos pixeles que gana la linea, asi que la
+   fila fija sigue midiendo lo mismo y no come mas alto de pantalla. */
+.cab-fija .grid.centrado .stat{padding-bottom:3px}
+/* La franja de acento aguanta mas letra, pero son seis columnas y las
+   etiquetas largas ("Velocidad media", "Potencia estimada") se parten en
+   dos lineas y descuadran la fila; el espaciado entre letras baja para
+   compensar el tipo mas grande. */
+.cab-fija .grid.centrado .stat .k{padding:2px 8px;margin-bottom:0;font-size:12px;
+  letter-spacing:.03em;font-weight:800;-webkit-text-stroke:.3px currentColor}
+.cab-fija .grid.centrado .stat .v{font-size:17px;font-weight:700;padding:0 10px 2px}
+.cab-fija .grid.centrado .stat .v small{font-size:11px;font-weight:600}
 .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
   color:var(--ink3);margin:0 0 12px}
 h1{font-size:clamp(32px,5vw,46px);line-height:1.04;letter-spacing:-.03em;margin:0;
@@ -214,8 +222,14 @@ h3{font-family:var(--mono);font-size:11px;letter-spacing:.15em;text-transform:up
   background:var(--card2);border:1px solid var(--line);border-radius:var(--r-s);
   font-family:var(--mono);font-size:12px;color:var(--ink3);
   transition:transform .15s,border-color .15s}
-.dia30.activo{cursor:default;font-weight:600}
+.dia30.activo{font-weight:600}
 .dia30.activo:hover{transform:translateY(-1px)}
+/* Los dias con salida son botones: hay que quitarles el relleno y el
+   aspecto propios para que sigan midiendo igual que las cajas vacias. */
+button.dia30{padding:0;margin:0;width:100%;appearance:none;-webkit-appearance:none;
+  cursor:pointer;font-weight:600}
+button.dia30:hover{filter:brightness(1.25)}
+button.dia30:focus-visible{outline:2px solid var(--acento);outline-offset:2px}
 .dia30.hoy{outline:1px solid var(--line2);outline-offset:2px}
 
 /* ---------- consejo ---------- */
@@ -386,12 +400,19 @@ h3{letter-spacing:.01em}
 /* Los botones del perfil (modos, expandir, cerrar horizontal) van lo mas
    redondeados posible, en Helvetica y en bold: es la interfaz de un
    instrumento, y asi se distingue de un vistazo del resto de chips de la
-   app (filtros de fecha, etc.), que se quedan como estaban. */
+   app. */
 .chart .chips button,
 .perfil-horizontal-girar .chips button{border-radius:999px;font-weight:700;
   font-family:"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif}
 .chart .chips button[aria-pressed="true"],
 .perfil-horizontal-girar .chips button[aria-pressed="true"]{font-weight:700}
+
+/* Los atajos de rango de fechas de Resumen (Ultima semana, Todo el
+   historial...) siguen la misma linea redondeada que los botones de
+   flecha y busqueda del selector de salidas: mismo radio de pildora que
+   .btn-nav-salida y .btn-buscar-salida, sin tocar el resto de chips de
+   la app. */
+.chips-rango button{border-radius:999px}
 
 /* Paradas y Dureza son ajustes de vista, no una eleccion entre modos: una
    casilla con su etiqueta pesa menos que un chip pulsado/sin pulsar y deja
@@ -422,6 +443,13 @@ h3{letter-spacing:.01em}
   border-bottom:2px solid transparent;transition:background .14s,color .14s,border-color .14s}
 .perfil-leyenda button i{width:8px;height:8px;border-radius:2px;display:inline-block}
 .perfil-leyenda button[aria-pressed="true"]{color:var(--ink1);font-weight:700}
+/* Version no interactiva de la misma leyenda -PerfilPuerto no filtra
+   tramos, solo informa de que pendiente representa cada color-, con el
+   mismo aspecto pequeno y compacto que la de Actividades. */
+.perfil-leyenda .leyenda-item{display:flex;align-items:center;gap:5px;
+  font-family:"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif;
+  font-weight:600;font-size:11px;color:var(--ink2)}
+.perfil-leyenda .leyenda-item i{width:8px;height:8px;border-radius:2px;display:inline-block}
 
 .fields{gap:14px}
 label{margin-bottom:7px;display:block}
@@ -770,14 +798,70 @@ h1{font-size:clamp(26px,3.4vw,34px)}
 */
 .tabla-salidas .col-tipo{width:56px;min-width:0;white-space:nowrap}
 
+/*
+  Cabeceras que ordenan. El boton hereda el aspecto del rotulo de la
+  cabecera (no se ve como boton) y solo se delata al pasar por encima:
+  una tabla con nueve botones dibujados seria mucho ruido para lo que
+  es. La flecha ocupa sitio siempre -en gris cuando la columna no manda-
+  para que al cambiar de columna no se muevan los titulos de sitio.
+*/
+.tabla-salidas th{padding:0}
+/* "Incluir" no ordena nada, asi que no lleva boton dentro y necesita
+   conservar su propio relleno. */
+.tabla-salidas th.col-incluir{padding:12px}
+.th-orden{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:6px;
+  width:100%;padding:12px;cursor:pointer;font:inherit;color:inherit;
+  letter-spacing:inherit;text-transform:inherit;white-space:nowrap;
+  flex-direction:row-reverse;justify-content:flex-start}
+/*
+  Las columnas de numeros van pegadas a la derecha, como el resto de la
+  tabla; las de texto (la primera, Fecha y Salida) a la izquierda. El
+  boton es flex, asi que el text-align de la celda ya no le afecta y hay
+  que decirselo aqui.
+
+  En las de la derecha el orden se invierte (row-reverse) para que la
+  flecha quede a la IZQUIERDA del rotulo: puesta detras, empujaba el
+  texto hacia dentro y los titulos dejaban de estar alineados con sus
+  cifras.
+*/
+th:first-child .th-orden,
+.tabla-salidas .col-fecha .th-orden,
+.tabla-salidas .col-nombre .th-orden{flex-direction:row;justify-content:flex-start}
+.tabla-salidas th:not(.col-tipo):not(.col-fecha):not(.col-nombre) .th-orden{
+  padding-left:var(--e5);padding-right:var(--e5)}
+.th-orden:hover{color:var(--ink)}
+.th-orden.activo{color:var(--ink)}
+.th-orden:focus-visible{outline:2px solid var(--acento);outline-offset:-2px}
+.th-orden-flecha{font-size:10px;line-height:1;color:var(--ink3)}
+.th-orden.activo .th-orden-flecha{color:var(--acento)}
+
+/* Menu de terrenos de la cabecera Tipo. Cuelga de la celda, que es
+   estrecha, asi que se ancla a la izquierda y crece hacia la derecha
+   hasta caber los tres nombres. */
+.th-tipo{position:relative}
+.th-tipo-menu{position:absolute;left:8px;top:100%;z-index:20;min-width:150px;
+  display:grid;gap:2px;padding:6px;background:var(--card2);
+  border:1px solid var(--line2);border-radius:var(--r);
+  box-shadow:0 12px 28px rgba(0,0,0,.45)}
+.th-tipo-menu button{all:unset;box-sizing:border-box;display:flex;align-items:center;
+  gap:8px;padding:7px 9px;border-radius:var(--r-s);cursor:pointer;
+  font-family:var(--sans);font-size:13px;font-weight:500;letter-spacing:0;
+  text-transform:none;white-space:nowrap;color:var(--ink2)}
+.th-tipo-menu button:hover{background:var(--card);color:var(--ink)}
+.th-tipo-menu button[aria-pressed="true"]{color:var(--acento)}
+.th-tipo-menu button:focus-visible{outline:2px solid var(--acento);outline-offset:-2px}
+
 /* Km, Tiempo, Desnivel+, Vel media y FC: peso normal, no el 500 que
    pone la tabla por defecto; y mas separacion entre ellas, que con el
    mismo relleno de 12px que el resto de la tabla quedaban pegadas unas
    a otras. Tipo, Fecha y Salida no lo necesitan: ya tienen aire de
    sobra por su propio ancho o por ser una insignia compacta. */
 .tabla-salidas th:not(.col-tipo):not(.col-fecha):not(.col-nombre),
+.tabla-salidas td:not(.col-tipo):not(.col-fecha):not(.col-nombre){font-weight:400}
+/* El relleno de la cabecera lo pone ahora el boton que ordena, no la
+   celda: si lo pusieran los dos, la zona clicable se quedaria corta. */
 .tabla-salidas td:not(.col-tipo):not(.col-fecha):not(.col-nombre){
-  font-weight:400;padding-left:var(--e5);padding-right:var(--e5)}
+  padding-left:var(--e5);padding-right:var(--e5)}
 
 /*
   Insignia del maximo de una columna (salida mas larga, mayor desnivel,

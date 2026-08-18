@@ -11,6 +11,7 @@ import Rutas from './Rutas';
 import AnalizadorGPX from './AnalizadorGPX';
 import Logros, { TopLogros } from './Logros';
 import UltimosDias from './UltimosDias';
+import { Flecha, ThOrden, ordenarPor } from './Tablas';
 import Consejo from './Consejo';
 import { IcoAviso } from './Iconos';
 import Layout, { SECCIONES } from './Layout';
@@ -20,7 +21,7 @@ import {
   PERFILES_BICI, detectarPuertos, serieCarga, umbralEstimado,
   vatios, vatiosPuerto, repartoZonas, repartoGlobal,
   calcularZonas, ultimosDias, consejoEntrenador, normalizarAltitud,
-  velocidadMaximaLlano, tipoRuta, TIPO_INSIGNIA,
+  velocidadMaximaLlano, tipoRuta, TIPO_INSIGNIA, ORDEN_TIPO, referenciaTerreno,
   num, duracion, duracionHMS, fechaCorta, fechaDDMMAA, kmh, km,
 } from '@/lib/metrics';
 
@@ -68,6 +69,11 @@ export default function Dashboard({ atleta }) {
   const [excluidas, setExcluidas] = useState(new Set());
   const [rango, setRango] = useState({ desde: '', hasta: '' });
   const [objetivos, setObjetivos] = useState({ ...OBJETIVOS_INICIALES });
+
+  /* La vara de medir del terreno sale del historial entero, no del rango
+     de fechas elegido: si no, filtrar por "ultima semana" recalificaria
+     todas las salidas contra la mejor de esa semana. */
+  const refTerreno = useMemo(() => referenciaTerreno(salidas), [salidas]);
   const [refrescando, setRefrescando] = useState(false);
   const [menuAbierto, setMenuAbierto] = useState(false);
 
@@ -356,7 +362,7 @@ export default function Dashboard({ atleta }) {
   const zonas = useMemo(() => calcularZonas(cfg), [cfg]);
 
   const dias = useMemo(
-    () => ultimosDias(activas, cfg, zonas, umbral, 30),
+    () => ultimosDias(activas, cfg, zonas, umbral, 30, refTerreno),
     [activas, cfg, zonas, umbral]
   );
   const consejo = useMemo(
@@ -430,19 +436,19 @@ export default function Dashboard({ atleta }) {
           enRango={enRango} rango={rango} setRango={setRango} velMaxLlano={velMaxLlano}
           irASalida={irASalida} />
       )}
-      {pestana === 'resumen' && <TopLogros salidas={historicas} cache={cache} cfg={cfg} />}
+      {pestana === 'resumen' && <TopLogros salidas={historicas} cache={cache} cfg={cfg} refTerreno={refTerreno} />}
       {pestana === 'resumen' && <Consejo consejo={consejo} />}
 
       {pestana === 'resumen' && (
         <Resumen salidas={activas} cfg={cfg} umbral={umbral} masaTotal={masaTotal}
           excluidas={excluidas} setExcluidas={setExcluidas} enRango={enRango}
           cache={cache} dias={dias} pedirStreams={pedirStreams} irASalida={irASalida}
-          zonas={zonas} reparto={repartoResumen} />
+          zonas={zonas} reparto={repartoResumen} refTerreno={refTerreno} />
       )}
       {pestana === 'entrenamientos' && (
         <Entrenamientos salidas={salidas} cfg={cfg} zonas={zonas} umbral={umbral} cache={cache}
           pedirStreams={pedirStreams} salidaInicial={saltarASalida}
-          onSalidaInicialConsumida={() => setSaltarASalida(null)} />
+          onSalidaInicialConsumida={() => setSaltarASalida(null)} refTerreno={refTerreno} />
       )}
       {pestana === 'datos' && (
         <Datos cfg={cfg} setCfg={setCfg} zonas={zonas} />
@@ -459,7 +465,8 @@ export default function Dashboard({ atleta }) {
         </>
       )}
       {pestana === 'rutas' && (
-        <Rutas salidas={activas} cache={cache} excluidas={excluidas} cfg={cfg} zonas={zonas} />
+        <Rutas salidas={activas} cache={cache} excluidas={excluidas} cfg={cfg} zonas={zonas}
+          refTerreno={refTerreno} />
       )}
 
       {pestana === 'analizador' && (
@@ -469,10 +476,12 @@ export default function Dashboard({ atleta }) {
 
       {pestana === 'objetivos' && (
         <Objetivos salidas={activas} cfg={cfg} cache={cache} excluidas={excluidas}
-          masaTotal={masaTotal} objetivos={objetivos} setObjetivos={setObjetivos} />
+          masaTotal={masaTotal} objetivos={objetivos} setObjetivos={setObjetivos}
+          refTerreno={refTerreno} />
       )}
 
-      {pestana === 'logros' && <Logros salidas={historicas} cache={cache} cfg={cfg} atleta={atleta} />}
+      {pestana === 'logros' && <Logros salidas={historicas} cache={cache} cfg={cfg} atleta={atleta}
+        refTerreno={refTerreno} />}
 
     </div>
     </Layout>
@@ -591,7 +600,7 @@ function Estadisticas({ salidas, todas, excluidas, cfg, umbral, enRango, rango, 
     <>
       <h2 className="titulo-resumen">Tus estadísticas</h2>
 
-      <div className="chips" style={{ marginTop: 0, marginBottom: 'var(--e4)' }}>
+      <div className="chips chips-rango" style={{ marginTop: 0, marginBottom: 'var(--e4)' }}>
         <span className="campo-fecha">
           <label htmlFor="fd">Desde</label>
           <input id="fd" type="date" value={rango.desde} min={limites?.min} max={limites?.max}
@@ -651,8 +660,105 @@ function ValorTabla({ max, children }) {
   return max ? <span className="marca-max">{children}</span> : children;
 }
 
+/*
+  Criterios de ordenacion de la tabla de salidas. Cada uno saca de la
+  salida el valor por el que comparar; el resto de la mecanica (sentido,
+  nulos al final, empates) es comun y vive en ordenarSalidas.
+*/
+const criteriosSalidas = (refTerreno) => ({
+  tipo: (s) => ORDEN_TIPO[tipoRuta(s, refTerreno)],
+  fecha: (s) => s.fecha,
+  nombre: (s) => (s.nombre || '').toLowerCase(),
+  km: (s) => km(s),
+  tiempo: (s) => s.tiempoMovimiento,
+  desnivel: (s) => s.desnivel,
+  vel: (s) => kmh(s),
+  fc: (s) => s.fcMedia,
+});
+
+/*
+  Las salidas sin el dato (FC sin pulsometro, sobre todo) van siempre al
+  final, se ordene como se ordene: mandarlas arriba al invertir el
+  sentido solo llenaria la primera pantalla de guiones.
+*/
+function ordenarSalidas(lista, campo, desc, tipoElegido, refTerreno) {
+  /* Con un terreno elegido en la cabecera de Tipo el criterio deja de
+     ser la dureza y pasa a ser "esta es de las que busco o no"; dentro
+     de cada grupo se conserva el orden por fecha, de la mas reciente a
+     la mas antigua. */
+  if (campo === 'tipo' && tipoElegido) {
+    return [...lista].sort((a, b) => {
+      const ea = tipoRuta(a, refTerreno) === tipoElegido ? 0 : 1;
+      const eb = tipoRuta(b, refTerreno) === tipoElegido ? 0 : 1;
+      if (ea !== eb) return ea - eb;
+      return b.fecha.localeCompare(a.fecha);
+    });
+  }
+  const criterios = criteriosSalidas(refTerreno);
+  return ordenarPor(lista, criterios, criterios[campo] ? campo : 'fecha', desc);
+}
+
+/*
+  Tipo no se ordena como las demas: "de mayor a menor terreno" no es lo
+  que se busca casi nunca, sino ver primero las de montana, o las
+  llanas. Asi que la cabecera abre un menu con los tres perfiles y el
+  elegido sube arriba del todo.
+*/
+function ThTipo({ orden, setOrden }) {
+  const [abierto, setAbierto] = useState(false);
+  const caja = useRef(null);
+  const activo = orden.campo === 'tipo' && Boolean(orden.tipo);
+
+  useEffect(() => {
+    if (!abierto) return;
+    const fuera = (e) => { if (!caja.current?.contains(e.target)) setAbierto(false); };
+    document.addEventListener('mousedown', fuera);
+    return () => document.removeEventListener('mousedown', fuera);
+  }, [abierto]);
+
+  /* Volver a elegir el mismo terreno lo suelta y devuelve la tabla a su
+     orden por fecha: si no, no habria forma de deshacerlo. */
+  const elegir = (t) => {
+    setOrden(orden.tipo === t
+      ? { campo: 'fecha', desc: true }
+      : { campo: 'tipo', desc: true, tipo: t });
+    setAbierto(false);
+  };
+
+  return (
+    <th className="col-tipo" aria-sort={activo ? 'descending' : 'none'}>
+      <div className="th-tipo" ref={caja}>
+        <button type="button" className={`th-orden${activo ? ' activo' : ''}`}
+          aria-expanded={abierto} onClick={() => setAbierto((v) => !v)}>
+          Tipo
+          <Flecha activo={activo} desc />
+        </button>
+        {abierto && (
+          <div className="th-tipo-menu">
+            {Object.entries(TIPO_INSIGNIA).map(([t, ins]) => (
+              <button key={t} type="button"
+                aria-pressed={orden.tipo === t}
+                onClick={() => elegir(t)}>
+                <span className="cat" style={{ background: ins.fondo, color: ins.tinta }}>
+                  {ins.codigo}
+                </span>
+                {NOMBRES_TERRENO[t]}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </th>
+  );
+}
+
+/* Los nombres que se usan en la leyenda del calendario, no los de
+   NOMBRES_TIPO ("Mixto", "Puerto"): en esta tabla el usuario ve Llano,
+   Colina y Montana. */
+const NOMBRES_TERRENO = { llano: 'Llano', mixto: 'Colina', puerto: 'Montaña' };
+
 function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
-  enRango, cache, dias, pedirStreams, irASalida, zonas, reparto }) {
+  enRango, cache, dias, pedirStreams, irASalida, zonas, reparto, refTerreno }) {
 
   /* Máximos de cada columna para resaltar */
   const maximos = useMemo(() => ({
@@ -670,6 +776,9 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
     a que le toque el turno.
   */
   const [salidaAbierta, setSalidaAbierta] = useState(null);
+  /* Por defecto, lo mismo que se veia antes de poder ordenar: las mas
+     recientes arriba. */
+  const [orden, setOrden] = useState({ campo: 'fecha', desc: true });
   const [cargandoPerfil, setCargandoPerfil] = useState(false);
 
   const alternarFila = (s) => {
@@ -692,7 +801,7 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
   return (
     <>
       <h2>Últimos 30 días</h2>
-      <UltimosDias dias={dias} />
+      <UltimosDias dias={dias} onSalida={irASalida} />
 
       <RepartoZonas zonas={zonas} reparto={reparto} />
 
@@ -719,19 +828,25 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
               <table className="tabla-salidas">
                 <thead>
                   <tr>
-                    <th className="col-tipo">Tipo</th><th className="col-fecha">Fecha</th>
-                    <th className="col-nombre">Salida</th><th>Km</th><th>Tiempo</th>
-                    <th>Desnivel +</th><th>Vel media</th><th>FC</th><th>Incluir</th>
+                    <ThTipo orden={orden} setOrden={setOrden} />
+                    <ThOrden campo="fecha" orden={orden} setOrden={setOrden} className="col-fecha">Fecha</ThOrden>
+                    <ThOrden campo="nombre" orden={orden} setOrden={setOrden} className="col-nombre">Salida</ThOrden>
+                    <ThOrden campo="km" orden={orden} setOrden={setOrden}>Km</ThOrden>
+                    <ThOrden campo="tiempo" orden={orden} setOrden={setOrden}>Tiempo</ThOrden>
+                    <ThOrden campo="desnivel" orden={orden} setOrden={setOrden}>Desnivel +</ThOrden>
+                    <ThOrden campo="vel" orden={orden} setOrden={setOrden}>Vel media</ThOrden>
+                    <ThOrden campo="fc" orden={orden} setOrden={setOrden}>FC</ThOrden>
+                    <th className="col-incluir">Incluir</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {[...enRango].reverse().map((s) => {
+                  {ordenarSalidas(enRango, orden.campo, orden.desc, orden.tipo, refTerreno).map((s) => {
                     const dentro = !excluidas.has(s.id);
                     const distVal = km(s);
                     const desnVal = s.desnivel;
                     const velVal = kmh(s);
                     const fcVal = s.fcMedia;
-                    const insignia = TIPO_INSIGNIA[tipoRuta(s)];
+                    const insignia = TIPO_INSIGNIA[tipoRuta(s, refTerreno)];
 
                     const abierta = salidaAbierta === s.id;
                     const streamsFila = cache[s.id];

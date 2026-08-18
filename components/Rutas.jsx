@@ -1,11 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import Perfil from './Perfil';
 import PerfilPuerto from './PerfilPuerto';
+import { ThOrden, ordenarPor } from './Tablas';
 import { parseGPX, referenciasCiclista, analizarRuta } from '@/lib/gpx';
 import {
   distanciaEquivalente, nivelDificultad, TRAMOS_DUREZA, num, categoriaPuerto,
+  tipoRuta, TIPO_INSIGNIA,
 } from '@/lib/metrics';
 import { buscarNombre, guardarNombre } from '@/lib/nombres';
 import { useCacheNombres, escribirCache } from '@/lib/nombresCache';
@@ -37,7 +39,7 @@ function motivoGpx(codigo) {
   }
 }
 
-export default function Rutas({ salidas, cache, excluidas, cfg, zonas }) {
+export default function Rutas({ salidas, cache, excluidas, cfg, zonas, refTerreno }) {
   const [rutas, setRutas] = useState(null);
   const [error, setError] = useState(null);
   const [cargando, setCargando] = useState(false);
@@ -46,7 +48,7 @@ export default function Rutas({ salidas, cache, excluidas, cfg, zonas }) {
   const [detalle, setDetalle] = useState({});   // id → datos del GPX ya parseado
   const [cargandoGpx, setCargandoGpx] = useState(false);
 
-  const [orden, setOrden] = useState('dificultad');
+  const [orden, setOrden] = useState({ campo: 'dificultad', desc: true });
   const [filtros, setFiltros] = useState(false);
   const [kmMin, setKmMin] = useState('');
   const [kmMax, setKmMax] = useState('');
@@ -95,12 +97,25 @@ export default function Rutas({ salidas, cache, excluidas, cfg, zonas }) {
     setCargandoGpx(false);
   };
 
+  /* La dificultad sale de los kilometros equivalentes (nivelDificultad
+     no mira otra cosa), asi que ordenar por una u otra columna da el
+     mismo resultado; se dejan las dos porque son dos lecturas del mismo
+     dato y no siempre se busca la misma. */
+  const CRITERIOS = {
+    nombre: (r) => (r.nombre || '').toLowerCase(),
+    distancia: (r) => r.km,
+    desnivel: (r) => r.desnivel,
+    mkm: (r) => r.desnivel / r.km,
+    eq: (r) => r.eq,
+    dificultad: (r) => r.eq,
+  };
+
   const lista = useMemo(() => {
     if (!rutas) return [];
     const num_ = (v) => (v === '' ? null : +v);
     const a = num_(kmMin), b = num_(kmMax), c = num_(dMin), d = num_(dMax);
 
-    return rutas
+    const filtradas = rutas
       .map((r) => {
         const km = r.metros / 1000;
         return { ...r, km, eq: distanciaEquivalente(km, r.desnivel),
@@ -108,13 +123,10 @@ export default function Rutas({ salidas, cache, excluidas, cfg, zonas }) {
       })
       .filter((r) =>
         (a === null || r.km >= a) && (b === null || r.km <= b) &&
-        (c === null || r.desnivel >= c) && (d === null || r.desnivel <= d))
-      .sort((x, y) => {
-        if (orden === 'distancia') return y.km - x.km;
-        if (orden === 'desnivel') return y.desnivel - x.desnivel;
-        if (orden === 'nombre') return x.nombre.localeCompare(y.nombre);
-        return y.eq - x.eq;
-      });
+        (c === null || r.desnivel >= c) && (d === null || r.desnivel <= d));
+
+    return ordenarPor(filtradas, CRITERIOS, orden.campo, orden.desc);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rutas, orden, kmMin, kmMax, dMin, dMax]);
 
   return (
@@ -147,13 +159,6 @@ export default function Rutas({ salidas, cache, excluidas, cfg, zonas }) {
       {rutas && rutas.length > 0 && (
         <>
           <div className="chips" style={{ marginBottom: 6 }}>
-            {[['dificultad', 'Dificultad'], ['distancia', 'Distancia'],
-              ['desnivel', 'Desnivel'], ['nombre', 'Nombre']].map(([id, n]) => (
-              <button key={id} aria-pressed={orden === id} onClick={() => setOrden(id)}
-                style={orden === id ? { background: 'var(--ink)', borderColor: 'var(--ink)' } : null}>
-                {n}
-              </button>
-            ))}
             <button onClick={() => setFiltros(!filtros)}
               style={filtros ? { background: 'var(--ink2)', borderColor: 'var(--ink2)' } : null}>
               {filtros ? 'Ocultar filtros' : 'Filtrar'}
@@ -192,33 +197,69 @@ export default function Rutas({ salidas, cache, excluidas, cfg, zonas }) {
             </div>
           )}
 
+          <div className="cab-tabla">
+            <span className="rotulo">Rutas</span>
+            <span className="hint" style={{ margin: 0 }}>
+              Pulsa una fila para ver su perfil detallado
+            </span>
+          </div>
+
           <div className="scroll">
             <table>
               <thead>
                 <tr>
-                  <th>Ruta</th><th>Dist.</th><th>Desn.</th><th>m/km</th>
-                  <th>Km equiv.</th><th>Dificultad</th>
+                  <ThOrden campo="nombre" orden={orden} setOrden={setOrden}
+                    className="col-nombre">Ruta</ThOrden>
+                  <ThOrden campo="distancia" orden={orden} setOrden={setOrden}>Dist.</ThOrden>
+                  <ThOrden campo="desnivel" orden={orden} setOrden={setOrden}>Desn.</ThOrden>
+                  <ThOrden campo="mkm" orden={orden} setOrden={setOrden}>m/km</ThOrden>
+                  <ThOrden campo="eq" orden={orden} setOrden={setOrden}>Km equiv.</ThOrden>
+                  <ThOrden campo="dificultad" orden={orden} setOrden={setOrden}>Dificultad</ThOrden>
                 </tr>
               </thead>
               <tbody>
-                {lista.map((r) => (
-                  <tr key={r.id} onClick={() => abrir(r)}
-                    style={{ cursor: 'pointer',
-                      background: abierta === r.id ? 'var(--card2)' : undefined }}>
-                    <td>
-                      <span style={{ color: 'var(--ink3)', fontFamily: 'var(--mono)',
-                        fontSize: 11, marginRight: 7 }}>
-                        {abierta === r.id ? '▾' : '▸'}
-                      </span>
-                      {r.nombre}
-                    </td>
-                    <td>{num(r.km, 1)}</td>
-                    <td>+{num(r.desnivel, 0)}</td>
-                    <td>{num(r.desnivel / r.km, 1)}</td>
-                    <td>{num(r.eq, 1)}</td>
-                    <td style={{ color: r.niv.color }}>{r.niv.nombre}</td>
-                  </tr>
-                ))}
+                {lista.map((r) => {
+                  /* Misma insignia de terreno que las salidas: una ruta
+                     guardada se clasifica igual que una rodada, por sus
+                     metros de desnivel por kilometro. */
+                  const ins = TIPO_INSIGNIA[tipoRuta({ distancia: r.metros, desnivel: r.desnivel }, refTerreno)];
+                  const abiertaEsta = abierta === r.id;
+                  return (
+                    <Fragment key={r.id}>
+                    <tr onClick={() => abrir(r)}
+                      style={{ cursor: 'pointer',
+                        background: abiertaEsta ? 'var(--card2)' : undefined }}>
+                      <td className="col-nombre">
+                        <span className="fila-puerto">
+                          <span className="flecha">{abiertaEsta ? '▾' : '▸'}</span>
+                          <span className="cat"
+                            style={{ background: ins.fondo, color: ins.tinta }}>
+                            {ins.codigo}
+                          </span>
+                          {r.nombre}
+                        </span>
+                      </td>
+                      <td>{num(r.km, 1)}</td>
+                      <td>+{num(r.desnivel, 0)}</td>
+                      <td>{num(r.desnivel / r.km, 1)}</td>
+                      <td>{num(r.eq, 1)}</td>
+                      <td style={{ color: r.niv.color }}>{r.niv.nombre}</td>
+                    </tr>
+
+                    {/* El detalle se despliega en una fila propia justo
+                        debajo de la suya, igual que en Actividades y en
+                        Mis ascensiones. */}
+                    {abiertaEsta && (
+                      <tr className="fila-detalle">
+                        <td colSpan={6}>
+                          <DetalleRuta ruta={r} datos={detalle[r.id]} cargando={cargandoGpx}
+                            ref_={ref} cfg={cfg} zonas={zonas} />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -228,10 +269,6 @@ export default function Rutas({ salidas, cache, excluidas, cfg, zonas }) {
             subida cuentan como un kilómetro más, con un recargo cuando ese desnivel va muy
             concentrado. Por eso una llana larga puede pesar más que una corta con una subida.
           </p>
-
-          {abierta && <DetalleRuta ruta={lista.find((x) => x.id === abierta)}
-            datos={detalle[abierta]} cargando={cargandoGpx}
-            ref_={ref} cfg={cfg} zonas={zonas} />}
         </>
       )}
     </>

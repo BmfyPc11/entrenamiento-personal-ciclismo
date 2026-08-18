@@ -753,10 +753,10 @@ function contarCoronaciones(salidas, cache, codigo) {
    etiqueta- que lleguen o pasen de minKm. No mira tramos sueltos
    dentro de la salida: usa la salida entera, así que solo cuentan
    salidas que ya de por si son llanas y suficientemente largas. */
-function mejorVelocidadLlano(salidas, minKm) {
+function mejorVelocidadLlano(salidas, minKm, refTerreno) {
   let max = 0;
   (salidas || []).forEach((s) => {
-    if (tipoRuta(s) !== 'llano' || km(s) < minKm) return;
+    if (tipoRuta(s, refTerreno) !== 'llano' || km(s) < minKm) return;
     const v = kmh(s);
     if (v > max) max = v;
   });
@@ -970,32 +970,32 @@ const LOGROS_POR_CATEGORIA = {
     {
       id: 'rodador', nombre: 'Rodador', descripcion: 'Velocidad media en llano sostenida durante 15 km.',
       escala: ESCALA_RODADOR, unidad: 'km/h',
-      valor: (salidas) => mejorVelocidadLlano(salidas, 15),
+      valor: (salidas, cache, cfg, refTerreno) => mejorVelocidadLlano(salidas, 15, refTerreno),
     },
     {
       id: 'km-lisos-25', nombre: '25 km lisos', descripcion: 'Tiempo más rápido en recorrer 25 km en llano.',
       escala: ESCALA_KM_LISOS_25, distanciaKm: 25,
-      valor: (salidas) => mejorVelocidadLlano(salidas, 25),
+      valor: (salidas, cache, cfg, refTerreno) => mejorVelocidadLlano(salidas, 25, refTerreno),
     },
     {
       id: 'locomotora', nombre: 'Locomotora', descripcion: 'Velocidad media en llano sostenida durante 35 km.',
       escala: ESCALA_LOCOMOTORA, unidad: 'km/h',
-      valor: (salidas) => mejorVelocidadLlano(salidas, 35),
+      valor: (salidas, cache, cfg, refTerreno) => mejorVelocidadLlano(salidas, 35, refTerreno),
     },
     {
       id: 'km-lisos-50', nombre: '50 km lisos', descripcion: 'Tiempo más rápido en recorrer 50 km en llano.',
       escala: ESCALA_KM_LISOS_50, distanciaKm: 50,
-      valor: (salidas) => mejorVelocidadLlano(salidas, 50),
+      valor: (salidas, cache, cfg, refTerreno) => mejorVelocidadLlano(salidas, 50, refTerreno),
     },
     {
       id: 'tren-bala', nombre: 'Tren bala', descripcion: 'Velocidad media en llano sostenida durante 70 km.',
       escala: ESCALA_TREN_BALA, unidad: 'km/h',
-      valor: (salidas) => mejorVelocidadLlano(salidas, 70),
+      valor: (salidas, cache, cfg, refTerreno) => mejorVelocidadLlano(salidas, 70, refTerreno),
     },
     {
       id: 'km-lisos-100', nombre: '100 km lisos', descripcion: 'Tiempo más rápido en recorrer 100 km en llano.',
       escala: ESCALA_KM_LISOS_100, distanciaKm: 100,
-      valor: (salidas) => mejorVelocidadLlano(salidas, 100),
+      valor: (salidas, cache, cfg, refTerreno) => mejorVelocidadLlano(salidas, 100, refTerreno),
     },
     {
       id: 'sprinter', nombre: 'Sprinter', descripcion: 'Velocidad máxima sostenida en un tramo llano.',
@@ -1213,12 +1213,12 @@ function ResumenLogros({ atleta, resumen }) {
   dentro del tramo actual hacia el siguiente -asi dos logros en la
   misma division no quedan empatados sin mas.
 */
-export function TopLogros({ salidas, cache, cfg }) {
+export function TopLogros({ salidas, cache, cfg, refTerreno }) {
   const mejores = useMemo(() => {
     const todos = [];
     Object.values(LOGROS_POR_CATEGORIA).forEach((lista) => {
       lista.forEach((l) => {
-        const valor = l.valor(salidas, cache, cfg);
+        const valor = l.valor(salidas, cache, cfg, refTerreno);
         const { actual, siguiente } = estadoEscala(l.escala, valor);
         const nivel = nivelesConseguidos(l.escala, valor);
         const pct = siguiente ? Math.min(100, (valor / siguiente.umbral) * 100) : 100;
@@ -1226,7 +1226,7 @@ export function TopLogros({ salidas, cache, cfg }) {
       });
     });
     return todos.sort((a, b) => (b.nivel - a.nivel) || (b.pct - a.pct)).slice(0, 5);
-  }, [salidas, cache, cfg]);
+  }, [salidas, cache, cfg, refTerreno]);
 
   if (!mejores.length) return null;
 
@@ -1256,16 +1256,16 @@ export function TopLogros({ salidas, cache, cfg }) {
   categorias a la vez para que el rango medio y el radar no dependan de
   cual este desplegada en cada momento.
 */
-export default function Logros({ salidas, cache, cfg, atleta }) {
+export default function Logros({ salidas, cache, cfg, atleta, refTerreno }) {
   const [cat, setCat] = useState('rodaje');
 
   const resultados = useMemo(() => {
     const out = {};
     Object.entries(LOGROS_POR_CATEGORIA).forEach(([id, lista]) => {
-      out[id] = lista.map((l) => ({ ...l, valor: l.valor(salidas, cache, cfg) }));
+      out[id] = lista.map((l) => ({ ...l, valor: l.valor(salidas, cache, cfg, refTerreno) }));
     });
     return out;
-  }, [salidas, cache, cfg]);
+  }, [salidas, cache, cfg, refTerreno]);
 
   const resumen = useMemo(() => {
     const porCategoria = CATEGORIAS.map(([id, nombre]) => {

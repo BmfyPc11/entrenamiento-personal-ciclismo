@@ -16,10 +16,10 @@ export const OBJETIVOS_INICIALES = {
   Se mide contra el mejor registro, no contra la media: un objetivo se
   alcanza el dia que lo consigues una vez, no cuando lo promedias.
 */
-export function calcularObjetivos({ salidas, cache, excluidas, cfg, masaTotal, obj }) {
+export function calcularObjetivos({ salidas, cache, excluidas, cfg, masaTotal, obj, refTerreno }) {
   const o = { ...OBJETIVOS_INICIALES, ...(obj || {}) };
 
-  const llanas = salidas.filter(esLlana);
+  const llanas = salidas.filter((s) => esLlana(s, refTerreno));
   const mejorLlano = llanas.length ? Math.max(...llanas.map(kmh)) : 0;
 
   const puertos = Object.entries(cache || {}).flatMap(([id, st]) =>

@@ -3,8 +3,8 @@
 import { vatios, num } from '@/lib/metrics';
 import { calcularObjetivos, BarrasObjetivo, OBJETIVOS_INICIALES } from './objetivosLib';
 
-export default function Objetivos({ salidas, cfg, cache, excluidas, masaTotal, objetivos, setObjetivos }) {
-  const r = calcularObjetivos({ salidas, cache, excluidas, cfg, masaTotal, obj: objetivos });
+export default function Objetivos({ salidas, cfg, cache, excluidas, masaTotal, objetivos, setObjetivos, refTerreno }) {
+  const r = calcularObjetivos({ salidas, cache, excluidas, cfg, masaTotal, obj: objetivos, refTerreno });
   const o = r.o;
   const set = (k, v) => setObjetivos({ ...o, [k]: v });
 

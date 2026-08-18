@@ -2,8 +2,11 @@
 
 import { useMemo, useState } from 'react';
 import {
-  seccionesPuerto, TRAMOS_DUREZA, zonaDeFC, categoriaPuerto, num, duracion,
+  seccionesPuerto, puntoPendienteMaxima, TRAMOS_DUREZA, tramoDureza,
+  categoriaPuerto, num, duracion,
 } from '@/lib/metrics';
+
+const HELVETICA = '"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif';
 
 /*
   Perfil detallado de un solo puerto, dibujado como los perfiles de las
@@ -11,24 +14,41 @@ import {
 
   A escala de un puerto lo que importa no es la silueta sino cuanto pica
   cada tramo, y eso una linea suave no lo dice: hay que leerlo del color
-  y del numero.
+  y del numero. Los tramos son de 250 m -mas anchos que los 50 m de
+  Actividades- porque aqui no hace falta cazar cada rampa suelta, solo
+  como se reparte el esfuerzo a lo largo de la subida.
 */
 export default function PerfilPuerto({ streams, puerto, indice, cfg, zonas, nombre }) {
   const [foco, setFoco] = useState(null);
-  const [modo, setModo] = useState('dureza');
 
-  const det = useMemo(() => seccionesPuerto(streams, puerto), [streams, puerto]);
+  const det = useMemo(() => seccionesPuerto(streams, puerto, { paso: 250 }), [streams, puerto]);
+  const picoReal = useMemo(() => puntoPendienteMaxima(streams, puerto), [streams, puerto]);
   if (!det || !det.secciones.length) return null;
   const sec = det.secciones;
 
-  const hayFC = Boolean(streams.fc) && sec.some((s) => s.fcMedia);
   const cat = categoriaPuerto(puerto.metros, puerto.pendiente);
+  const nombrePuerto = nombre || `Subida ${indice + 1}`;
 
-  /* --- geometria --- */
-  const W = 760, H = 240;
-  const mIzq = 46, mDer = 14, mSup = 34, mInf = 34;
+  /* --- geometria ---
+     Debajo de la linea base se reserva una franja para los % de cada
+     tramo (antes iban encima de cada barra y con muchos tramos se
+     amontonaban) y, arriba, un hueco para la "coronacion": la linea que
+     sube desde el final de la subida hasta la insignia con la categoria.
+     La ficha del puerto (nombre y datos) queda a la IZQUIERDA de esa
+     insignia y no a un lado reservado aparte, asi el grafico conserva
+     todo su ancho. Los margenes laterales son mas ajustados que al
+     principio para que las barras cubran mas caja y menos aire.
+  */
+  const W = 820, mIzq = 40, mDer = 10, mSupBase = 34, mInf = 26;
+  const alto = 220;
+  /* Antes quedaba mucho hueco muerto entre la insignia y el borde
+     superior de la caja: la ficha y la insignia solo necesitan unos
+     40 px de los 66 que se reservaban. */
+  const extraSup = 40;
+  const gapFranja = 4, franjaH = 26;
+  const mSup = mSupBase + extraSup;
+  const H = mSup + alto + gapFranja + franjaH + mInf;
   const ancho = W - mIzq - mDer;
-  const alto = H - mSup - mInf;
 
   /*
     El eje horizontal arranca en el pie del puerto, no en el kilometro de
@@ -48,83 +68,88 @@ export default function PerfilPuerto({ streams, puerto, indice, cfg, zonas, nomb
 
   const refs = [base, base + rango / 2, base + rango].map((v) => Math.round(v / 10) * 10);
 
-  const colorDe = (s) => {
-    if (modo === 'zonas') {
-      if (!s.fcMedia || !zonas) return '#4A5563';
-      return zonaDeFC(s.fcMedia, zonas).color;
+  const colorDe = (s) => TRAMOS_DUREZA[s.tramo - 1].color;
+
+  /* Altura del perfil DIBUJADO (no la altitud suavizada real) en un km
+     cualquiera: interpola sobre la misma cadena de trapecios que se
+     pinta, para que cualquier marcador que se apoye aqui quede pegado a
+     la silueta que se ve, no a un valor que no coincide con el dibujo. */
+  const alturaEnKm = (km) => {
+    if (km <= sec[0].kmIni) return sec[0].altIni;
+    for (const s of sec) {
+      if (km <= s.kmFin) {
+        const t = s.kmFin > s.kmIni ? (km - s.kmIni) / (s.kmFin - s.kmIni) : 0;
+        return s.altIni + t * (s.altFin - s.altIni);
+      }
     }
-    return TRAMOS_DUREZA[s.tramo - 1].color;
-  };
-
-  const etiquetaDe = (s) => {
-    if (modo === 'zonas') return s.fcMedia ? String(s.fcMedia) : '';
-    return num(s.pendiente, 1);
+    return sec[sec.length - 1].altFin;
   };
 
   /*
-    Seccion mas empinada del puerto. Con secciones de 50 m no es un dato
-    de adorno: es la rampa que decide si subes sentado o te tienes que
-    levantar, y conviene tenerla senalada sin buscarla.
+    Indicadores de distancia a paso limpio (0,25 / 0,5 / 1 km) en vez de
+    repartir el eje en quintos: un puerto de 1,5 km con marcas cada 0,25
+    se lee mejor que uno con marcas en 0,38-0,75-1,13 km, que no dicen
+    nada por si solas. El paso crece con la longitud para que un puerto
+    largo no acabe con quince numeros pegados unos a otros.
   */
-  const iMax = sec.reduce((m, s, i) => (s.pendiente > sec[m].pendiente ? i : m), 0);
-
-  /*
-    Que etiquetas caben.
-
-    A 50 m por seccion un puerto largo pasa de las cien barras, de apenas
-    seis pixeles cada una: escribir un numero encima de todas las dejaria
-    ilegibles unas sobre otras. El salto no se fija en "una de cada dos"
-    sino en pixeles, que es lo que de verdad determina si dos numeros
-    chocan, de modo que un repecho corto las muestra casi todas y un
-    puerto largo solo las que caben.
-  */
-  const anchoSeccion = ancho / sec.length;
-  const SEPARACION = 38;
-  const salto = Math.max(1, Math.ceil(SEPARACION / anchoSeccion));
-
-  const verEtiqueta = (i) => {
-    if (i === iMax) return true;                    // la maxima nunca se oculta
-    if (Math.abs(i - iMax) < salto) return false;   // ni se le pega ninguna al lado
-    return i % salto === 0;
+  /* Sin decimales de mas: "1,0 km" se queda en "1 km", pero "0,25 km"
+     o "3,7 km" conservan los que hacen falta para no perder precision. */
+  const formatoKm = (v) => {
+    const r2 = Math.round(v * 100) / 100;
+    if (Math.abs(r2 - Math.round(r2)) < 1e-9) return num(r2, 0);
+    const r1 = Math.round(v * 10) / 10;
+    return Math.abs(r1 - r2) < 1e-9 ? num(r1, 1) : num(r2, 2);
   };
 
-  /* Leyenda: solo las categorias que aparecen de verdad en este puerto. */
-  const leyenda = modo === 'zonas'
-    ? (zonas || [])
-        .filter((z) => sec.some((s) => s.fcMedia && zonaDeFC(s.fcMedia, zonas).n === z.n))
-        .map((z) => ({ color: z.color, nombre: `Z${z.n} · ${z.nombre}` }))
-    : TRAMOS_DUREZA.filter((t) => sec.some((s) => s.tramo === t.n))
-        .map((t) => ({ color: t.color, nombre: t.nombre }));
+  /*
+    Las marcas salen de los limites REALES de los tramos (cada 250 m),
+    no de numeros redondos independientes: un puerto no mide un multiplo
+    exacto de 0,5 km, asi que una marca en "1,0 km" a secas caia entre
+    dos tramos y la linea discontinua no coincidia con ninguno. Aqui se
+    cuenta en tramos -dos (~0,5 km) o cuatro (~1 km) segun lo largo que
+    sea el puerto- y se usa el limite real de ese tramo como posicion,
+    que es exactamente donde ya cae la barra de al lado.
+  */
+  const segPorMarca = kmT <= 3 ? 2 : 4;
+  const marcasEje = [0];
+  for (let i = segPorMarca; i < sec.length; i += segPorMarca) {
+    marcasEje.push(sec[i].kmIni - km0);
+  }
+  const pasoAprox = segPorMarca * 0.25;
+  if (kmT - marcasEje[marcasEje.length - 1] > pasoAprox * 0.4) marcasEje.push(kmT);
+  else marcasEje[marcasEje.length - 1] = kmT;
+
+  /* --- el pico real: no el tramo con la media mas alta, sino la ventana
+     de ~200 m mas empinada de toda la subida (la misma cuenta que usa
+     detectarPuertos para "pendienteMax"), clavada en su punto real. */
+  const kmPico = picoReal ? (picoReal.kmIni + picoReal.kmFin) / 2 : null;
+  const xPico = kmPico != null ? x(kmPico) : null;
+  const yPico = kmPico != null ? y(alturaEnKm(kmPico)) : null;
+  const colorPico = picoReal ? tramoDureza(picoReal.pendiente).color : null;
+
+  /* --- la coronacion: linea ascendente desde el final del perfil hasta
+     la insignia de categoria; la ficha (nombre + datos) queda a su
+     izquierda, dentro del propio ancho del grafico. */
+  const xCima = W - mDer;
+  const yFinal = y(sec[sec.length - 1].altFin);
+  const yInsignia = mSup - 20;
+  const rInsignia = 14;
+  const xFicha = xCima - rInsignia - 10;
+  const tamNombre = nombrePuerto.length > 26 ? 12 : 13.5;
+
+  /* --- la franja de %, debajo de la linea base: una caja negra con el
+     numero en blanco -no un chip de color por tramo-, para que se lea
+     como una etiqueta de dato y no compita con los colores de arriba. */
+  const yFranjaTop = y(base) + gapFranja;
 
   return (
     <div className="panel" style={{ marginTop: 4 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between',
-        alignItems: 'baseline', flexWrap: 'wrap', gap: 8, marginBottom: 4 }}>
-        <h3 style={{ margin: 0, display: 'flex', alignItems: 'baseline', gap: 8,
-          fontFamily: 'var(--sans)' }}>
-          {nombre || `Subida ${indice + 1}`}
-          {/* La categoria va con el color de su dureza: de un vistazo se
-              ve si el puerto es un tramite o un asunto serio. */}
-          <span style={{ color: cat.color, fontFamily: 'var(--mono)',
-            fontSize: 13, fontWeight: 500,
-            border: `1px solid ${cat.color}`, borderRadius: 8,
-            padding: '1px 7px' }}>
-            {cat.nombre}
-          </span>
-        </h3>
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 12.5, color: 'var(--ink2)' }}>
-          {num(puerto.metros / 1000, 2)} km · +{num(puerto.desnivel, 0)} m ·{' '}
-          {num(puerto.pendiente, 1)} % · coef. {num(cat.coef, 0)} ·{' '}
-          secciones de {det.paso} m
-        </span>
-      </div>
-
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', overflow: 'visible' }}
         onMouseLeave={() => setFoco(null)}>
 
         {refs.map((v, i) => (
           <g key={i}>
-            <line x1={mIzq} x2={W - mDer} y1={y(v)} y2={y(v)}
+            <line x1={mIzq} x2={xCima} y1={y(v)} y2={y(v)}
               stroke="var(--line)" strokeWidth="1" opacity=".5" />
             <text x={mIzq - 8} y={y(v) + 4} textAnchor="end"
               fontFamily="var(--mono)" fontSize="10.5" fill="var(--ink3)">{v}</text>
@@ -142,62 +167,116 @@ export default function PerfilPuerto({ streams, puerto, indice, cfg, zonas, nomb
           */
           const d = `M ${x1} ${y(base)} L ${x1} ${y(s.altIni)} L ${x2} ${y(s.altFin)} L ${x2} ${y(base)} Z`;
           const anchoPx = x2 - x1;
-          const et = etiquetaDe(s);
-          const esMax = i === iMax;
-          const cima = Math.max(s.altIni, s.altFin);
           return (
             <g key={i} onMouseEnter={() => setFoco(i)} style={{ cursor: 'default' }}>
-              {/*
-                Sin opacidad parcial cuando no hay foco: con secciones de
-                50 m las barras se tocan de cien en cien, y dos bordes
-                semitransparentes superpuestos dejaban una costura oscura
-                en cada frontera. A opacidad plena desaparecen.
-              */}
               <path d={d} fill={c} stroke={c} strokeWidth="0.5"
                 opacity={foco === null ? 1 : activo ? 1 : 0.35} />
               <rect x={x1} y={mSup} width={anchoPx} height={alto} fill="transparent" />
-              {verEtiqueta(i) && et !== '' && (
-                <text x={(x1 + x2) / 2} y={y(cima) - (esMax ? 16 : 6)}
-                  textAnchor="middle" fontFamily="var(--mono)" fontSize={esMax ? 11 : 10}
-                  fontWeight={esMax ? '700' : '600'}
-                  fill={esMax || activo ? 'var(--ink)' : 'var(--ink2)'}>
-                  {et}
-                </text>
+            </g>
+          );
+        })}
+
+        <line x1={mIzq} x2={xCima} y1={y(base)} y2={y(base)}
+          stroke="var(--line2)" strokeWidth="1" />
+
+        {/* Una linea vertical discontinua en cada marca de km, superpuesta
+            sobre el propio relleno -no detras, como al principio- para que
+            se lea cruzando el color. Sube desde la base solo hasta tocar la
+            silueta real del perfil en ese punto: si siguiera hasta arriba
+            se saldria del grafico, por el "cielo" vacio donde ya no hay
+            nada que marcar. Tampoco se repite en los dos extremos, que ya
+            los marcan el eje y la linea de coronacion. */}
+        {marcasEje.filter((v) => v > 0.02 && v < kmT - 0.02).map((v, i) => (
+          <line key={`vk${i}`} x1={x(km0 + v)} x2={x(km0 + v)}
+            y1={y(base)} y2={y(alturaEnKm(km0 + v))}
+            stroke="rgba(255,255,255,.55)" strokeWidth="1.8" strokeDasharray="3 4" />
+        ))}
+
+        {/* Franja de % por tramo, debajo de la linea base: caja negra,
+            texto blanco y el "%" siempre visible -no hay que adivinar
+            de que unidad se habla. */}
+        {sec.map((s, i) => {
+          const x1 = x(s.kmIni), x2 = x(s.kmFin);
+          const activo = foco === i;
+          return (
+            <g key={i} onMouseEnter={() => setFoco(i)} style={{ cursor: 'default' }}>
+              <rect x={x1} y={yFranjaTop} width={x2 - x1} height={franjaH}
+                fill="#101318" opacity={foco === null ? 1 : activo ? 1 : 0.45} />
+              {x1 > mIzq && (
+                <line x1={x1} x2={x1} y1={yFranjaTop} y2={yFranjaTop + franjaH}
+                  stroke="var(--bg)" strokeWidth="1" />
               )}
-              {/* Punta que senala la seccion mas empinada de la subida. */}
-              {esMax && (
-                <path
-                  d={`M ${(x1 + x2) / 2} ${y(cima) - 4} l -4 -7 l 8 0 Z`}
-                  fill={c} stroke="var(--ink)" strokeWidth="1" strokeLinejoin="round" />
+              {(x2 - x1) > 30 && (
+                <text x={(x1 + x2) / 2} y={yFranjaTop + franjaH / 2 + 4} textAnchor="middle"
+                  fontFamily="var(--mono)" fontSize="11" fontWeight="700" fill="#FFFFFF">
+                  {num(s.pendiente, 1)} %
+                </text>
               )}
             </g>
           );
         })}
 
-        <line x1={mIzq} x2={W - mDer} y1={y(base)} y2={y(base)}
-          stroke="var(--line2)" strokeWidth="1" />
+        {marcasEje.map((v, i) => {
+          /*
+            La linea tiene que clavarse en el borde real del tramo (por
+            eso v es ese valor exacto, con sus decimales feos), pero el
+            numero que se lee no: se redondea al medio/kilometro mas
+            cercano -salvo el ultimo, que es el final real de la subida
+            y ese si interesa exacto, no redondeado. */
+          const esUltima = i === marcasEje.length - 1;
+          const etiqueta = esUltima ? v : Math.round(v / pasoAprox) * pasoAprox;
+          return (
+            <text key={i} x={x(km0 + v)} y={H - 10}
+              textAnchor={i === 0 ? 'start' : esUltima ? 'end' : 'middle'}
+              fontFamily="var(--mono)" fontSize="10.5" fontWeight="700" fill="var(--ink)">
+              {formatoKm(etiqueta)} km
+            </text>
+          );
+        })}
 
-        {[0, 0.25, 0.5, 0.75, 1].map((f, i) => (
-          <text key={i} x={mIzq + ancho * f} y={H - 12}
-            textAnchor={i === 0 ? 'start' : i === 4 ? 'end' : 'middle'}
-            fontFamily="var(--mono)" fontSize="10.5" fill="var(--ink3)">
-            {num(kmT * f, 1)} km
-          </text>
-        ))}
+        {/*
+          El pico real de la subida: no el tramo con la media mas alta,
+          sino el punto exacto -dentro de ese tramo o a caballo entre dos-
+          donde la pendiente aprieta de verdad. Es la unica rampa que se
+          marca sobre el propio perfil; el resto de porcentajes vive en
+          la franja de abajo.
+        */}
+        {picoReal && (
+          <g>
+            <path
+              d={`M ${xPico} ${yPico - 4} l -5 -8 l 10 0 Z`}
+              fill={colorPico} stroke="var(--ink)" strokeWidth="1" strokeLinejoin="round" />
+            <text x={xPico} y={yPico - 16} textAnchor="middle"
+              fontFamily="var(--mono)" fontSize="11" fontWeight="700" fill="var(--ink)">
+              {num(picoReal.pendiente, 1)} %
+            </text>
+          </g>
+        )}
+
+        {/*
+          La coronacion: donde acaba el perfil, una linea sube hasta una
+          insignia con la categoria del puerto; a su izquierda, el nombre
+          y la ficha (desnivel, distancia, pendiente media). Es la misma
+          lectura que da el mapa de un puerto en una guia de carrera: se
+          ve de un vistazo que ahi arriba se acaba de coronar.
+        */}
+        <line x1={xCima} x2={xCima} y1={yFinal} y2={yInsignia + rInsignia}
+          stroke={cat.color} strokeWidth="2" strokeDasharray="1 4" strokeLinecap="round" />
+        <circle cx={xCima} cy={yInsignia} r={rInsignia} fill={cat.color} />
+        <text x={xCima} y={yInsignia + 4} textAnchor="middle"
+          fontFamily={HELVETICA} fontWeight="700" fontSize="11.5"
+          fill={cat.codigo === 'hc' ? '#FFFFFF' : '#0A0C0F'}>
+          {cat.nombre}
+        </text>
+        <text x={xFicha} y={yInsignia - 3} textAnchor="end"
+          fontFamily={HELVETICA} fontWeight="700" fontSize={tamNombre} fill="var(--ink)">
+          {nombrePuerto}
+        </text>
+        <text x={xFicha} y={yInsignia + 13} textAnchor="end"
+          fontFamily={HELVETICA} fontWeight="400" fontSize="11" fill="var(--ink2)">
+          +{num(puerto.desnivel, 0)} m - {num(puerto.metros / 1000, 2)} km a {num(puerto.pendiente, 1)} %
+        </text>
       </svg>
-
-      <div className="chips" style={{ marginTop: 12 }}>
-        <button aria-pressed={modo === 'dureza'} onClick={() => setModo('dureza')}
-          style={modo === 'dureza' ? { background: 'var(--ink)', borderColor: 'var(--ink)' } : null}>
-          Perfil y dureza
-        </button>
-        <button aria-pressed={modo === 'zonas'} disabled={!hayFC}
-          onClick={() => setModo('zonas')}
-          title={hayFC ? '' : 'Esta subida no tiene frecuencia cardíaca'}
-          style={modo === 'zonas' ? { background: 'var(--ink)', borderColor: 'var(--ink)' } : null}>
-          Zonas de frecuencia cardíaca
-        </button>
-      </div>
 
       {foco !== null && (
         <div style={{ fontFamily: 'var(--mono)', fontSize: 12.5, color: 'var(--ink2)',
@@ -211,14 +290,12 @@ export default function PerfilPuerto({ streams, puerto, indice, cfg, zonas, nomb
         </div>
       )}
 
-      <div className="chips" style={{ marginTop: 12 }}>
-        {leyenda.map((l, i) => (
-          <span key={i} style={{ fontFamily: 'var(--mono)', fontSize: 11.5,
-            color: 'var(--ink2)', display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '4px 9px', border: '1px solid var(--line2)', borderRadius: 6 }}>
-            <i style={{ background: l.color, width: 9, height: 9, borderRadius: 2,
-              display: 'inline-block' }} />
-            {l.nombre}
+      {/* La leyenda arranca justo donde arranca el grafico (mIzq), no en
+          el borde del panel: mismo eje vertical que el resto de la UI. */}
+      <div className="perfil-leyenda" style={{ marginTop: 12, marginLeft: `${(mIzq / W) * 100}%` }}>
+        {TRAMOS_DUREZA.filter((t) => sec.some((s) => s.tramo === t.n)).map((t) => (
+          <span key={t.n} className="leyenda-item">
+            <i style={{ background: t.color }} />{t.nombre}
           </span>
         ))}
       </div>
