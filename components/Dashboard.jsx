@@ -851,11 +851,21 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
                     const abierta = salidaAbierta === s.id;
                     const streamsFila = cache[s.id];
                     const puertosFila = streamsFila ? detectarPuertos(streamsFila) : [];
+                    /*
+                      Foco (opcion 2b del rediseno, la elegida sobre la
+                      alternativa "acordeon en su sitio"): con una fila
+                      abierta, las demas se retiran en vez de quedarse
+                      igual -asi la que importa de verdad destaca sin
+                      necesidad de ocultar el resto.
+                    */
+                    const enfocada = salidaAbierta == null || abierta;
 
                     return (
                       <Fragment key={s.id}>
                       <tr onClick={() => alternarFila(s)}
-                        style={{ opacity: dentro ? 1 : 0.35, cursor: 'pointer',
+                        className={abierta ? 'fila-activa' : undefined}
+                        style={{ opacity: (dentro ? 1 : 0.35) * (enfocada ? 1 : 0.38),
+                          cursor: 'pointer',
                           background: abierta ? 'var(--card2)' : undefined }}>
                         <td className="col-tipo">
                           <span className="cat" style={{ background: insignia.fondo, color: insignia.tinta }}>
@@ -900,29 +910,44 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
                         </td>
                       </tr>
 
-                      {abierta && (
-                        <tr className="fila-detalle">
-                          <td colSpan={9}>
-                            {streamsFila ? (
-                              <div className="perfil-mini">
-                                <div className="perfil-mini-grafico">
-                                  <Perfil streams={streamsFila} puertos={puertosFila}
-                                    modo="relieve" compacto simple altura={190} />
+                      {/*
+                        Siempre montada -antes solo existia la de la fila
+                        abierta, y por eso no habia forma de animar el
+                        cierre: un elemento que se desmonta no puede hacer
+                        una transicion de salida. El alto real lo decide
+                        el CSS (grid-template-rows 0fr/1fr en
+                        .fila-detalle-panel), no esta condicion.
+
+                        El grafico solo se monta si streamsFila ya esta en
+                        cache -evita pagar el coste de Perfil en filas que
+                        nunca se han abierto- pero una vez montado se
+                        queda: reabrir la misma fila despues es instantaneo.
+                      */}
+                      <tr className="fila-detalle">
+                        <td colSpan={9} className="fila-detalle-panel-td">
+                          <div className={`fila-detalle-panel${abierta ? ' abierta' : ''}`}>
+                            <div className="fila-detalle-inner">
+                              {streamsFila ? (
+                                <div className="perfil-mini">
+                                  <div className="perfil-mini-grafico">
+                                    <Perfil streams={streamsFila} puertos={puertosFila}
+                                      modo="relieve" compacto simple altura={190} animarEntrada />
+                                  </div>
+                                  <button className="btn-analisis"
+                                    onClick={() => irASalida(s.id)}>
+                                    Analizar
+                                  </button>
                                 </div>
-                                <button className="btn-analisis"
-                                  onClick={() => irASalida(s.id)}>
-                                  Analizar
-                                </button>
-                              </div>
-                            ) : (
-                              <p className="perfil-mini-cargando">
-                                {cargandoPerfil && <span className="spin" />}
-                                {cargandoPerfil ? 'Cargando el perfil…' : 'Sin perfil disponible.'}
-                              </p>
-                            )}
-                          </td>
-                        </tr>
-                      )}
+                              ) : abierta ? (
+                                <p className="perfil-mini-cargando">
+                                  {cargandoPerfil && <span className="spin" />}
+                                  {cargandoPerfil ? 'Cargando el perfil…' : 'Sin perfil disponible.'}
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
                       </Fragment>
                     );
                   })}

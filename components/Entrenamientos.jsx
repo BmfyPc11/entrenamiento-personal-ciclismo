@@ -764,16 +764,26 @@ export default function Entrenamientos({
                           del final del bloque: con seis puertos, pulsabas el
                           primero y el perfil aparecia cinco filas mas abajo,
                           sin nada que lo atara al que habias abierto.
+
+                          Igual que en Resumen: fila siempre montada -no
+                          {puertoAbierto === i && (...)}- para que el cierre
+                          tambien se pueda animar, con el alto real resuelto
+                          por CSS (.fila-detalle-panel, grid-template-rows
+                          0fr/1fr) en vez de por esta condicion.
                         */}
-                        {puertoAbierto === i && streams && (
-                          <tr className="fila-detalle">
-                            <td colSpan={11}>
-                              <PerfilPuerto streams={streams} puerto={p}
-                                indice={i} cfg={cfg} zonas={zonas}
-                                nombre={nombresPuertos[i]} />
-                            </td>
-                          </tr>
-                        )}
+                        <tr className="fila-detalle">
+                          <td colSpan={11} className="fila-detalle-panel-td">
+                            <div className={`fila-detalle-panel${puertoAbierto === i ? ' abierta' : ''}`}>
+                              <div className="fila-detalle-inner">
+                                {streams && (
+                                  <PerfilPuerto streams={streams} puerto={p}
+                                    indice={i} cfg={cfg} zonas={zonas}
+                                    nombre={nombresPuertos[i]} />
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
                         </Fragment>
                       );
                     })}

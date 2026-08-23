@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   zonaDeFC, tramoDureza, TRAMOS_DUREZA, tramoVelocidad, TRAMOS_VELOCIDAD,
   categoriaPuerto, detectarParadas, num, duracion,
@@ -158,6 +158,16 @@ export default function Perfil({
      mas aire de lo normal, para que los repechos cortos de una etapa
      llana se disimulen en vez de leerse como un puerto. */
   llana = false,
+  /*
+    Solo para el modo "relieve" + simple: en vez de aparecer ya dibujado,
+    el area crece desde la base, la linea se traza y se marca la cima real
+    de la salida (punto mas alto, no un puerto concreto). La animacion en
+    si vive en CSS (globals.css), disparada por la clase "abierta" del
+    contenedor que use este componente -aqui solo se pintan los elementos
+    con las clases y el punto de partida que esa hoja de estilos espera.
+    Por defecto apagado: ningun otro sitio donde se usa Perfil lo pide.
+  */
+  animarEntrada = false,
 }) {
   const [hover, setHover] = useState(null);
 
@@ -206,6 +216,24 @@ export default function Perfil({
      resalta igual venga el foco de la tabla o de pasar por encima de su
      propia ficha en el grafico. */
   const [fichaFoco, setFichaFoco] = useState(null);
+
+  /*
+    Longitud real del trazo superior, para "dibujarlo" con animarEntrada.
+    Se mide con getTotalLength() -la tecnica clasica, mas fiable entre
+    navegadores que el atributo pathLength con un valor inventado (1):
+    con un trazo real de cientos de puntos y un pathLength tan alejado de
+    su longitud real, algunos motores redondean mal el patron de guiones
+    y el trazo queda a medias. La longitud varia con cada salida, asi que
+    se guarda en una custom property CSS (--linea-len) y es el CSS quien
+    decide destino (0) y origen (la propia --linea-len) del recorrido.
+  */
+  const lineaRef = useRef(null);
+  const [lineaLen, setLineaLen] = useState(0);
+  useLayoutEffect(() => {
+    if (!animarEntrada) return;
+    const len = lineaRef.current?.getTotalLength();
+    if (len) setLineaLen(len);
+  });
 
   /*
     Se detecta sobre el stream completo, no sobre los hasta 900 puntos
@@ -549,6 +577,16 @@ export default function Perfil({
             <stop offset="0%" stopColor="#4A5563" stopOpacity=".55" />
             <stop offset="100%" stopColor="#4A5563" stopOpacity=".05" />
           </linearGradient>
+          {/* Mismo gradiente que el de "relieve" -de arriba abajo, mas
+              opaco a mas transparente- pero en el amarillo de "amarillo",
+              igual que en el mockup del rediseno. Antes era un relleno
+              plano; con el area animandose desde la base, un gradiente le
+              da algo de profundidad al crecer, en vez de un bloque de
+              color liso. */}
+          <linearGradient id="relieve-amarillo" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#E0A82E" stopOpacity=".55" />
+            <stop offset="100%" stopColor="#E0A82E" stopOpacity=".05" />
+          </linearGradient>
         </defs>
 
         {guias.map((v) => (
@@ -611,10 +649,16 @@ export default function Perfil({
               detras del color como en dureza/velocidad/zonas.
             */}
             <path d={areaPath(0, datos.d.length - 1)}
-              fill={amarillo ? '#E0A82E' : 'url(#relieve)'} />
-            <path d={lineaPath(0, datos.d.length - 1)} fill="none"
+              fill={amarillo ? 'url(#relieve-amarillo)' : 'url(#relieve)'}
+              className={animarEntrada ? 'perfil-area-anim' : undefined}
+              style={animarEntrada ? { transformOrigin: `0px ${H - B}px` } : undefined} />
+            <path ref={animarEntrada ? lineaRef : undefined}
+              d={lineaPath(0, datos.d.length - 1)} fill="none"
               stroke={amarillo ? '#E0A82E' : '#C8CFD8'}
-              strokeWidth="1.7" strokeLinejoin="round" />
+              strokeWidth="1.7" strokeLinejoin="round"
+              className={animarEntrada ? 'perfil-linea-anim' : undefined}
+              strokeDasharray={animarEntrada ? lineaLen : undefined}
+              style={animarEntrada ? { '--linea-len': lineaLen } : undefined} />
           </>
         )}
 
@@ -678,9 +722,21 @@ export default function Perfil({
                 */}
                 <line x1={f.x} y1={f.yCaja + f.alto} x2={f.x} y2={H - B}
                   stroke={trazo} strokeWidth={f.activo ? 2 : 1.2}
-                  strokeDasharray="4 3" opacity={f.activo ? 0.95 : 0.65} />
+                  strokeDasharray="4 3" opacity={f.activo ? 0.95 : 0.65}
+                  className={animarEntrada ? 'perfil-cima-stem' : undefined}
+                  style={animarEntrada ? { transformOrigin: `${f.x}px ${H - B}px` } : undefined} />
+                {/* Anillo que pulsa una vez desplegado: solo con animarEntrada,
+                    marca la cima de este puerto igual que hacia el marcador
+                    independiente que se quito -pero sobre la ficha real. */}
+                {animarEntrada && (
+                  <circle cx={f.x} cy={f.yCima} r={f.activo ? 5 : 4} fill="none" stroke={trazo}
+                    strokeWidth="1" className="perfil-cima-anillo"
+                    style={{ transformOrigin: `${f.x}px ${f.yCima}px` }} />
+                )}
                 <circle cx={f.x} cy={f.yCima} r={f.activo ? 4 : 3}
-                  fill={trazo} />
+                  fill={trazo}
+                  className={animarEntrada ? 'perfil-cima-punto' : undefined}
+                  style={animarEntrada ? { transformOrigin: `${f.x}px ${f.yCima}px` } : undefined} />
 
                 <g transform={`translate(${f.xCaja},${f.yCaja})`}
                   pointerEvents={onPuertoClick ? 'auto' : 'none'}
@@ -688,29 +744,40 @@ export default function Perfil({
                   onMouseEnter={onPuertoClick ? () => setFichaFoco(f.i) : undefined}
                   onMouseLeave={onPuertoClick ? () => setFichaFoco(null) : undefined}
                   style={onPuertoClick ? { cursor: 'pointer' } : undefined}>
-                  <rect width={f.ancho} height={f.alto} rx="7"
-                    fill="#161C26" stroke={trazo}
-                    strokeWidth={f.activo ? 1.6 : 1} opacity=".97" />
-
                   {/*
-                    Solo categoria y distancia -como la insignia de "Tus
-                    salidas" en Resumen-, siempre visibles: es el dato que
-                    se busca de un vistazo, sin nombre ni pendiente/desnivel
-                    detallados que ya estan en la tabla de abajo.
+                    Grupo interior solo para la animacion: el de fuera ya
+                    lleva su propio transform="translate(...)" para
+                    posicionarse, y un transform de CSS en el mismo
+                    elemento lo sustituiria en vez de sumarse -por eso el
+                    escalado de entrada va aqui dentro, no en el de fuera.
                   */}
-                  <rect x={(f.ancho - f.anchoCat) / 2} y="5" width={f.anchoCat} height="20" rx="6"
-                    fill={f.cat.color} />
-                  <text x={f.ancho / 2} y="19.5" textAnchor="middle"
-                    fill={f.cat.codigo === 'hc' ? '#FFFFFF' : '#0E1116'}
-                    fontSize={compacto ? 13 : 12.5} fontWeight="800"
-                    fontFamily="ui-monospace,Menlo,monospace">
-                    {f.cat.nombre}
-                  </text>
-                  <text x={f.ancho / 2} y={f.alto - 6} textAnchor="middle" fill="#E8EAED"
-                    fontSize="11.5" fontWeight="400"
-                    fontFamily='"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif'>
-                    {f.textoDist}
-                  </text>
+                  <g className={animarEntrada ? 'perfil-cima-ficha' : undefined}
+                    style={animarEntrada
+                      ? { transformOrigin: `${f.ancho / 2}px ${f.alto}px` } : undefined}>
+                    <rect width={f.ancho} height={f.alto} rx="7"
+                      fill="#161C26" stroke={trazo}
+                      strokeWidth={f.activo ? 1.6 : 1} opacity=".97" />
+
+                    {/*
+                      Solo categoria y distancia -como la insignia de "Tus
+                      salidas" en Resumen-, siempre visibles: es el dato que
+                      se busca de un vistazo, sin nombre ni pendiente/desnivel
+                      detallados que ya estan en la tabla de abajo.
+                    */}
+                    <rect x={(f.ancho - f.anchoCat) / 2} y="5" width={f.anchoCat} height="20" rx="6"
+                      fill={f.cat.color} />
+                    <text x={f.ancho / 2} y="19.5" textAnchor="middle"
+                      fill={f.cat.codigo === 'hc' ? '#FFFFFF' : '#0E1116'}
+                      fontSize={compacto ? 13 : 12.5} fontWeight="800"
+                      fontFamily="ui-monospace,Menlo,monospace">
+                      {f.cat.nombre}
+                    </text>
+                    <text x={f.ancho / 2} y={f.alto - 6} textAnchor="middle" fill="#E8EAED"
+                      fontSize="11.5" fontWeight="400"
+                      fontFamily='"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif'>
+                      {f.textoDist}
+                    </text>
+                  </g>
                 </g>
               </g>
               );
