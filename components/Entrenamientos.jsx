@@ -54,6 +54,17 @@ export default function Entrenamientos({
   const [velFoco, setVelFoco] = useState([]);
   const [puertoFoco, setPuertoFoco] = useState(null);
   const [puertoAbierto, setPuertoAbierto] = useState(null);
+  /* Version de puertoAbierto con un frame de retraso, solo para la clase
+     que dispara la animacion del panel -mismo motivo y misma tecnica que
+     claseAbierta en Dashboard.jsx: sin este retraso, un contenido que se
+     monte mientras el panel ya lleva la clase "abierta" puesta nace
+     directamente en su estado final, sin nada que animar. */
+  const [puertoClaseAbierta, setPuertoClaseAbierta] = useState(null);
+  useEffect(() => {
+    if (puertoAbierto == null) { setPuertoClaseAbierta(null); return; }
+    const id = requestAnimationFrame(() => setPuertoClaseAbierta(puertoAbierto));
+    return () => cancelAnimationFrame(id);
+  }, [puertoAbierto]);
   /* Punto bajo el cursor en el perfil (indice del stream completo), para
      pintar el mismo punto en el mapa mientras se recorre el grafico. */
   const [puntoHover, setPuntoHover] = useState(null);
@@ -773,7 +784,7 @@ export default function Entrenamientos({
                         */}
                         <tr className="fila-detalle">
                           <td colSpan={11} className="fila-detalle-panel-td">
-                            <div className={`fila-detalle-panel${puertoAbierto === i ? ' abierta' : ''}`}>
+                            <div className={`fila-detalle-panel${puertoClaseAbierta === i ? ' abierta' : ''}`}>
                               <div className="fila-detalle-inner">
                                 {streams && (
                                   <PerfilPuerto streams={streams} puerto={p}

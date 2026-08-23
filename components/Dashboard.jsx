@@ -781,6 +781,27 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
   const [orden, setOrden] = useState({ campo: 'fecha', desc: true });
   const [cargandoPerfil, setCargandoPerfil] = useState(false);
 
+  /*
+    Version de salidaAbierta con un frame de retraso, para que la clase
+    CSS "abierta" del panel de detalle solo llegue a aplicarse un
+    fotograma despues de que se pida abrir una fila.
+
+    Sin este retraso, la primera vez que se abre una fila -streams sin
+    cache todavia- el contenido real (.perfil-mini) no llega a existir
+    hasta que la carga termina, y para entonces el panel ya llevaria un
+    rato con "abierta" puesta: nace directamente en su estado final, sin
+    haber pintado nunca el cerrado, y no hay transicion CSS que animar.
+    Con este retraso, cualquier contenido que se monte de golpe -al
+    instante o tras una carga- siempre tiene, como minimo, un fotograma
+    pintado en su estado cerrado antes de que "abierta" llegue.
+  */
+  const [claseAbierta, setClaseAbierta] = useState(null);
+  useEffect(() => {
+    if (salidaAbierta == null) { setClaseAbierta(null); return; }
+    const id = requestAnimationFrame(() => setClaseAbierta(salidaAbierta));
+    return () => cancelAnimationFrame(id);
+  }, [salidaAbierta]);
+
   const alternarFila = (s) => {
     if (salidaAbierta === s.id) { setSalidaAbierta(null); return; }
     setSalidaAbierta(s.id);
@@ -849,6 +870,10 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
                     const insignia = TIPO_INSIGNIA[tipoRuta(s, refTerreno)];
 
                     const abierta = salidaAbierta === s.id;
+                    /* Con retraso de un frame respecto a "abierta" -ver
+                       claseAbierta mas arriba-, solo para la clase que
+                       dispara la animacion del panel. */
+                    const panelAbierto = claseAbierta === s.id;
                     const streamsFila = cache[s.id];
                     const puertosFila = streamsFila ? detectarPuertos(streamsFila) : [];
                     /*
@@ -925,7 +950,7 @@ function Resumen({ salidas, cfg, umbral, masaTotal, excluidas, setExcluidas,
                       */}
                       <tr className="fila-detalle">
                         <td colSpan={9} className="fila-detalle-panel-td">
-                          <div className={`fila-detalle-panel${abierta ? ' abierta' : ''}`}>
+                          <div className={`fila-detalle-panel${panelAbierto ? ' abierta' : ''}`}>
                             <div className="fila-detalle-inner">
                               {streamsFila ? (
                                 <div className="perfil-mini">

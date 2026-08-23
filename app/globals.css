@@ -740,21 +740,16 @@ h1{font-size:clamp(26px,3.4vw,34px)}
   transition:opacity .34s ease .12s,transform .38s cubic-bezier(.16,1,.3,1) .12s;
 }
 /*
-  Sin esto, la primera vez que se abre una fila -mientras streamsFila no
-  esta en cache todavia- el contenido real (.perfil-mini) no existe hasta
-  que la carga termina, y para entonces .fila-detalle-panel ya lleva un
-  rato con la clase "abierta" puesta: el elemento nace ya emparejando la
-  regla de arriba, sin haber pasado nunca por el estado cerrado, y no hay
-  transicion que animar -un caso que no se ve la primera vez que se prueba
-  pero sale enseguida en el uso real. @starting-style le dice al navegador
-  de que valores partir en ese instante exacto de insercion, sin depender
-  de que exista un fotograma previo real pintado en pantalla.
+  La primera vez que se abre una fila -mientras streamsFila no esta en
+  cache todavia- el contenido real (.perfil-mini) no existe hasta que la
+  carga termina. Si .fila-detalle-panel llevase ya la clase "abierta"
+  puesta para entonces, ese contenido naceria directamente emparejando la
+  regla de arriba, sin pasar nunca por el estado cerrado: nada que animar.
+  Por eso la clase "abierta" no la pone directamente el estado de la fila,
+  sino una version con un frame de retraso (ver claseAbierta en
+  Dashboard.jsx y Entrenamientos.jsx): así, cuando llega, el contenido ya
+  ha tenido su primer pintado en el estado cerrado.
 */
-@starting-style{
-  .fila-detalle-panel.abierta .fila-detalle-inner > *{
-    opacity:0;transform:translateY(8px);
-  }
-}
 
 /*
   Entrada del perfil mismo (Perfil.jsx, prop animarEntrada): el area
@@ -764,9 +759,10 @@ h1{font-size:clamp(26px,3.4vw,34px)}
   -0.16s/.2s/.52s/.72s- porque ese escalonado es lo que hace que se lea
   como una secuencia y no como todo a la vez.
 
-  Mismo motivo que arriba para los @starting-style: Perfil tampoco existe
-  hasta que streamsFila esta en cache, momento en el que su ancestro
-  .fila-detalle-panel puede llevar ya un rato abierto.
+  Mismo motivo que arriba: Perfil tampoco existe hasta que streamsFila
+  esta en cache, momento en el que su ancestro .fila-detalle-panel puede
+  llevar ya un rato abierto -de ahi tambien el frame de retraso de
+  claseAbierta antes de que estas reglas lleguen a aplicar.
 */
 .perfil-area-anim{transform:scaleY(.02);transition:transform .6s cubic-bezier(.16,1,.3,1)}
 .perfil-linea-anim{stroke-dashoffset:var(--linea-len);transition:stroke-dashoffset .78s cubic-bezier(.33,1,.68,1)}
@@ -787,13 +783,6 @@ h1{font-size:clamp(26px,3.4vw,34px)}
 .fila-detalle-panel.abierta .perfil-cima-punto{transform:scale(1);transition-delay:.72s}
 .fila-detalle-panel.abierta .perfil-cima-ficha{
   opacity:1;transform:scale(1);transition-delay:.78s;
-}
-@starting-style{
-  .fila-detalle-panel.abierta .perfil-area-anim{transform:scaleY(.02)}
-  .fila-detalle-panel.abierta .perfil-linea-anim{stroke-dashoffset:var(--linea-len)}
-  .fila-detalle-panel.abierta .perfil-cima-stem{transform:scaleY(0)}
-  .fila-detalle-panel.abierta .perfil-cima-punto{transform:scale(0)}
-  .fila-detalle-panel.abierta .perfil-cima-ficha{opacity:0;transform:scale(.85)}
 }
 
 @keyframes cimaPulse{
@@ -890,9 +879,6 @@ h1{font-size:clamp(26px,3.4vw,34px)}
 .tabla-salidas .col-tipo{width:56px;min-width:0;white-space:nowrap}
 
 /*
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
   Foco (opcion 2b del rediseno de animaciones, elegida sobre "acordeon en
   su sitio"): con una fila abierta, la propia fila destaca -mas aire
   vertical y una marca de acento- y el resto se retira en vez de
@@ -905,8 +891,8 @@ h1{font-size:clamp(26px,3.4vw,34px)}
 .tabla-salidas tbody tr td{transition:padding .4s cubic-bezier(.16,1,.3,1),box-shadow .4s cubic-bezier(.16,1,.3,1)}
 .tabla-salidas tr.fila-activa td{padding-top:15px;padding-bottom:14px}
 .tabla-salidas tr.fila-activa td.col-tipo{box-shadow:inset 3px 0 0 var(--acento)}
-=======
->>>>>>> Stashed changes
+
+/*
   Cabeceras que ordenan. El boton hereda el aspecto del rotulo de la
   cabecera (no se ve como boton) y solo se delata al pasar por encima:
   una tabla con nueve botones dibujados seria mucho ruido para lo que
@@ -958,10 +944,6 @@ th:first-child .th-orden,
 .th-tipo-menu button:hover{background:var(--card);color:var(--ink)}
 .th-tipo-menu button[aria-pressed="true"]{color:var(--acento)}
 .th-tipo-menu button:focus-visible{outline:2px solid var(--acento);outline-offset:-2px}
-<<<<<<< Updated upstream
-=======
->>>>>>> 8ce095578166cf4f8a3a788165520c29822c5aa5
->>>>>>> Stashed changes
 
 /* Km, Tiempo, Desnivel+, Vel media y FC: peso normal, no el 500 que
    pone la tabla por defecto; y mas separacion entre ellas, que con el
