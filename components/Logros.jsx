@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  IcoLogros, IcoFlecha, IcoFlechaDerecha, IcoTriangulo,
+  IcoLogros, IcoFlecha, IcoFlechaDerecha, IcoTriangulo, IcoCerrar,
   IcoRodaje, IcoAscensiones, IcoVelocidad, IcoHabitos, IcoExploracion, IcoComunidad,
 } from './Iconos';
 import {
@@ -586,20 +586,34 @@ function formatoMagnitud(v, distanciaKm, unidad, decimales, conUnidad = true) {
   return conUnidad ? `${num(v, decimales)}${unidad ? ` ${unidad}` : ''}` : num(v, decimales);
 }
 
-/* Cuanto le falta (o le faltaba) para el siguiente tramo, en las mismas
-   unidades que se ven en pantalla. En las tarjetas de tiempo el valor
-   guardado sigue siendo velocidad, asi que la resta se hace sobre los
-   tiempos ya convertidos -no sobre los km/h- para que "cuanto le falta"
-   sea un tiempo a recortar y no una velocidad a ganar. */
-function diferenciaMagnitud(valor, siguiente, distanciaKm, unidad, decimales) {
-  if (!siguiente) return null;
+/*
+  Diferencia entre dos valores de un mismo logro, en las mismas unidades
+  que se ven en pantalla. En las tarjetas de tiempo el valor guardado
+  sigue siendo velocidad, asi que la resta se hace sobre los tiempos ya
+  convertidos -no sobre los km/h- para que la diferencia sea un tiempo
+  (ganado o por recortar) y no una velocidad.
+
+  Generica sobre dos valores cualesquiera (no solo "valor" contra el
+  umbral de un tramo) para poder reutilizarla tambien al comparar el
+  antes y el despues de una sincronizacion -ver diferenciaMagnitud, mas
+  abajo, y el popup de logros actualizados.
+*/
+function diferenciaValores(desde, hasta, distanciaKm, unidad, decimales) {
   if (distanciaKm) {
-    if (valor <= 0) return null;
-    const diffSeg = (distanciaKm / valor) * 3600 - (distanciaKm / siguiente.umbral) * 3600;
+    if (desde <= 0 || hasta <= 0) return null;
+    const diffSeg = (distanciaKm / desde) * 3600 - (distanciaKm / hasta) * 3600;
     return diffSeg > 0 ? duracionHMS(diffSeg) : null;
   }
-  const diff = siguiente.umbral - valor;
+  const diff = hasta - desde;
   return diff > 0 ? `${num(diff, decimales)}${unidad ? ` ${unidad}` : ''}` : null;
+}
+
+/* Cuanto le falta (o le faltaba) para el siguiente tramo: la misma
+   diferencia de arriba, entre el valor actual y el umbral del siguiente
+   tramo. */
+function diferenciaMagnitud(valor, siguiente, distanciaKm, unidad, decimales) {
+  if (!siguiente) return null;
+  return diferenciaValores(valor, siguiente.umbral, distanciaKm, unidad, decimales);
 }
 
 function TarjetaRango({ nombre, descripcion, escala, valor, unidad = 'km', decimales = 1, distanciaKm = 0 }) {
@@ -1125,6 +1139,25 @@ const LOGROS_POR_CATEGORIA = {
 };
 
 /*
+  Aplana el catalogo y calcula el valor de los 33 logros de una vez,
+  para (salidas, cache, cfg, refTerreno) dados. Es el mismo calculo que
+  hacian por separado Logros() y TopLogros -cada uno con su propio
+  bucle sobre LOGROS_POR_CATEGORIA-, ahora en un solo sitio para que no
+  se puedan desincronizar. Tambien lo usa Dashboard para comparar el
+  "antes" y el "despues" de una sincronizacion y montar el popup de
+  logros actualizados (ver PopupLogrosActualizados, mas abajo).
+*/
+export function calcularLogros(salidas, cache, cfg, refTerreno) {
+  const planos = [];
+  Object.entries(LOGROS_POR_CATEGORIA).forEach(([categoria, lista]) => {
+    lista.forEach((l) => {
+      planos.push({ ...l, categoria, valor: l.valor(salidas, cache, cfg, refTerreno) });
+    });
+  });
+  return planos;
+}
+
+/*
   Radar hexagonal: un eje por categoria, dibujado a mano en SVG -sin
   libreria de graficos, igual que el resto de Graficos.jsx-. Tres
   anillos de fondo marcan 33/66/100 % como referencia, y el poligono de
@@ -1215,15 +1248,11 @@ function ResumenLogros({ atleta, resumen }) {
 */
 export function TopLogros({ salidas, cache, cfg, refTerreno }) {
   const mejores = useMemo(() => {
-    const todos = [];
-    Object.values(LOGROS_POR_CATEGORIA).forEach((lista) => {
-      lista.forEach((l) => {
-        const valor = l.valor(salidas, cache, cfg, refTerreno);
-        const { actual, siguiente } = estadoEscala(l.escala, valor);
-        const nivel = nivelesConseguidos(l.escala, valor);
-        const pct = siguiente ? Math.min(100, (valor / siguiente.umbral) * 100) : 100;
-        todos.push({ id: l.id, nombre: l.nombre, descripcion: l.descripcion, nivel, pct, actual });
-      });
+    const todos = calcularLogros(salidas, cache, cfg, refTerreno).map((l) => {
+      const { actual, siguiente } = estadoEscala(l.escala, l.valor);
+      const nivel = nivelesConseguidos(l.escala, l.valor);
+      const pct = siguiente ? Math.min(100, (l.valor / siguiente.umbral) * 100) : 100;
+      return { id: l.id, nombre: l.nombre, descripcion: l.descripcion, nivel, pct, actual };
     });
     return todos.sort((a, b) => (b.nivel - a.nivel) || (b.pct - a.pct)).slice(0, 5);
   }, [salidas, cache, cfg, refTerreno]);
@@ -1249,6 +1278,173 @@ export function TopLogros({ salidas, cache, cfg, refTerreno }) {
 }
 
 /*
+  Una tarjeta del carrusel del popup de logros actualizados: mismo
+  vocabulario visual que TarjetaRango (insignia, nombre, descripcion,
+  barra hacia el siguiente tramo) pero con dos anadidos propios de la
+  comparacion antes/despues -el aviso de cuanto ha subido y el segundo
+  tramo de la barra, en ocre, que pinta justo ese aumento.
+
+  forwardRef porque el carrusel necesita el nodo de cada tarjeta para
+  saber, con un IntersectionObserver, cual esta a la vista y llevar la
+  cuenta "2 / 5" -ver PopupLogrosActualizados.
+*/
+const TarjetaPopupLogro = forwardRef(function TarjetaPopupLogro(
+  { logro: {
+    nombre, descripcion, escala, valorAntes, valorDespues,
+    unidad: unidadRaw, decimales: decimalesRaw, distanciaKm: distanciaKmRaw,
+  } },
+  ref,
+) {
+  /* Mismos valores por defecto que TarjetaRango (ver su uso en
+     Logros()): buena parte del catalogo no fija unidad/decimales
+     porque "km" y un decimal ya son lo habitual. */
+  const unidad = unidadRaw ?? 'km';
+  const decimales = decimalesRaw ?? 1;
+  const distanciaKm = distanciaKmRaw ?? 0;
+
+  const { actual, siguiente } = estadoEscala(escala, valorDespues);
+  const colorBarra = (actual ?? siguiente)?.color ?? 'var(--line2)';
+  /* Denominador comun para las dos marcas de la barra: el umbral del
+     siguiente tramo sin conseguir, o el del propio tramo maximo si ya
+     no queda ninguno -asi "antes" y "despues" se leen sobre la misma
+     regla en vez de saltar de escala a mitad de barra. */
+  const denominador = siguiente ? siguiente.umbral : (actual?.umbral || valorDespues || 1);
+  const pctDespues = Math.min(100, (valorDespues / denominador) * 100);
+  const pctAntes = Math.min(pctDespues, Math.max(0, (valorAntes / denominador) * 100));
+
+  const aumento = diferenciaValores(valorAntes, valorDespues, distanciaKm, unidad, decimales);
+  const falta = diferenciaMagnitud(valorDespues, siguiente, distanciaKm, unidad, decimales);
+  const total = siguiente
+    ? formatoMagnitud(siguiente.umbral, distanciaKm, unidad, 0)
+    : `${formatoMagnitud(actual?.umbral ?? 0, distanciaKm, unidad, 0)} · rango máximo`;
+
+  return (
+    <div className="popup-logro-card" ref={ref}>
+      <div className="popup-logro-cabecera">
+        <div className="insignia-circulo" style={{ '--c': actual ? actual.color : 'var(--line2)' }}>
+          {actual ? (actual.sub ?? '★') : '—'}
+        </div>
+        <div>
+          <p className="popup-logro-nombre">{nombre}</p>
+          <p className="popup-logro-desc">{descripcion}</p>
+        </div>
+      </div>
+
+      <div className="popup-logro-aumento">
+        {aumento ? `+${aumento}` : 'Primera vez conseguido'}
+      </div>
+
+      <div className="bar-comparativa">
+        <i className="base" style={{ width: `${pctAntes}%`, background: colorBarra }} />
+        <i className="aumento" style={{ left: `${pctAntes}%`, width: `${Math.max(0, pctDespues - pctAntes)}%` }} />
+      </div>
+
+      <p className="popup-logro-note">
+        {formatoMagnitud(valorDespues, distanciaKm, unidad, decimales, false)} / {total}
+      </p>
+      {falta && <p className="popup-logro-falta">Faltan {falta} para el siguiente nivel</p>}
+    </div>
+  );
+});
+
+/*
+  Popup que aparece al pulsar "Actualizar" cuando la sincronizacion trae
+  actividad nueva de verdad y esa actividad hace subir el valor de algun
+  logro -suba o no de division: ver el filtro en Dashboard.sincronizar,
+  que es quien decide que logros entran aqui y calcula valorAntes /
+  valorDespues de cada uno.
+
+  El propio popup no sabe nada de Strava ni de sincronizacion: solo
+  pinta la lista que le llega, un logro por tarjeta, en un carrusel
+  vertical con scroll-snap. El contador "2 / 5" y las flechas de arriba
+  y abajo son la misma cosa vista de otras dos formas -el
+  IntersectionObserver actualiza el contador al arrastrar a mano, y las
+  flechas usan scrollIntoView para moverse una tarjeta cada vez-, asi
+  que nunca deberian desincronizarse entre si.
+*/
+export function PopupLogrosActualizados({ logros, onCerrar }) {
+  const [indice, setIndice] = useState(0);
+  const contRef = useRef(null);
+  const tarjetasRef = useRef([]);
+
+  /* Fondo bloqueado mientras el popup esta abierto, igual que el cajon
+     de navegacion movil en Layout. */
+  useEffect(() => {
+    const previo = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previo; };
+  }, []);
+
+  useEffect(() => {
+    const alPulsar = (e) => { if (e.key === 'Escape') onCerrar(); };
+    document.addEventListener('keydown', alPulsar);
+    return () => document.removeEventListener('keydown', alPulsar);
+  }, [onCerrar]);
+
+  /* Que tarjeta esta "a la vista" para el contador, tambien cuando el
+     usuario mueve el carrusel a mano (rueda del raton, arrastre tactil)
+     en vez de con las flechas. */
+  useEffect(() => {
+    const cont = contRef.current;
+    if (!cont) return;
+    const obs = new IntersectionObserver((entradas) => {
+      entradas.forEach((e) => {
+        if (e.isIntersecting && e.intersectionRatio > 0.6) {
+          const i = tarjetasRef.current.indexOf(e.target);
+          if (i !== -1) setIndice(i);
+        }
+      });
+    }, { root: cont, threshold: [0.6] });
+    tarjetasRef.current.forEach((n) => n && obs.observe(n));
+    return () => obs.disconnect();
+  }, [logros.length]);
+
+  const irA = (i) => {
+    const acotado = Math.max(0, Math.min(logros.length - 1, i));
+    tarjetasRef.current[acotado]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  if (!logros.length) return null;
+
+  return (
+    <div className="popup-velo" onClick={onCerrar}>
+      <div className="popup-logros" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true"
+        aria-label="Logros actualizados">
+        <button type="button" className="popup-cerrar" onClick={onCerrar} aria-label="Cerrar">
+          <IcoCerrar />
+        </button>
+
+        <p className="popup-titulo">¡Progreso en tus logros!</p>
+        <p className="popup-subtitulo">
+          {logros.length === 1
+            ? 'Un logro ha avanzado con tu última sincronización.'
+            : `${logros.length} logros han avanzado con tu última sincronización.`}
+        </p>
+
+        <div className="popup-carrusel" ref={contRef}>
+          {logros.map((l, i) => (
+            <TarjetaPopupLogro key={l.id} logro={l} ref={(n) => { tarjetasRef.current[i] = n; }} />
+          ))}
+        </div>
+
+        {logros.length > 1 && (
+          <div className="popup-nav">
+            <button type="button" onClick={() => irA(indice - 1)} disabled={indice === 0} aria-label="Logro anterior">
+              <IcoFlecha style={{ transform: 'rotate(180deg)' }} />
+            </button>
+            <span className="popup-contador">{indice + 1} / {logros.length}</span>
+            <button type="button" onClick={() => irA(indice + 1)} disabled={indice === logros.length - 1}
+              aria-label="Siguiente logro">
+              <IcoFlecha />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/*
   Panel de insignias por conseguir, en forma de acordeon: cada boton de
   categoria despliega su rejilla de logros debajo y cierra las demas -
   volver a pulsar la que ya esta abierta la cierra-. Encima va el
@@ -1260,9 +1456,10 @@ export default function Logros({ salidas, cache, cfg, atleta, refTerreno }) {
   const [cat, setCat] = useState('rodaje');
 
   const resultados = useMemo(() => {
+    const planos = calcularLogros(salidas, cache, cfg, refTerreno);
     const out = {};
-    Object.entries(LOGROS_POR_CATEGORIA).forEach(([id, lista]) => {
-      out[id] = lista.map((l) => ({ ...l, valor: l.valor(salidas, cache, cfg, refTerreno) }));
+    Object.keys(LOGROS_POR_CATEGORIA).forEach((id) => {
+      out[id] = planos.filter((l) => l.categoria === id);
     });
     return out;
   }, [salidas, cache, cfg, refTerreno]);

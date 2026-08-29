@@ -1205,3 +1205,69 @@ nav.logros-categorias button[aria-selected="true"] svg{color:var(--acento-ink)}
 .escala-tier .sub{display:block;font-weight:700;font-size:14px}
 .escala-tier .umbral{display:block;font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-top:2px}
 .escala-tier.conseguido .umbral{color:var(--ink2)}
+
+/*
+  Popup de logros actualizados tras pulsar "Actualizar" (Dashboard.
+  sincronizar / PopupLogrosActualizados en Logros.jsx). Reutiliza el
+  vocabulario visual de las tarjetas de arriba -insignia-circulo, .bar-
+  para que se lea como la misma pantalla, con dos piezas propias: el
+  aviso del aumento y el segundo tramo de la barra, en ocre, que pinta
+  justo ese aumento sobre el progreso que ya habia antes de sincronizar.
+*/
+.popup-velo{position:fixed;inset:0;z-index:200;
+  background:rgba(4,5,7,.72);backdrop-filter:blur(2px);
+  display:flex;align-items:center;justify-content:center;padding:var(--e4)}
+
+.popup-logros{position:relative;width:min(420px,100%);max-height:min(640px,88vh);
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+  padding:var(--e5);display:flex;flex-direction:column;
+  box-shadow:0 20px 60px rgba(0,0,0,.5)}
+
+.popup-cerrar{position:absolute;top:14px;right:14px;width:32px;height:32px;
+  display:flex;align-items:center;justify-content:center;padding:0;border-radius:50%;
+  background:var(--card2);border:1px solid var(--line2);color:var(--ink2)}
+.popup-cerrar:hover{background:var(--bg2);color:var(--ink)}
+.popup-cerrar svg{width:16px;height:16px}
+
+.popup-titulo{margin:0 34px 2px 0;font-size:19px;font-weight:700;color:var(--ink)}
+.popup-subtitulo{margin:0 0 var(--e4);font-size:13px;color:var(--ink2);line-height:1.5}
+
+/* Carrusel vertical: una tarjeta por pantalla, con scroll-snap para que
+   tanto arrastrar a mano como las flechas de abajo paren siempre en el
+   borde de una tarjeta, nunca a mitad. */
+.popup-carrusel{flex:1;min-height:0;overflow-y:auto;scroll-snap-type:y mandatory;
+  display:flex;flex-direction:column;gap:var(--e3);scrollbar-width:none}
+.popup-carrusel::-webkit-scrollbar{display:none}
+
+.popup-logro-card{scroll-snap-align:start;flex:0 0 auto;
+  background:var(--card2);border:1px solid var(--line);border-radius:var(--r-s);
+  padding:16px 18px}
+
+.popup-logro-cabecera{display:flex;align-items:center;gap:var(--e3)}
+.popup-logro-cabecera .insignia-circulo{width:44px;height:44px;font-size:13px}
+.popup-logro-nombre{margin:0;font-size:15.5px;font-weight:700;color:var(--ink)}
+.popup-logro-desc{margin:3px 0 0;font-size:12.5px;color:var(--ink2);line-height:1.4}
+
+.popup-logro-aumento{display:inline-flex;align-items:center;gap:5px;
+  margin:14px 0 0;padding:4px 10px;border-radius:99px;
+  background:color-mix(in srgb, var(--amber) 18%, transparent);
+  color:var(--amber);font-family:var(--mono);font-size:12.5px;font-weight:600}
+
+.bar-comparativa{position:relative;height:6px;background:var(--bg2);
+  border-radius:99px;margin:12px 0 8px;overflow:hidden}
+.bar-comparativa i{position:absolute;top:0;height:100%;border-radius:99px}
+.bar-comparativa i.base{transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.bar-comparativa i.aumento{background:var(--amber);
+  transition:width .8s cubic-bezier(.2,.8,.2,1) .3s, left .8s cubic-bezier(.2,.8,.2,1) .3s}
+
+.popup-logro-note{margin:0;font-size:12.5px;color:var(--ink2)}
+.popup-logro-falta{margin:4px 0 0;font-size:11.5px;color:var(--ink3);font-family:var(--mono)}
+
+.popup-nav{display:flex;align-items:center;justify-content:center;gap:var(--e4);
+  margin-top:var(--e4);padding-top:var(--e3);border-top:1px solid var(--line)}
+.popup-nav button{width:32px;height:32px;padding:0;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--card2);border:1px solid var(--line2);color:var(--ink2)}
+.popup-nav button:hover:not(:disabled){background:var(--bg2);color:var(--ink)}
+.popup-nav button svg{width:15px;height:15px}
+.popup-contador{font-family:var(--mono);font-size:12px;color:var(--ink3);min-width:44px;text-align:center}

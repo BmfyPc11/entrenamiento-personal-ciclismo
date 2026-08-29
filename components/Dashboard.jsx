@@ -9,7 +9,7 @@ import Ascensiones from './Ascensiones';
 import Evolucion from './Evolucion';
 import Rutas from './Rutas';
 import AnalizadorGPX from './AnalizadorGPX';
-import Logros, { TopLogros } from './Logros';
+import Logros, { TopLogros, calcularLogros, PopupLogrosActualizados } from './Logros';
 import UltimosDias from './UltimosDias';
 import { Flecha, ThOrden, ordenarPor } from './Tablas';
 import Consejo from './Consejo';
@@ -162,7 +162,7 @@ export default function Dashboard({ atleta }) {
     setError(null);
     try {
       const r = await fetch('/api/activities', { cache: 'no-store' });
-      if (r.status === 401) { window.location.reload(); return; }
+      if (r.status === 401) { window.location.reload(); return null; }
       const j = await r.json();
       if (j.error) throw new Error(j.error);
       setSalidas(j.salidas);
@@ -170,36 +170,14 @@ export default function Dashboard({ atleta }) {
       if (atleta?.peso && cfg.peso === CFG_INICIAL.peso) {
         setCfg((c) => ({ ...c, peso: Math.round(atleta.peso) }));
       }
+      return j.salidas;
     } catch (e) {
       setError('No se pudieron leer tus actividades. Prueba a recargar la página.');
+      return null;
     }
   }, [atleta, cfg.peso]);
 
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, []);
-
-  /* --- sincronizacion con Strava, a mano desde "Actualizar" --- */
-  const sincronizar = useCallback(async () => {
-    setRefrescando(true);
-    setError(null);
-    try {
-      const r = await fetch('/api/sync', { method: 'POST', cache: 'no-store' });
-      if (r.status === 401) { window.location.reload(); return; }
-      const j = await r.json();
-      if (j.error) throw new Error(j.error);
-      if (j.aviso === 'limite_alcanzado') {
-        setError('Strava ha limitado las peticiones por unos minutos. Se sincronizó lo que dio tiempo.');
-      }
-      await cargar();
-    } catch (e) {
-      setError(
-        e.message === 'limite_alcanzado'
-          ? 'Strava ha alcanzado su límite de peticiones. Espera unos 15 minutos y vuelve a intentarlo.'
-          : 'No se pudo sincronizar con Strava. Prueba de nuevo en un momento.'
-      );
-    } finally {
-      setRefrescando(false);
-    }
-  }, [cargar]);
 
   /* --- streams bajo demanda, con cache --- */
   const pedirStreams = useCallback(async (id) => {
@@ -229,6 +207,85 @@ export default function Dashboard({ atleta }) {
     setCache((c) => ({ ...c, [id]: st }));
     return st;
   }, []);
+
+  /* --- popup de logros actualizados, tras un "Actualizar" con actividad nueva --- */
+  const [popupLogros, setPopupLogros] = useState(null);
+
+  /* --- sincronizacion con Strava, a mano desde "Actualizar" --- */
+  const sincronizar = useCallback(async () => {
+    setRefrescando(true);
+    setError(null);
+
+    /*
+      Instantanea de "antes de sincronizar": salidas y cache tal cual
+      estan justo al pulsar el boton. Se guarda ya, antes de la llamada
+      a Strava, porque es la unica referencia valida para saber despues
+      cuanto ha subido cada logro -pedirla mas tarde ya reflejaria la
+      actividad nueva.
+    */
+    const idsAntes = new Set(salidas.map((s) => s.id));
+    const historicasAntes = salidas.filter((s) => !excluidas.has(s.id));
+    const valorAntesPorId = Object.fromEntries(
+      calcularLogros(historicasAntes, cache, cfg, refTerreno).map((l) => [l.id, l.valor])
+    );
+
+    try {
+      const r = await fetch('/api/sync', { method: 'POST', cache: 'no-store' });
+      if (r.status === 401) { window.location.reload(); return; }
+      const j = await r.json();
+      if (j.error) throw new Error(j.error);
+      if (j.aviso === 'limite_alcanzado') {
+        setError('Strava ha limitado las peticiones por unos minutos. Se sincronizó lo que dio tiempo.');
+      }
+
+      const salidasNuevas = await cargar();
+
+      /*
+        "detalleNuevo" (cuantas salidas no tenian streams guardados antes
+        de este sync, ver /api/sync) es la senal de que ha llegado
+        actividad de verdad nueva, no solo la misma lista de siempre.
+        Solo entonces merece la pena montar el popup: calcular el
+        "despues" de los 33 logros para nada, cuando no hay nada nuevo,
+        es trabajo tirado en cada pulsacion de "Actualizar".
+      */
+      if (j.detalleNuevo > 0 && salidasNuevas) {
+        const idsNuevas = salidasNuevas.filter((s) => !idsAntes.has(s.id)).map((s) => s.id);
+
+        /*
+          Los streams de las salidas nuevas ya estan en Postgres -el
+          propio /api/sync los acaba de guardar-, asi que pedirlos aqui
+          por /api/streams es una lectura local, no una llamada a
+          Strava: no compite por el limite de la API. Sin este paso
+          exprofeso, logros como Tocar el cielo o Escalador de primera
+          se quedarian sin la actividad nueva hasta que le tocara su
+          turno en la carga de fondo, y el popup los daria por no
+          modificados aunque de verdad hayan subido.
+        */
+        const streamsNuevos = {};
+        await Promise.all(idsNuevas.map(async (id) => {
+          try { streamsNuevos[id] = await pedirStreams(id); } catch { /* sin stream, como el resto del panel */ }
+        }));
+
+        const cacheDespues = { ...cache, ...streamsNuevos };
+        const historicasDespues = salidasNuevas.filter((s) => !excluidas.has(s.id));
+        const refTerrenoDespues = referenciaTerreno(salidasNuevas);
+
+        const modificados = calcularLogros(historicasDespues, cacheDespues, cfg, refTerrenoDespues)
+          .map((l) => ({ ...l, valorAntes: valorAntesPorId[l.id] ?? 0, valorDespues: l.valor }))
+          .filter((l) => l.valorDespues - l.valorAntes > 1e-9);
+
+        if (modificados.length) setPopupLogros(modificados);
+      }
+    } catch (e) {
+      setError(
+        e.message === 'limite_alcanzado'
+          ? 'Strava ha alcanzado su límite de peticiones. Espera unos 15 minutos y vuelve a intentarlo.'
+          : 'No se pudo sincronizar con Strava. Prueba de nuevo en un momento.'
+      );
+    } finally {
+      setRefrescando(false);
+    }
+  }, [cargar, salidas, cache, cfg, excluidas, refTerreno, pedirStreams]);
 
   /*
     Carga automatica en segundo plano.
@@ -406,6 +463,7 @@ export default function Dashboard({ atleta }) {
   const IconoTitulo = seccionActual[2];
 
   return (
+    <Fragment>
     <Layout seccion={pestana} setSeccion={setPestana} atleta={atleta}
       onActualizar={sincronizar} refrescando={refrescando}
       abierto={menuAbierto} setAbierto={setMenuAbierto}>
@@ -485,6 +543,11 @@ export default function Dashboard({ atleta }) {
 
     </div>
     </Layout>
+
+    {popupLogros && (
+      <PopupLogrosActualizados logros={popupLogros} onCerrar={() => setPopupLogros(null)} />
+    )}
+    </Fragment>
   );
 }
 
