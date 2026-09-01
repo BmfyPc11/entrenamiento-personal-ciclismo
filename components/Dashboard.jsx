@@ -77,6 +77,16 @@ export default function Dashboard({ atleta }) {
   const [refrescando, setRefrescando] = useState(false);
   const [menuAbierto, setMenuAbierto] = useState(false);
 
+  /*
+    Aviso de "salidas sin sincronizar" al abrir la app. null = todavia no
+    se ha comprobado o no hace falta avisar; {cantidad, saturado} cuando
+    si. bannerCerrado no se guarda en ningun sitio a proposito -es una
+    eleccion, no un bug-: si sigues sin sincronizar, la proxima vez que
+    abras la app te lo vuelve a decir en vez de callarselo para siempre.
+  */
+  const [avisoNuevas, setAvisoNuevas] = useState(null);
+  const [bannerCerrado, setBannerCerrado] = useState(false);
+
   /* Ultimo uso de la API que Strava ha informado, para poder frenar la
      sincronizacion de fondo antes de chocar con el limite. Un ref y no un
      estado: cambia con cada peticion y no debe disparar un re-render. */
@@ -179,6 +189,19 @@ export default function Dashboard({ atleta }) {
 
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, []);
 
+  /*
+    Comprobacion ligera de salidas sin sincronizar, una vez al abrir la
+    app -no en cada cambio de pestana. Es la unica llamada a Strava fuera
+    de "Actualizar": una peticion (ver /api/sync/check), nada que ver con
+    el coste de una sincronizacion de verdad.
+  */
+  useEffect(() => {
+    fetch('/api/sync/check', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j?.cantidad > 0) setAvisoNuevas(j); })
+      .catch(() => {});
+  }, []);
+
   /* --- streams bajo demanda, con cache --- */
   const pedirStreams = useCallback(async (id) => {
     const r = await fetch(`/api/streams?id=${id}`, { cache: 'no-store' });
@@ -215,6 +238,7 @@ export default function Dashboard({ atleta }) {
   const sincronizar = useCallback(async () => {
     setRefrescando(true);
     setError(null);
+    setAvisoNuevas(null);
 
     /*
       Instantanea de "antes de sincronizar": salidas y cache tal cual
@@ -464,6 +488,22 @@ export default function Dashboard({ atleta }) {
 
   return (
     <Fragment>
+    {avisoNuevas && !bannerCerrado && (
+      <div className="banner-sync">
+        <span>
+          {avisoNuevas.saturado
+            ? 'Más de 10 salidas sin sincronizar'
+            : `${avisoNuevas.cantidad} salida${avisoNuevas.cantidad === 1 ? '' : 's'} nueva${avisoNuevas.cantidad === 1 ? '' : 's'} sin sincronizar`}
+        </span>
+        <button type="button" onClick={sincronizar} disabled={refrescando}>
+          {refrescando ? 'Actualizando…' : 'Actualizar ahora'}
+        </button>
+        <button type="button" className="banner-sync-cerrar"
+          onClick={() => setBannerCerrado(true)} aria-label="Cerrar aviso">
+          ✕
+        </button>
+      </div>
+    )}
     <Layout seccion={pestana} setSeccion={setPestana} atleta={atleta}
       onActualizar={sincronizar} refrescando={refrescando}
       abierto={menuAbierto} setAbierto={setMenuAbierto}>
