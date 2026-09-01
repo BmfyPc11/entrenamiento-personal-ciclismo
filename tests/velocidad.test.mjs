@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   velocidadMaximaLlanoTramo, velocidadMaximaLlano, zonasGpsDudoso,
+  tiempoHastaDistancia, calcularSplits, mejorVentanaTiempo,
 } from '../lib/metrics.js';
 
 /*
@@ -307,4 +308,83 @@ test('un filtro de fechas no le quita pruebas al catalogo de zonas', () => {
      pero 1 y 2 siguen en cache porque el fondo las descarga todas. */
   const soloFiltrada = velocidadMaximaLlano(cache, [{ id: 3 }]);
   assert.ok(soloFiltrada.valor < 35, `la zona dudosa deberia seguir descontandose: ${soloFiltrada.valor} km/h`);
+});
+
+/* ---------- tiempo real hasta una distancia (splits de "X km lisos") ---------- */
+
+/* Crucero constante a 7 m/s (25,2 km/h): a esa velocidad, d = 7*t
+   exactamente, asi que el tiempo esperado en cualquier distancia es
+   metros/7, sirva o no de muestra exacta. */
+test('en llano puro, el tiempo hasta una distancia es metros/velocidad', () => {
+  const s = construir([{ v0: 7, pend: 0, segs: 300 }]); // hasta 2100 m
+  const t = tiempoHastaDistancia(s, 1400);
+  assert.ok(Math.abs(t - 1400 / 7) < 0.01, `esperaba ${1400 / 7} s y dio ${t}`);
+});
+
+test('interpola entre dos muestras cuando la distancia cae entre medias', () => {
+  const s = construir([{ v0: 7, pend: 0, segs: 300 }]);
+  // 1403,5 m cae a mitad de camino entre el paso 200 (1400 m) y el 201 (1407 m)
+  const t = tiempoHastaDistancia(s, 1403.5);
+  assert.ok(Math.abs(t - 200.5) < 0.01, `esperaba ~200,5 s y dio ${t}`);
+});
+
+test('una distancia nunca alcanzada no da tiempo', () => {
+  const s = construir([{ v0: 7, pend: 0, segs: 300 }]); // solo llega a 2100 m
+  assert.equal(tiempoHastaDistancia(s, 5000), null);
+});
+
+test('sin streams utiles no hay tiempo', () => {
+  assert.equal(tiempoHastaDistancia(null, 1000), null);
+  assert.equal(tiempoHastaDistancia({}, 1000), null);
+  assert.equal(tiempoHastaDistancia({ distancia: [0], tiempo: [0] }, 1000), null);
+});
+
+test('calcularSplits solo guarda las distancias que la salida alcanza', () => {
+  const s = construir([{ v0: 7, pend: 0, segs: 1000 }]); // hasta 7000 m
+  const splits = calcularSplits(s, [5, 10]);
+  assert.ok(5 in splits, 'deberia alcanzar los 5 km');
+  assert.ok(!(10 in splits), 'no deberia alcanzar los 10 km');
+  assert.ok(Math.abs(splits[5] - 5000 / 7) < 0.01, `esperaba ${5000 / 7} s y dio ${splits[5]}`);
+});
+
+/* ---------- mejor ventana de una distancia, en cualquier punto de la salida ---------- */
+
+/*
+  Calentamiento lento, un tramo fuerte a mitad de salida, vuelta a
+  aflojar. Los 5 km se pueden cubrir de dos formas: desde el km 0
+  (arrastrando el calentamiento lento) o solo con el tramo fuerte -que
+  cubre exactamente 5000 m el solo-. La ventana deslizante tiene que
+  encontrar la segunda, mas rapida, no la primera.
+*/
+test('encuentra el mejor tramo aunque no empiece en el km 0', () => {
+  const s = construir([
+    { v0: 5, pend: 0, segs: 200 },   // 0 -> 1000 m, lento
+    { v0: 10, pend: 0, segs: 500 },  // 1000 -> 6000 m, fuerte: exactamente 5000 m a 10 m/s
+    { v0: 5, pend: 0, segs: 200 },   // 6000 -> 7000 m, lento otra vez
+  ]);
+
+  const desdeElInicio = tiempoHastaDistancia(s, 5000);
+  assert.ok(Math.abs(desdeElInicio - 600) < 0.01, `esperaba 600 s desde el inicio y dio ${desdeElInicio}`);
+
+  const mejorVentana = mejorVentanaTiempo(s, 5000);
+  assert.ok(Math.abs(mejorVentana - 500) < 0.01, `esperaba 500 s de mejor ventana y dio ${mejorVentana}`);
+  assert.ok(mejorVentana < desdeElInicio, 'la ventana deslizante deberia ganar al tiempo desde el km 0');
+});
+
+test('en llano puro, la ventana deslizante coincide con el tiempo desde el inicio', () => {
+  const s = construir([{ v0: 7, pend: 0, segs: 300 }]);
+  const a = tiempoHastaDistancia(s, 1400);
+  const b = mejorVentanaTiempo(s, 1400);
+  assert.ok(Math.abs(a - b) < 0.01, `a ritmo constante deberian coincidir: ${a} vs ${b}`);
+});
+
+test('una distancia mayor que toda la salida no tiene ventana', () => {
+  const s = construir([{ v0: 7, pend: 0, segs: 300 }]); // hasta 2100 m
+  assert.equal(mejorVentanaTiempo(s, 5000), null);
+});
+
+test('sin streams utiles no hay mejor ventana', () => {
+  assert.equal(mejorVentanaTiempo(null, 1000), null);
+  assert.equal(mejorVentanaTiempo({}, 1000), null);
+  assert.equal(mejorVentanaTiempo({ distancia: [0], tiempo: [0] }, 1000), null);
 });

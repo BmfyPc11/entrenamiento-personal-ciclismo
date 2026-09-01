@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { leerSesion, traerActividades, traerStreams, traerSegmentos, cercaDelLimite } from '@/lib/strava';
-import { guardarSalidas, guardarStreams, guardarSegmentos, obtenerIdsConStreams, obtenerPersonasConocidas } from '@/lib/repo';
+import {
+	guardarSalidas, guardarStreams, guardarSegmentos, obtenerIdsConStreams, obtenerPersonasConocidas,
+	guardarSplits, obtenerIdsConSplits, obtenerStreams,
+} from '@/lib/repo';
+import { calcularSplits } from '@/lib/metrics';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,9 +36,25 @@ export async function POST() {
 		if (cercaDelLimite(limite)) break;
 		const r = await traerStreams(salida.id);
 		limite = r.limite || limite;
-		if (r.streams) await guardarStreams(salida.id, r.streams);
+		if (r.streams) {
+			await guardarStreams(salida.id, r.streams);
+			await guardarSplits(salida.id, calcularSplits(r.streams));
+		}
 		const rs = await traerSegmentos(salida.id);
 		if (rs.segmentos) await guardarSegmentos(salida.id, rs.segmentos);
+	}
+
+	/*
+	  Backfill de splits para salidas que ya tenian streams guardados de
+	  antes de que este calculo existiera. Es lectura/escritura local en
+	  Postgres, sin llamar a Strava, asi que no compite con el limite de
+	  la API y puede procesar todo el historico pendiente de una vez.
+	*/
+	const idsConSplits = await obtenerIdsConSplits(athleteId);
+	const faltanSplits = [...idsConStreams].filter((id) => !idsConSplits.has(id));
+	for (const id of faltanSplits) {
+		const streams = await obtenerStreams(id);
+		if (streams) await guardarSplits(id, calcularSplits(streams));
 	}
 
 	return NextResponse.json({

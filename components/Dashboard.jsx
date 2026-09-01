@@ -64,6 +64,10 @@ export default function Dashboard({ atleta }) {
   const [salidas, setSalidas] = useState(null);
   const [error, setError] = useState(null);
   const [cache, setCache] = useState(leerCacheStreams);
+  /* Tiempo real hasta cada distancia (5/10/20/40/80 km), precalculado en
+     /api/sync y guardado en BD -ver lib/metrics.js calcularSplits. Logros
+     solo lee estos numeros, no recalcula nada sobre streams. */
+  const [splits, setSplits] = useState({});
   const [pestana, setPestana] = useState('resumen');
   const [cfg, setCfg] = useState(CFG_INICIAL);
   const [excluidas, setExcluidas] = useState(new Set());
@@ -187,7 +191,21 @@ export default function Dashboard({ atleta }) {
     }
   }, [atleta, cfg.peso]);
 
-  useEffect(() => { cargar(); /* eslint-disable-next-line */ }, []);
+  /* --- carga de splits (tiempo real por distancia), desde la base de datos --- */
+  const cargarSplits = useCallback(async () => {
+    try {
+      const r = await fetch('/api/splits', { cache: 'no-store' });
+      if (r.status === 401) return null;
+      const j = await r.json();
+      if (j.error) throw new Error(j.error);
+      setSplits(j.splits || {});
+      return j.splits || {};
+    } catch (e) {
+      return null; // sin splits el panel sigue funcionando, esas 5 tarjetas solo se quedan sin dato
+    }
+  }, []);
+
+  useEffect(() => { cargar(); cargarSplits(); /* eslint-disable-next-line */ }, []);
 
   /*
     Comprobacion ligera de salidas sin sincronizar, una vez al abrir la
@@ -250,7 +268,7 @@ export default function Dashboard({ atleta }) {
     const idsAntes = new Set(salidas.map((s) => s.id));
     const historicasAntes = salidas.filter((s) => !excluidas.has(s.id));
     const valorAntesPorId = Object.fromEntries(
-      calcularLogros(historicasAntes, cache, cfg, refTerreno).map((l) => [l.id, l.valor])
+      calcularLogros(historicasAntes, cache, cfg, refTerreno, splits).map((l) => [l.id, l.valor])
     );
 
     try {
@@ -263,6 +281,14 @@ export default function Dashboard({ atleta }) {
       }
 
       const salidasNuevas = await cargar();
+      /*
+        Se refresca siempre, no solo si hay actividad nueva: /api/sync
+        tambien rellena en segundo plano los splits de salidas antiguas
+        que aun no los tenian (backfill, ver ruta), y sin este refresco
+        esos numeros no aparecerian en la pestaña Logros hasta la
+        proxima recarga entera de la pagina.
+      */
+      const splitsDespues = (await cargarSplits()) || splits;
 
       /*
         "detalleNuevo" (cuantas salidas no tenian streams guardados antes
@@ -294,7 +320,7 @@ export default function Dashboard({ atleta }) {
         const historicasDespues = salidasNuevas.filter((s) => !excluidas.has(s.id));
         const refTerrenoDespues = referenciaTerreno(salidasNuevas);
 
-        const modificados = calcularLogros(historicasDespues, cacheDespues, cfg, refTerrenoDespues)
+        const modificados = calcularLogros(historicasDespues, cacheDespues, cfg, refTerrenoDespues, splitsDespues)
           .map((l) => ({ ...l, valorAntes: valorAntesPorId[l.id] ?? 0, valorDespues: l.valor }))
           .filter((l) => l.valorDespues - l.valorAntes > 1e-9);
 
@@ -309,7 +335,7 @@ export default function Dashboard({ atleta }) {
     } finally {
       setRefrescando(false);
     }
-  }, [cargar, salidas, cache, cfg, excluidas, refTerreno, pedirStreams]);
+  }, [cargar, cargarSplits, salidas, cache, cfg, excluidas, refTerreno, splits, pedirStreams]);
 
   /*
     Carga automatica en segundo plano.
@@ -534,7 +560,7 @@ export default function Dashboard({ atleta }) {
           enRango={enRango} rango={rango} setRango={setRango} velMaxLlano={velMaxLlano}
           irASalida={irASalida} />
       )}
-      {pestana === 'resumen' && <TopLogros salidas={historicas} cache={cache} cfg={cfg} refTerreno={refTerreno} />}
+      {pestana === 'resumen' && <TopLogros salidas={historicas} cache={cache} cfg={cfg} refTerreno={refTerreno} splits={splits} />}
       {pestana === 'resumen' && <Consejo consejo={consejo} />}
 
       {pestana === 'resumen' && (
@@ -579,7 +605,7 @@ export default function Dashboard({ atleta }) {
       )}
 
       {pestana === 'logros' && <Logros salidas={historicas} cache={cache} cfg={cfg} atleta={atleta}
-        refTerreno={refTerreno} />}
+        refTerreno={refTerreno} splits={splits} />}
 
     </div>
     </Layout>

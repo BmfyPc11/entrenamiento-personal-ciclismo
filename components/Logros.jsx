@@ -6,7 +6,7 @@ import {
   IcoRodaje, IcoAscensiones, IcoVelocidad, IcoHabitos, IcoExploracion, IcoComunidad,
 } from './Iconos';
 import {
-  km, kmh, num, duracionHMS, detectarParadas, detectarPuertos, categoriaPuerto,
+  km, num, duracionHMS, detectarParadas, detectarPuertos, categoriaPuerto,
   tipoRuta, vatiosSalida, velocidadMaximaLlano, distanciaGeo,
 } from '@/lib/metrics';
 
@@ -219,33 +219,49 @@ const ESCALA_FUERA_DE_CATEGORIA = construirEscala([
   90,
 ]);
 
-/* Las seis escalas de velocidad sostenida en llano (Rodador, Locomotora,
-   Tren bala, y las tres "X km lisos") miden lo mismo -la velocidad
-   media mas alta en una salida llana de al menos esa distancia- asi que
-   comparten forma: techos altos en las distancias cortas, mas bajos en
-   las largas porque cuesta mas sostener el ritmo cuanto mas dura el
-   esfuerzo. */
-const ESCALA_RODADOR = construirEscala([
-  18, 20, 22, 24, 26,
-  27, 28, 29, 30, 31,
-  32, 33, 34, 35, 36,
-  37, 38, 39, 40, 41,
-  42, 43, 44, 45, 46,
-  47, 48, 49, 50, 51,
-  55,
+/* Las cinco escalas de "tiempo mas rapido en recorrer X km en llano"
+   miden lo mismo con distinta vara -el tiempo real hasta esa distancia,
+   ver tiempoHastaDistancia en lib/metrics.js- asi que comparten forma:
+   techos altos en las distancias cortas, mas bajos en las largas porque
+   cuesta mas sostener el ritmo cuanto mas dura el esfuerzo. Antes habia
+   seis escalas (Rodador/Locomotora/Tren bala + tres "X km lisos") que
+   duplicaban el mismo dato -velocidad media de toda la salida- mostrado
+   de dos formas; se han fundido en solo un tipo de tarjeta con 5
+   distancias, calculadas sobre el tramo real y no sobre la salida
+   entera. Punto de partida razonado a partir de las escalas antiguas
+   -sujeto a contrastar contra el historico real una vez implementado,
+   igual que se hizo para recalibrar Sprinter-. */
+const ESCALA_KM_LISOS_5 = construirEscala([
+  20, 22, 24, 26, 28,
+  29, 30, 31, 32, 33,
+  34, 35, 36, 37, 38,
+  39, 40, 41, 42, 43,
+  44, 45, 46, 47, 48,
+  49, 50, 51, 52, 53,
+  57,
 ]);
 
-const ESCALA_KM_LISOS_25 = construirEscala([
-  18, 20, 22, 24, 26,
-  27, 28, 29, 30, 31,
-  32, 33, 34, 35, 36,
-  37, 38, 39, 40, 41,
-  42, 43, 44, 45, 46,
-  47, 48, 49, 50, 51,
+const ESCALA_KM_LISOS_10 = construirEscala([
+  19, 21, 23, 25, 27,
+  28, 29, 30, 31, 32,
+  33, 34, 35, 36, 37,
+  38, 39, 40, 41, 42,
+  43, 44, 45, 46, 47,
+  48, 49, 50, 51, 52,
+  56,
+]);
+
+const ESCALA_KM_LISOS_20 = construirEscala([
+  17, 19, 21, 23, 25,
+  26, 27, 28, 29, 30,
+  31, 32, 33, 34, 35,
+  36, 37, 38, 39, 40,
+  41, 42, 43, 44, 45,
+  46, 47, 48, 49, 50,
   54,
 ]);
 
-const ESCALA_LOCOMOTORA = construirEscala([
+const ESCALA_KM_LISOS_40 = construirEscala([
   17, 19, 21, 23, 25,
   26, 27, 28, 29, 30,
   31, 32, 33, 34, 35,
@@ -255,27 +271,7 @@ const ESCALA_LOCOMOTORA = construirEscala([
   52,
 ]);
 
-const ESCALA_KM_LISOS_50 = construirEscala([
-  17, 19, 21, 23, 25,
-  26, 27, 28, 29, 30,
-  31, 32, 33, 34, 35,
-  36, 37, 38, 39, 40,
-  41, 42, 43, 44, 45,
-  46, 47, 48, 49, 50,
-  52,
-]);
-
-const ESCALA_TREN_BALA = construirEscala([
-  16, 18, 20, 22, 24,
-  25, 26, 27, 28, 29,
-  30, 31, 32, 33, 34,
-  35, 36, 37, 38, 39,
-  40, 41, 42, 43, 44,
-  45, 46, 47, 48, 49,
-  50,
-]);
-
-const ESCALA_KM_LISOS_100 = construirEscala([
+const ESCALA_KM_LISOS_80 = construirEscala([
   16, 18, 20, 22, 24,
   25, 26, 27, 28, 29,
   30, 31, 32, 33, 34,
@@ -287,16 +283,23 @@ const ESCALA_KM_LISOS_100 = construirEscala([
 
 /* Velocidad punta en llano -la misma cuenta que "Vel. punta en llano"
    de Tus estadisticas, no una nueva-, tramos de verdad rodados y no
-   ruido de GPS. Maestro pide 110 km/h, por encima de cualquier sprint
-   real en llano sin viento ni rueda ajena. */
+   ruido de GPS. El propio calculo (velocidadMaximaLlanoTramo, mas abajo
+   en lib/metrics.js) descarta como ruido cualquier paso por encima de
+   90 km/h, asi que la escala tiene que quedar por debajo de ese techo o
+   ningun dato real podria alcanzar el ultimo tramo. Maestro pide 70
+   km/h: el pico de un sprint de pelotón profesional en llano ronda los
+   70-75 km/h, y el record del mundo de los 200 m lanzados en pista -la
+   referencia absoluta de velocidad ciclista sin bajada ni rueda ajena-
+   esta en torno a 79-80 km/h. 70 queda ya fuera del alcance de
+   cualquier aficionado sin dejar de ser un dato de ciclismo real. */
 const ESCALA_SPRINTER = construirEscala([
-  30, 35, 40, 45, 50,
-  52, 54, 56, 58, 60,
-  62, 64, 66, 68, 70,
-  72, 74, 76, 78, 80,
-  82, 84, 86, 88, 90,
-  92, 94, 96, 98, 100,
-  110,
+  25, 28, 31, 34, 37,
+  39, 41, 43, 45, 47,
+  48, 49, 50, 51, 52,
+  53, 54, 55, 56, 57,
+  58, 59, 60, 61, 62,
+  63, 64, 65, 66, 67,
+  70,
 ]);
 
 /* Potencia media estimada de una salida completa (o medida, si el
@@ -762,16 +765,25 @@ function contarCoronaciones(salidas, cache, codigo) {
   return total;
 }
 
-/* La velocidad media mas alta entre las salidas llanas -tipoRuta(s)
-   igual a "llano", el mismo corte que ya usa toda la app para esa
-   etiqueta- que lleguen o pasen de minKm. No mira tramos sueltos
-   dentro de la salida: usa la salida entera, así que solo cuentan
-   salidas que ya de por si son llanas y suficientemente largas. */
-function mejorVelocidadLlano(salidas, minKm, refTerreno) {
+/* El tiempo real mas rapido -no la media de toda la salida- en cubrir
+   `distKm` dentro de una salida llana. splits llega ya calculado desde
+   /api/sync (ver calcularSplits en lib/metrics.js): aqui solo se hace
+   la comparacion entre salidas y se aplica el filtro de terreno, que no
+   puede congelarse en el sync porque refTerreno depende del historico
+   completo del momento en que se lee, no de cuando se sincronizo esa
+   salida en concreto.
+
+   Se devuelve como velocidad (km/h), no como tiempo: asi la tarjeta
+   reutiliza tal cual el truco de "distanciaKm" + formatoMagnitud que ya
+   convierte una velocidad en el tiempo que enseña en pantalla, sin
+   tocar la comparacion de tramos de la escala. */
+function mejorSplitReal(salidas, splits, distKm, refTerreno) {
   let max = 0;
   (salidas || []).forEach((s) => {
-    if (tipoRuta(s, refTerreno) !== 'llano' || km(s) < minKm) return;
-    const v = kmh(s);
+    if (tipoRuta(s, refTerreno) !== 'llano') return;
+    const seg = splits?.[s.id]?.[distKm];
+    if (!seg) return;
+    const v = distKm / (seg / 3600);
     if (v > max) max = v;
   });
   return max;
@@ -982,34 +994,29 @@ const LOGROS_POR_CATEGORIA = {
   ],
   velocidad: [
     {
-      id: 'rodador', nombre: 'Rodador', descripcion: 'Velocidad media en llano sostenida durante 15 km.',
-      escala: ESCALA_RODADOR, unidad: 'km/h',
-      valor: (salidas, cache, cfg, refTerreno) => mejorVelocidadLlano(salidas, 15, refTerreno),
+      id: 'km-lisos-5', nombre: '5 km lisos', descripcion: 'Tiempo más rápido en recorrer 5 km en llano.',
+      escala: ESCALA_KM_LISOS_5, distanciaKm: 5,
+      valor: (salidas, cache, cfg, refTerreno, splits) => mejorSplitReal(salidas, splits, 5, refTerreno),
     },
     {
-      id: 'km-lisos-25', nombre: '25 km lisos', descripcion: 'Tiempo más rápido en recorrer 25 km en llano.',
-      escala: ESCALA_KM_LISOS_25, distanciaKm: 25,
-      valor: (salidas, cache, cfg, refTerreno) => mejorVelocidadLlano(salidas, 25, refTerreno),
+      id: 'km-lisos-10', nombre: '10 km lisos', descripcion: 'Tiempo más rápido en recorrer 10 km en llano.',
+      escala: ESCALA_KM_LISOS_10, distanciaKm: 10,
+      valor: (salidas, cache, cfg, refTerreno, splits) => mejorSplitReal(salidas, splits, 10, refTerreno),
     },
     {
-      id: 'locomotora', nombre: 'Locomotora', descripcion: 'Velocidad media en llano sostenida durante 35 km.',
-      escala: ESCALA_LOCOMOTORA, unidad: 'km/h',
-      valor: (salidas, cache, cfg, refTerreno) => mejorVelocidadLlano(salidas, 35, refTerreno),
+      id: 'km-lisos-20', nombre: '20 km lisos', descripcion: 'Tiempo más rápido en recorrer 20 km en llano.',
+      escala: ESCALA_KM_LISOS_20, distanciaKm: 20,
+      valor: (salidas, cache, cfg, refTerreno, splits) => mejorSplitReal(salidas, splits, 20, refTerreno),
     },
     {
-      id: 'km-lisos-50', nombre: '50 km lisos', descripcion: 'Tiempo más rápido en recorrer 50 km en llano.',
-      escala: ESCALA_KM_LISOS_50, distanciaKm: 50,
-      valor: (salidas, cache, cfg, refTerreno) => mejorVelocidadLlano(salidas, 50, refTerreno),
+      id: 'km-lisos-40', nombre: '40 km lisos', descripcion: 'Tiempo más rápido en recorrer 40 km en llano.',
+      escala: ESCALA_KM_LISOS_40, distanciaKm: 40,
+      valor: (salidas, cache, cfg, refTerreno, splits) => mejorSplitReal(salidas, splits, 40, refTerreno),
     },
     {
-      id: 'tren-bala', nombre: 'Tren bala', descripcion: 'Velocidad media en llano sostenida durante 70 km.',
-      escala: ESCALA_TREN_BALA, unidad: 'km/h',
-      valor: (salidas, cache, cfg, refTerreno) => mejorVelocidadLlano(salidas, 70, refTerreno),
-    },
-    {
-      id: 'km-lisos-100', nombre: '100 km lisos', descripcion: 'Tiempo más rápido en recorrer 100 km en llano.',
-      escala: ESCALA_KM_LISOS_100, distanciaKm: 100,
-      valor: (salidas, cache, cfg, refTerreno) => mejorVelocidadLlano(salidas, 100, refTerreno),
+      id: 'km-lisos-80', nombre: '80 km lisos', descripcion: 'Tiempo más rápido en recorrer 80 km en llano.',
+      escala: ESCALA_KM_LISOS_80, distanciaKm: 80,
+      valor: (salidas, cache, cfg, refTerreno, splits) => mejorSplitReal(salidas, splits, 80, refTerreno),
     },
     {
       id: 'sprinter', nombre: 'Sprinter', descripcion: 'Velocidad máxima sostenida en un tramo llano.',
@@ -1147,11 +1154,11 @@ const LOGROS_POR_CATEGORIA = {
   "antes" y el "despues" de una sincronizacion y montar el popup de
   logros actualizados (ver PopupLogrosActualizados, mas abajo).
 */
-export function calcularLogros(salidas, cache, cfg, refTerreno) {
+export function calcularLogros(salidas, cache, cfg, refTerreno, splits) {
   const planos = [];
   Object.entries(LOGROS_POR_CATEGORIA).forEach(([categoria, lista]) => {
     lista.forEach((l) => {
-      planos.push({ ...l, categoria, valor: l.valor(salidas, cache, cfg, refTerreno) });
+      planos.push({ ...l, categoria, valor: l.valor(salidas, cache, cfg, refTerreno, splits) });
     });
   });
   return planos;
@@ -1246,16 +1253,16 @@ function ResumenLogros({ atleta, resumen }) {
   dentro del tramo actual hacia el siguiente -asi dos logros en la
   misma division no quedan empatados sin mas.
 */
-export function TopLogros({ salidas, cache, cfg, refTerreno }) {
+export function TopLogros({ salidas, cache, cfg, refTerreno, splits }) {
   const mejores = useMemo(() => {
-    const todos = calcularLogros(salidas, cache, cfg, refTerreno).map((l) => {
+    const todos = calcularLogros(salidas, cache, cfg, refTerreno, splits).map((l) => {
       const { actual, siguiente } = estadoEscala(l.escala, l.valor);
       const nivel = nivelesConseguidos(l.escala, l.valor);
       const pct = siguiente ? Math.min(100, (l.valor / siguiente.umbral) * 100) : 100;
       return { id: l.id, nombre: l.nombre, descripcion: l.descripcion, nivel, pct, actual };
     });
     return todos.sort((a, b) => (b.nivel - a.nivel) || (b.pct - a.pct)).slice(0, 5);
-  }, [salidas, cache, cfg, refTerreno]);
+  }, [salidas, cache, cfg, refTerreno, splits]);
 
   if (!mejores.length) return null;
 
@@ -1452,17 +1459,17 @@ export function PopupLogrosActualizados({ logros, onCerrar }) {
   categorias a la vez para que el rango medio y el radar no dependan de
   cual este desplegada en cada momento.
 */
-export default function Logros({ salidas, cache, cfg, atleta, refTerreno }) {
+export default function Logros({ salidas, cache, cfg, atleta, refTerreno, splits }) {
   const [cat, setCat] = useState('rodaje');
 
   const resultados = useMemo(() => {
-    const planos = calcularLogros(salidas, cache, cfg, refTerreno);
+    const planos = calcularLogros(salidas, cache, cfg, refTerreno, splits);
     const out = {};
     Object.keys(LOGROS_POR_CATEGORIA).forEach((id) => {
       out[id] = planos.filter((l) => l.categoria === id);
     });
     return out;
-  }, [salidas, cache, cfg, refTerreno]);
+  }, [salidas, cache, cfg, refTerreno, splits]);
 
   const resumen = useMemo(() => {
     const porCategoria = CATEGORIAS.map(([id, nombre]) => {
