@@ -215,6 +215,54 @@ test('encontrarTodosLosSegmentosManuales encuentra cada repeticion, no solo la p
   assert.deepEqual(encontrarSegmentoManual(st, def), r[0]);
 });
 
+/*
+  El bug real reportado: en un circuito de varias vueltas, una pasada
+  intermedia se saltaba entera si el ruido del GPS de ESE dia hacia que
+  una vuelta POSTERIOR quedase por casualidad un poco mas cerca de las
+  coordenadas guardadas que la que tocaba -el buscador comparaba todas
+  las vueltas que quedaban por delante entre si, en vez de quedarse con
+  la primera que entraba en el radio.
+
+  Aqui la vuelta 2 (indice 5) queda a 80 m del pie guardado y la vuelta 3
+  (indice 9) a solo 20 m -mas cerca, pero es la vuelta de DESPUES-. Antes
+  del arreglo, al buscar la siguiente coincidencia tras la vuelta 1 el
+  resultado saltaba directo a la vuelta 3 y la 2 desaparecia sin dejar
+  rastro (ni "no reconocida": no llegaba ni a intentarse).
+*/
+test('un circuito de varias vueltas no se salta una vuelta intermedia por ruido del GPS', () => {
+  const metrosPorGrado = 111320;
+  const offset = (metros) => metros / metrosPorGrado;
+
+  const lat = [
+    0,                    // 0: pie vuelta 1 (referencia exacta del segmento)
+    offset(300),          // 1: cima vuelta 1
+    offset(5000),         // 2: lejos (fuera del circuito)
+    offset(6000),         // 3: lejos
+    offset(7000),         // 4: lejos
+    offset(80),           // 5: pie vuelta 2 -> 80 m del pie de referencia
+    offset(380),          // 6: cima vuelta 2
+    offset(9000),         // 7: lejos
+    offset(10000),        // 8: lejos
+    offset(20),           // 9: pie vuelta 3 -> 20 m del pie de referencia (mas cerca que la 2, pero es posterior)
+    offset(320),          // 10: cima vuelta 3
+    offset(12000),        // 11: lejos
+    offset(13000),        // 12: lejos
+  ];
+  const latlng = lat.map((v) => [v, 2]);
+  const distancia = latlng.map((_, i) => i * 100);
+  const streams = { latlng, distancia };
+
+  const def = { latInicio: 0, lonInicio: 2, latFin: offset(300), lonFin: 2, metros: 100 };
+
+  const r = encontrarTodosLosSegmentosManuales(streams, def);
+  assert.equal(r.length, 3, 'las tres vueltas tienen que reconocerse, ninguna saltada');
+  assert.deepEqual(r, [
+    { inicio: 0, fin: 1 },
+    { inicio: 5, fin: 6 },
+    { inicio: 9, fin: 10 },
+  ]);
+});
+
 test('recogerSegmentosManuales cuenta cada repeticion de la misma salida como un intento', () => {
   const st = perfilVaiven(20);
   const def = {

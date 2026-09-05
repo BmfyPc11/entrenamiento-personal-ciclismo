@@ -229,13 +229,6 @@ export default function Perfil({
      hace falta para arrancar el marcado directamente con el primer
      clic. */
   const RADIO_CLIC_PUNTO = 14;
-  /* Radio del iman (ver "extremos" mas abajo) que ayuda a acertar el
-     cambio de sentido del perfil -donde de verdad esta el pie o la cima
-     de un puerto- en vez de un punto cualquiera de al lado. Activo en
-     todo momento con el marcado encendido: en el hover normal, al elegir
-     la cima con el primer clic, dibujando el tramo o moviendo un extremo
-     ya existente. */
-  const RADIO_IMAN = 20;
   const [cercaLinea, setCercaLinea] = useState(false);
   const [marcando, setMarcando] = useState(null); // { cimaIdx } mientras se selecciona el pie hacia atras
   const [inicioMarcado, setInicioMarcado] = useState(null); // indice (reducido) del pie, mientras se arrastra
@@ -353,48 +346,6 @@ export default function Perfil({
       idx,
     };
   }, [streams]);
-
-  /*
-    "Iman" para marcar/editar con mas precision: los puntos donde el
-    perfil cambia de sentido (de subir a bajar, de bajar a subir, o entra
-    o sale de un llano) son justo donde esta el pie o la cima real de un
-    puerto, y a mano es dificil acertar el punto exacto con el raton. Se
-    buscan sobre una version suavizada del perfil -no el dato crudo del
-    GPS, que tiembla punto a punto y marcaria un "cambio de sentido" en
-    cada ruido de la señal- y solo cuentan los que superan una prominencia
-    minima, para no enganchar cada ondulacion del asfalto.
-  */
-  const extremos = useMemo(() => {
-    if (!datos) return [];
-    const { a } = datos;
-    const n = a.length;
-    if (n < 3) return [];
-
-    const VENTANA = 5;
-    const suave = a.map((_, i) => {
-      let suma = 0, cuenta = 0;
-      for (let k = Math.max(0, i - VENTANA); k <= Math.min(n - 1, i + VENTANA); k++) {
-        suma += a[k]; cuenta++;
-      }
-      return suma / cuenta;
-    });
-
-    const PROMINENCIA_MIN = 5; // metros
-    const puntos = [];
-    let direccion = 0; // -1 bajando, 1 subiendo, 0 sin decidir todavia
-    let ultimo = 0;
-    for (let i = 1; i < n; i++) {
-      const delta = suave[i] - suave[i - 1];
-      const nueva = delta > 0 ? 1 : delta < 0 ? -1 : direccion;
-      if (direccion !== 0 && nueva !== 0 && nueva !== direccion &&
-        Math.abs(suave[i - 1] - suave[ultimo]) >= PROMINENCIA_MIN) {
-        puntos.push(i - 1);
-        ultimo = i - 1;
-      }
-      if (nueva !== 0) direccion = nueva;
-    }
-    return puntos;
-  }, [datos]);
 
   /* Confirma la nueva posicion (el hover actual) del extremo que se
      estaba arrastrando, sin dejar que un extremo cruce al otro. Entrenamientos
@@ -736,35 +687,13 @@ export default function Perfil({
     const escalaX = r.width / W;
     const escalaY = r.height / alturaSvg;
 
-    /* Cerca de la linea se mide SIEMPRE sobre el punto real bajo el
-       cursor, antes de que el iman lo mueva: si se midiera despues,
-       cerca de cada cambio de sentido el iman podria alejar el punto que
-       se compara (hasta RADIO_IMAN, mas ancho que RADIO_CLIC_PUNTO) y
-       "estrecharia" justo la zona que se supone que tiene que ayudar a
-       acertar. */
+    /* Distancia real del cursor al punto que sigue la linea, para decidir
+       si el cursor se pone "clicable" -hace falta para arrancar el
+       marcado directamente con el primer clic. */
     if (marcado) {
       const pxLinea = (e.clientX - r.left) - X(datos.d[mejor]) * escalaX;
       const pyLinea = (e.clientY - r.top) - (Y(datos.a[mejor]) - origenY) * escalaY;
       setCercaLinea(Math.hypot(pxLinea, pyLinea) <= RADIO_CLIC_PUNTO);
-    }
-
-    /* Iman: en cualquier momento con el marcado activo -tambien en el
-       simple hover, no solo al dibujar un tramo nuevo o arrastrar un
-       extremo- el punto que sigue al cursor salta al cambio de sentido
-       del perfil mas cercano si cae a menos de RADIO_IMAN pixeles reales
-       de el, en vez de quedarse en el punto exacto que pisa el raton. Asi
-       se puede ver (y despues clicar) el punto exacto antes incluso de
-       empezar a marcar, que es donde de verdad esta el pie o la cima. */
-    if (marcado) {
-      const cursorPx = e.clientX - r.left, cursorPy = e.clientY - r.top;
-      let mejorIman = null, distIman = RADIO_IMAN;
-      for (const idxExt of extremos) {
-        const px = X(datos.d[idxExt]) * escalaX;
-        const py = (Y(datos.a[idxExt]) - origenY) * escalaY;
-        const dist = Math.hypot(cursorPx - px, cursorPy - py);
-        if (dist < distIman) { distIman = dist; mejorIman = idxExt; }
-      }
-      if (mejorIman != null) mejor = mejorIman;
     }
 
     setHover(mejor);
