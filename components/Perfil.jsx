@@ -91,6 +91,26 @@ function mapearIdx(iOriginal, datos) {
   return mejor;
 }
 
+/* Insignia redonda con una montaña dentro, para marcar la cima de un
+   puerto marcado a mano (ver prop `marcado` de Perfil). onClick entra
+   en edicion o suelta el extremo que se este arrastrando, segun toque;
+   onContextMenu (solo los ya confirmados lo traen) borra el puerto con
+   el clic derecho en vez de abrir el menu del navegador. */
+function iconoMontana(cx, cy, color, { onClick, onContextMenu, titulo } = {}) {
+  const interactivo = !!(onClick || onContextMenu);
+  return (
+    <g transform={`translate(${cx},${cy})`}
+      pointerEvents={interactivo ? 'auto' : 'none'}
+      onClick={onClick ? (e) => { e.stopPropagation(); onClick(); } : undefined}
+      onContextMenu={onContextMenu}
+      style={interactivo ? { cursor: 'pointer' } : undefined}>
+      {titulo && <title>{titulo}</title>}
+      <circle r="10" fill={color} />
+      <path d="M -5.5,3.5 L -1.5,-3 L 1,0.5 L 3,-4 L 5.5,3.5 Z" fill="#0E1116" />
+    </g>
+  );
+}
+
 /*
   Perfil de altimetria.
   - modo "relieve":   relleno neutro clasico, con los puertos subrayados
@@ -168,8 +188,73 @@ export default function Perfil({
     Por defecto apagado: ningun otro sitio donde se usa Perfil lo pide.
   */
   animarEntrada = false,
+  /*
+    TEMPORAL: marcado manual de puertos, primer intento. Con esto activo
+    el cursor deja de ir en cruz (simple flecha normal), y solo se pone
+    "clicable" al acercarse al punto que sigue el perfil. Un clic ahi
+    abre un desplegable ("Puerto", de momento la unica opcion); al
+    elegirlo, ese punto queda fijado como la cima y, moviendo el cursor
+    solo hacia atras en el recorrido (nunca mas alla de la cima), se ve
+    el tramo que se ira a marcar. Un segundo clic lo da por bueno.
+
+    Cualquier puerto ya dibujado -detectado automaticamente o marcado a
+    mano, da igual- se edita igual: clic derecho sobre su ficha lo pone
+    editable (aparece en verde, con un tirador en cada extremo); clicar
+    cualquiera de los dos tiradores lo "coge" y sigue al cursor hasta el
+    siguiente clic, que lo suelta ahi. Clic derecho otra vez, ya sobre el
+    tramo editable, lo borra en vez de tocar su forma. Un clic normal en
+    el fondo, sin nada cogido, sale de la edicion sin cambiar nada.
+
+    tramosManuales/onTramosManualesChange, si llegan, lo suben para que
+    Entrenamientos los use tambien en su tabla de "Detalles de la ruta"
+    (asi un puerto marcado a mano sale ahi con sus cifras, igual que uno
+    detectado) -esto es solo para los que se crean aqui desde cero.
+
+    onEditarPuerto(puerto, nuevoInicio, nuevoFin) y onEliminarPuerto(puerto)
+    son los que de verdad aplican el editado o el borrado: para un puerto
+    marcado a mano actuan sobre tramosManuales, pero para uno detectado
+    automaticamente Entrenamientos no tiene donde guardarlo salvo que se
+    lo pida explicitamente -de ahi que sean dos callbacks aparte en vez de
+    reutilizar tramosManuales para todo. Sin ellos -el resto de sitios
+    donde se usa Perfil- ningun puerto se puede editar ni borrar, como
+    antes.
+  */
+  marcado = false,
+  tramosManuales: tramosManualesControlados = null,
+  onTramosManualesChange = null,
+  onEditarPuerto = null,
+  onEliminarPuerto = null,
 }) {
   const [hover, setHover] = useState(null);
+
+  /* Distancia en pixeles del cursor al punto que sigue la linea: por
+     debajo de esto se considera "encima" para el cursor clicable, y
+     hace falta para arrancar el marcado directamente con el primer
+     clic. */
+  const RADIO_CLIC_PUNTO = 14;
+  /* Radio del iman (ver "extremos" mas abajo) que ayuda a acertar el
+     cambio de sentido del perfil -donde de verdad esta el pie o la cima
+     de un puerto- en vez de un punto cualquiera de al lado. Activo en
+     todo momento con el marcado encendido: en el hover normal, al elegir
+     la cima con el primer clic, dibujando el tramo o moviendo un extremo
+     ya existente. */
+  const RADIO_IMAN = 20;
+  const [cercaLinea, setCercaLinea] = useState(false);
+  const [marcando, setMarcando] = useState(null); // { cimaIdx } mientras se selecciona el pie hacia atras
+  const [inicioMarcado, setInicioMarcado] = useState(null); // indice (reducido) del pie, mientras se arrastra
+  const [tramosInternos, setTramosInternos] = useState([]); // [{ inicio, fin }] ya confirmados, indices del stream completo
+  const tramosManuales = tramosManualesControlados ?? tramosInternos;
+  const setTramosManuales = onTramosManualesChange
+    ? (actualizador) => onTramosManualesChange(
+        typeof actualizador === 'function' ? actualizador(tramosManuales) : actualizador)
+    : setTramosInternos;
+  const [editando, setEditando] = useState(null); // { puerto, extremo: 'inicio' | 'fin' | null }: puerto es el objeto de "puertos" que se esta editando ahora mismo, sea detectado o marcado a mano
+
+  /* Identidad estable de un puerto para todo lo que compara "es este mismo
+     que se esta editando": los detectados llevan autoKey (fijo mientras no
+     cambien streams/criterio, aunque su inicio/fin se editen), y los
+     marcados a mano manualIdx (su posicion en tramosManuales). */
+  const clavePuerto = (p) => (p.manual ? `m${p.manualIdx}` : `a${p.autoKey}`);
 
   /*
     Ancho real del contenedor, medido con ResizeObserver. Antes el SVG se
@@ -264,6 +349,48 @@ export default function Perfil({
       idx,
     };
   }, [streams]);
+
+  /*
+    "Iman" para marcar/editar con mas precision: los puntos donde el
+    perfil cambia de sentido (de subir a bajar, de bajar a subir, o entra
+    o sale de un llano) son justo donde esta el pie o la cima real de un
+    puerto, y a mano es dificil acertar el punto exacto con el raton. Se
+    buscan sobre una version suavizada del perfil -no el dato crudo del
+    GPS, que tiembla punto a punto y marcaria un "cambio de sentido" en
+    cada ruido de la señal- y solo cuentan los que superan una prominencia
+    minima, para no enganchar cada ondulacion del asfalto.
+  */
+  const extremos = useMemo(() => {
+    if (!datos) return [];
+    const { a } = datos;
+    const n = a.length;
+    if (n < 3) return [];
+
+    const VENTANA = 5;
+    const suave = a.map((_, i) => {
+      let suma = 0, cuenta = 0;
+      for (let k = Math.max(0, i - VENTANA); k <= Math.min(n - 1, i + VENTANA); k++) {
+        suma += a[k]; cuenta++;
+      }
+      return suma / cuenta;
+    });
+
+    const PROMINENCIA_MIN = 5; // metros
+    const puntos = [];
+    let direccion = 0; // -1 bajando, 1 subiendo, 0 sin decidir todavia
+    let ultimo = 0;
+    for (let i = 1; i < n; i++) {
+      const delta = suave[i] - suave[i - 1];
+      const nueva = delta > 0 ? 1 : delta < 0 ? -1 : direccion;
+      if (direccion !== 0 && nueva !== 0 && nueva !== direccion &&
+        Math.abs(suave[i - 1] - suave[ultimo]) >= PROMINENCIA_MIN) {
+        puntos.push(i - 1);
+        ultimo = i - 1;
+      }
+      if (nueva !== 0) direccion = nueva;
+    }
+    return puntos;
+  }, [datos]);
 
   if (!datos) {
     return <div ref={contRef}><p className="hint">Esta salida no tiene perfil de altimetría registrado.</p></div>;
@@ -393,6 +520,11 @@ export default function Perfil({
       .map((p, i) => ({ p, i, k: mapearIdx(p.fin, datos) }))
       .sort((u, v) => datos.d[u.k] - datos.d[v.k])
       .forEach(({ p, i, k }) => {
+        /* El que se esta editando ahora mismo (sea detectado o marcado a
+           mano) se pinta aparte, mas abajo, en verde y con un tirador en
+           cada extremo -saltarlo aqui evita que aparezca tambien como una
+           ficha amarilla quieta en su posicion vieja mientras se arrastra. */
+        if (marcado && editando && clavePuerto(p) === clavePuerto(editando.puerto)) return;
         const cat = categoriaPuerto(p.metros, p.pendiente);
         /* En la compacta la insignia va sola en su fila -sin la distancia
            al lado, que hacia de tope- asi que le sobra sitio para ser un
@@ -550,8 +682,107 @@ export default function Perfil({
     if (kmPos < 0 || kmPos > maxD) { setHover(null); onHoverChange?.(null); return; }
     let mejor = 0, dif = Infinity;
     datos.d.forEach((v, i) => { const dd = Math.abs(v - kmPos); if (dd < dif) { dif = dd; mejor = i; } });
+
+    /* Distancia real en pixeles (no en km), para todo lo que sigue: la
+       unidad de dibujo interna (W/alturaSvg) no tiene por que coincidir
+       con los pixeles reales de pantalla. */
+    const escalaX = r.width / W;
+    const escalaY = r.height / alturaSvg;
+
+    /* Cerca de la linea se mide SIEMPRE sobre el punto real bajo el
+       cursor, antes de que el iman lo mueva: si se midiera despues,
+       cerca de cada cambio de sentido el iman podria alejar el punto que
+       se compara (hasta RADIO_IMAN, mas ancho que RADIO_CLIC_PUNTO) y
+       "estrecharia" justo la zona que se supone que tiene que ayudar a
+       acertar. */
+    if (marcado) {
+      const pxLinea = (e.clientX - r.left) - X(datos.d[mejor]) * escalaX;
+      const pyLinea = (e.clientY - r.top) - (Y(datos.a[mejor]) - origenY) * escalaY;
+      setCercaLinea(Math.hypot(pxLinea, pyLinea) <= RADIO_CLIC_PUNTO);
+    }
+
+    /* Iman: en cualquier momento con el marcado activo -tambien en el
+       simple hover, no solo al dibujar un tramo nuevo o arrastrar un
+       extremo- el punto que sigue al cursor salta al cambio de sentido
+       del perfil mas cercano si cae a menos de RADIO_IMAN pixeles reales
+       de el, en vez de quedarse en el punto exacto que pisa el raton. Asi
+       se puede ver (y despues clicar) el punto exacto antes incluso de
+       empezar a marcar, que es donde de verdad esta el pie o la cima. */
+    if (marcado) {
+      const cursorPx = e.clientX - r.left, cursorPy = e.clientY - r.top;
+      let mejorIman = null, distIman = RADIO_IMAN;
+      for (const idxExt of extremos) {
+        const px = X(datos.d[idxExt]) * escalaX;
+        const py = (Y(datos.a[idxExt]) - origenY) * escalaY;
+        const dist = Math.hypot(cursorPx - px, cursorPy - py);
+        if (dist < distIman) { distIman = dist; mejorIman = idxExt; }
+      }
+      if (mejorIman != null) mejor = mejorIman;
+    }
+
     setHover(mejor);
     onHoverChange?.(datos.idx[mejor]);
+
+    if (!marcado) return;
+
+    if (marcando) {
+      /* Solo hacia atras respecto a la cima fijada: si el punto mas
+         cercano al cursor queda mas adelante en el recorrido, el pie
+         se queda pegado a la propia cima (seleccion vacia) en vez de
+         saltar hacia delante. */
+      setInicioMarcado(mejor > marcando.cimaIdx ? marcando.cimaIdx : mejor);
+    }
+  };
+
+  /* Clic en el fondo del grafico (no sobre un tirador, que para propagacion
+     antes de llegar aqui). Segun el estado actual: cierra un marcado en
+     curso, suelta el extremo que se estuviera arrastrando, sale de la
+     edicion si no habia nada cogido, o arranca un marcado nuevo. */
+  const onClick = (e) => {
+    if (!marcado) return;
+
+    if (marcando) {
+      const cimaIdx = marcando.cimaIdx;
+      const inicioIdx = inicioMarcado != null ? inicioMarcado : cimaIdx;
+      if (inicioIdx < cimaIdx) {
+        setTramosManuales((arr) => [...arr, { inicio: datos.idx[inicioIdx], fin: datos.idx[cimaIdx] }]);
+      }
+      setMarcando(null);
+      setInicioMarcado(null);
+      return;
+    }
+
+    if (editando) {
+      if (editando.extremo && hover != null) soltarExtremo(editando.extremo);
+      else setEditando(null);
+      return;
+    }
+
+    if (!cercaLinea || hover == null) return;
+    setMarcando({ cimaIdx: hover });
+    setInicioMarcado(hover);
+  };
+
+  /* Confirma la nueva posicion (el hover actual) del extremo que se
+     estaba arrastrando, sin dejar que un extremo cruce al otro. El
+     puerto que se esta editando (editando.puerto) puede ser tanto uno
+     marcado a mano -el cambio se guarda en tramosManuales, aqui mismo-
+     como uno detectado automaticamente -Entrenamientos es quien tiene
+     donde guardar ese ajuste, de ahi el callback onEditarPuerto. */
+  const soltarExtremo = (extremo) => {
+    const t = editando.puerto;
+    const nuevoValor = datos.idx[hover];
+    const nuevoInicio = extremo === 'inicio' ? nuevoValor : t.inicio;
+    const nuevoFin = extremo === 'fin' ? nuevoValor : t.fin;
+    if (nuevoInicio >= nuevoFin) { setEditando({ puerto: t, extremo: null }); return; }
+
+    if (t.manual) {
+      setTramosManuales((arr) => arr.map((tr, k) =>
+        k === t.manualIdx ? { inicio: nuevoInicio, fin: nuevoFin } : tr));
+    } else {
+      onEditarPuerto?.(t, nuevoInicio, nuevoFin);
+    }
+    setEditando({ puerto: { ...t, inicio: nuevoInicio, fin: nuevoFin }, extremo: null });
   };
 
   /* Las cajas ya traen sitio y medidas; aqui solo se marca cual esta
@@ -562,15 +793,22 @@ export default function Perfil({
     activo: puertoActivo === c.i,
   }));
 
+  const cursor = simple
+    ? 'default'
+    : !marcado
+      ? 'crosshair'
+      : (marcando || editando || cercaLinea) ? 'pointer' : 'default';
+
   return (
-    <div ref={contRef}>
+    <div ref={contRef} style={marcado ? { position: 'relative' } : undefined}>
       <svg
         viewBox={`0 ${origenY} ${W} ${alturaSvg}`}
         width={W}
         height={alturaSvg}
         onMouseMove={simple ? undefined : onMove}
-        onMouseLeave={simple ? undefined : () => { setHover(null); onHoverChange?.(null); }}
-        style={{ cursor: simple ? 'default' : 'crosshair', touchAction: 'pan-y' }}
+        onMouseLeave={simple ? undefined : () => { setHover(null); onHoverChange?.(null); if (marcado) setCercaLinea(false); }}
+        onClick={marcado ? onClick : undefined}
+        style={{ cursor, touchAction: 'pan-y' }}
       >
         <defs>
           <linearGradient id="relieve" x1="0" y1="0" x2="0" y2="1">
@@ -671,6 +909,7 @@ export default function Perfil({
         */}
         {puertos.map((p, i) => {
           if (puertoActivo !== i) return null;
+          if (marcado && editando && clavePuerto(p) === clavePuerto(editando.puerto)) return null;
           const a = mapear(p.inicio), b = mapear(p.fin);
           if (b <= a) return null;
           return (
@@ -687,6 +926,7 @@ export default function Perfil({
           porque va sobre fondo opaco.
         */}
         {modo === 'relieve' && puertos.map((p, i) => {
+          if (marcado && editando && clavePuerto(p) === clavePuerto(editando.puerto)) return null;
           const a = mapear(p.inicio), b = mapear(p.fin);
           if (b <= a) return null;
           const activo = puertoActivo === i;
@@ -712,6 +952,11 @@ export default function Perfil({
               */
               const infoActiva = modo === 'relieve' || modo === 'dureza';
               const trazo = f.activo || infoActiva ? '#D14B42' : '#E0A82E';
+              /* Un marcado a mano siempre se puede editar/borrar -vive en
+                 tramosManuales, que siempre existe aqui dentro-, pero uno
+                 detectado automaticamente solo si Entrenamientos ha dado
+                 los callbacks para guardar el ajuste en alguna parte. */
+              const puedeEditar = marcado && (f.p.manual || !!(onEditarPuerto && onEliminarPuerto));
               return (
               <g key={`f${f.i}`} pointerEvents="none">
                 {/*
@@ -739,11 +984,26 @@ export default function Perfil({
                   style={animarEntrada ? { transformOrigin: `${f.x}px ${f.yCima}px` } : undefined} />
 
                 <g transform={`translate(${f.xCaja},${f.yCaja})`}
-                  pointerEvents={onPuertoClick ? 'auto' : 'none'}
-                  onClick={onPuertoClick ? () => onPuertoClick(f.i) : undefined}
+                  pointerEvents={(onPuertoClick || puedeEditar) ? 'auto' : 'none'}
+                  onClick={onPuertoClick ? () => onPuertoClick(f.p) : undefined}
                   onMouseEnter={onPuertoClick ? () => setFichaFoco(f.i) : undefined}
                   onMouseLeave={onPuertoClick ? () => setFichaFoco(null) : undefined}
-                  style={onPuertoClick ? { cursor: 'pointer' } : undefined}>
+                  /*
+                    Clic derecho pone el puerto editable -en verde, con un
+                    tirador en cada extremo (mas abajo, junto a "marcando")-
+                    en vez de preguntar nada. Lo mismo vale para uno
+                    detectado automaticamente que para uno marcado a mano:
+                    la diferencia de a donde va a parar el cambio (a
+                    tramosManuales o a los ajustes del detectado) la decide
+                    Entrenamientos dentro de onEditarPuerto/onEliminarPuerto,
+                    no esto. Mientras se esta dibujando un tramo nuevo
+                    (marcando) no se puede abrir edicion a la vez.
+                  */
+                  onContextMenu={puedeEditar
+                    ? (e) => { e.preventDefault(); if (!marcando) setEditando({ puerto: f.p, extremo: null }); }
+                    : undefined}
+                  style={(onPuertoClick || puedeEditar) ? { cursor: 'pointer' } : undefined}>
+                  {puedeEditar && <title>Clic derecho para editar</title>}
                   {/*
                     Grupo interior solo para la animacion: el de fuera ya
                     lleva su propio transform="translate(...)" para
@@ -905,6 +1165,91 @@ export default function Perfil({
             </g>
           </g>
         )}
+
+        {/*
+          TEMPORAL: marcado manual. Mientras se arrastra hacia atras se
+          pinta en rojo (el mismo tramo, en progreso, y el mismo color que
+          ya se usa para resaltar el puerto activo en modo "Informacion");
+          en cuanto se confirma con el segundo clic pasa a la lista
+          tramosManuales y se repinta como un puerto normal (amarillo, con
+          su ficha de categoria y distancia). El icono de montana marca la
+          cima fijada mientras se dibuja.
+        */}
+        {marcado && marcando && (() => {
+          const cimaIdx = marcando.cimaIdx;
+          const pieIdx = inicioMarcado != null ? inicioMarcado : cimaIdx;
+          const a = Math.min(pieIdx, cimaIdx), b = Math.max(pieIdx, cimaIdx);
+          return (
+            <g pointerEvents="none">
+              {b > a && (
+                <>
+                  <path d={areaPath(a, b)} fill="#D14B42" opacity="0.35" />
+                  <path d={lineaPath(a, b)} fill="none" stroke="#D14B42"
+                    strokeWidth="3" strokeLinecap="round" />
+                </>
+              )}
+              {iconoMontana(X(datos.d[cimaIdx]), Y(datos.a[cimaIdx]) - 14, '#D14B42')}
+            </g>
+          );
+        })()}
+
+        {/*
+          Solo el que se esta editando ahora mismo se pinta aqui, en verde
+          con un tirador en cada extremo -sea un puerto detectado o uno
+          marcado a mano, da igual: el resto de tramos confirmados ya
+          salen mas arriba, mezclados en "puertos" (ver cajas/fichas), con
+          el mismo aspecto que un puerto cualquiera -subrayado amarillo,
+          ficha de categoria y distancia, resaltado en rojo al pasar el
+          cursor y clic para ir a la tabla de abajo. Clic derecho sobre esa
+          ficha es lo que entra aqui.
+        */}
+        {marcado && editando && (() => {
+          const t = editando.puerto;
+          const extremo = editando.extremo;
+
+          /* Mientras se arrastra un extremo, su posicion en pantalla es
+             el punto que sigue el cursor ahora mismo (hover), no la
+             guardada -asi el tramo se ve moverse en vivo. Los dos
+             extremos no pueden cruzarse. */
+          let a = mapear(t.inicio), b = mapear(t.fin);
+          if (extremo === 'inicio' && hover != null) a = Math.min(hover, b - 1);
+          if (extremo === 'fin' && hover != null) b = Math.max(hover, a + 1);
+          if (b <= a) return null;
+
+          const eliminar = (e) => {
+            e.preventDefault();
+            if (t.manual) setTramosManuales((arr) => arr.filter((_, k) => k !== t.manualIdx));
+            else onEliminarPuerto?.(t);
+            setEditando(null);
+          };
+
+          return (
+            <g>
+              <path d={areaPath(a, b)} fill="#D14B42" opacity="0.35" pointerEvents="none" />
+              <path d={lineaPath(a, b)} fill="none" stroke="#D14B42"
+                strokeWidth="3" strokeLinecap="round" pointerEvents="none" />
+
+              {iconoMontana(X(datos.d[b]), Y(datos.a[b]) - 14, '#D14B42', {
+                onContextMenu: eliminar,
+                onClick: extremo === 'fin' ? (() => soltarExtremo('fin'))
+                  : extremo == null ? (() => setEditando({ puerto: t, extremo: 'fin' }))
+                    : undefined,
+                titulo: 'Clic para mover · clic derecho para borrar',
+              })}
+
+              <circle cx={X(datos.d[a])} cy={Y(datos.a[a])} r="6"
+                fill="#D14B42" stroke="#0E1116" strokeWidth="2"
+                style={{ cursor: 'pointer' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (extremo === 'inicio') soltarExtremo('inicio');
+                  else if (extremo == null) setEditando({ puerto: t, extremo: 'inicio' });
+                }}>
+                <title>Arrastra para mover el pie del puerto</title>
+              </circle>
+            </g>
+          );
+        })()}
       </svg>
 
       {!simple && paradas.length > 0 && (

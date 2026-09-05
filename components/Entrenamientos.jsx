@@ -6,13 +6,14 @@ import Mapa from './Mapa';
 import PerfilPuerto from './PerfilPuerto';
 import { IcoExpandir, IcoCerrar, IcoActividades, IcoFlecha, IcoMapa, IcoBuscar } from './Iconos';
 import {
-  detectarPuertos, repartoZonas, repartoDureza, repartoVelocidad, valorarEntrenamiento,
+  detectarPuertos, construirPuerto, repartoZonas, repartoDureza, repartoVelocidad, valorarEntrenamiento,
   TRAMOS_DUREZA, TRAMOS_VELOCIDAD, vatiosPuerto, vatiosSalida, categoriaPuerto,
   num, duracion, fechaLarga, fechaDDMMAA, kmh, km, metrosPorKm, tipoRuta, TIPO_INSIGNIA,
   distanciaGeo,
 } from '@/lib/metrics';
 import { emparejarSegmento, buscarNombre, guardarNombre, RADIO_NOMBRE } from '@/lib/nombres';
 import { useCacheNombres, escribirCache } from '@/lib/nombresCache';
+import { leerPuertosManuales, guardarPuertosManuales } from '@/lib/puertosManualesCache';
 
 export default function Entrenamientos({
   salidas, cfg, zonas, umbral, cache, pedirStreams,
@@ -71,6 +72,29 @@ export default function Entrenamientos({
   /* Una fila de la tabla por puerto, para poder llevar la vista hasta ella
      cuando se pulsa su ficha en el perfil (ver irAPuerto mas abajo). */
   const filaPuertoRefs = useRef([]);
+  /* Puertos marcados a mano en el perfil (ver prop `marcado` de Perfil),
+     indices del stream completo. Vive aqui -no dentro de Perfil- porque
+     tambien hace falta para la tabla de "Detalles de la ruta" de abajo. */
+  const [tramosManuales, setTramosManuales] = useState([]);
+  /*
+    Ediciones del usuario sobre puertos detectados automaticamente: clic
+    derecho en el perfil los pone editables y un segundo clic derecho los
+    borra (ver Perfil, prop marcado). detectarPuertos no tiene memoria -
+    recalcula los mismos limites cada vez a partir de streams+criterio-,
+    asi que el cambio no se puede guardar en el propio puerto: se guarda
+    aparte, indexado por su inicio/fin originales (estables mientras no
+    cambien streams ni criterio), y se aplica cada vez que se recalculan.
+    Valores: { inicio, fin } si se ha movido, o 'eliminado' si se ha
+    borrado.
+  */
+  const [ajustesAuto, setAjustesAuto] = useState({});
+  /* Justo despues de cargar lo guardado de una salida (ver el efecto de
+     "sel" mas abajo) los dos setState de arriba disparan el efecto de
+     guardado con los valores VIEJOS todavia en las variables (React no
+     los actualiza hasta el siguiente render) -sin este freno, ese primer
+     disparo grabaria los datos de la salida anterior bajo el id de la
+     nueva. Se apaga solo, en el primer guardado real que le sigue. */
+  const saltarGuardadoPuertos = useRef(true);
   const [criterio, setCriterio] = useState({
     minMetros: 500, minDesnivel: 30, minPend: 3,
     /* Los dos de abajo no buscan puertos, afinan los que ya se han
@@ -99,10 +123,18 @@ export default function Entrenamientos({
     cerrarlo -la tabla vive en la pagina normal, no dentro del dialogo
     rotado.
   */
-  const irAPuerto = (i) => {
+  const irAPuerto = (p) => {
     setHorizontal(false);
-    setPuertoAbierto(i);
-    filaPuertoRefs.current[i]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    /* Perfil manda el propio objeto puerto (no un indice): la tabla de
+       abajo mezcla los detectados con los marcados a mano y los reordena
+       por km, asi que su posicion ahi no tiene por que coincidir con la
+       que tenia en la lista que ve el perfil. inicio/fin (indices del
+       stream completo) identifican al puerto sin ambiguedad, sea de
+       donde sea. */
+    const idx = puertosTabla.findIndex((x) => x.inicio === p.inicio && x.fin === p.fin);
+    const destino = idx >= 0 ? idx : 0;
+    setPuertoAbierto(destino);
+    filaPuertoRefs.current[destino]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
   /* Anade o quita un valor de una lista de foco (zonaFoco, durezaFoco,
@@ -169,11 +201,92 @@ export default function Entrenamientos({
     return () => { vivo = false; };
   }, [sel, cache, pedirStreams]);
 
-  useEffect(() => { setPuertoFoco(null); setZonaFoco([]); setPuertoAbierto(null); setPuntoHover(null); }, [sel]);
+  useEffect(() => {
+    setPuertoFoco(null); setZonaFoco([]); setPuertoAbierto(null); setPuntoHover(null);
+    const guardado = leerPuertosManuales(sel);
+    saltarGuardadoPuertos.current = true;
+    setTramosManuales(guardado.tramosManuales);
+    setAjustesAuto(guardado.ajustesAuto);
+  }, [sel]);
 
-  const puertos = useMemo(
+  /* Guarda en localStorage cada vez que el marcado o los ajustes cambian
+     de verdad -no en el primer disparo tras cambiar de salida, que es
+     justo lo que se acaba de leer de ahi mismo (ver saltarGuardadoPuertos
+     arriba). Persiste asi lo que antes se perdia al cambiar de pestana o
+     recargar la pagina. */
+  useEffect(() => {
+    if (!sel) return;
+    if (saltarGuardadoPuertos.current) { saltarGuardadoPuertos.current = false; return; }
+    guardarPuertosManuales(sel, { tramosManuales, ajustesAuto });
+  }, [sel, tramosManuales, ajustesAuto]);
+
+  const puertosDetectados = useMemo(
     () => (streams ? detectarPuertos(streams, criterio) : []),
     [streams, criterio]
+  );
+
+  /*
+    Los detectados, con los ajustes del usuario ya aplicados: movidos a su
+    nueva posicion (recalculando sus cifras con construirPuerto, igual que
+    si el detector los hubiera encontrado ahi directamente) o descartados
+    del todo. autoKey identifica al puerto por su inicio/fin ORIGINALES
+    -los que da detectarPuertos-, asi que sigue senalando al mismo aunque
+    ya este editado; es lo que usa Perfil para saber a cual esta tocando.
+  */
+  const puertos = useMemo(() => {
+    if (!streams) return [];
+    return puertosDetectados
+      .map((p) => {
+        const key = `${p.inicio}:${p.fin}`;
+        const ajuste = ajustesAuto[key];
+        if (ajuste === 'eliminado') return null;
+        if (ajuste) {
+          const editado = construirPuerto(streams, ajuste.inicio, ajuste.fin);
+          return editado ? { ...editado, autoKey: key } : null;
+        }
+        return { ...p, autoKey: key };
+      })
+      .filter(Boolean);
+  }, [puertosDetectados, ajustesAuto, streams]);
+
+  /* Aplica el editado o el borrado de un puerto detectado -ver el
+     comentario de ajustesAuto mas arriba-. Pasadas a Perfil como
+     onEditarPuerto/onEliminarPuerto: alli se llaman con el puerto tal
+     cual sale de "puertos" arriba, de donde sacan autoKey. */
+  const editarPuertoAuto = (p, nuevoInicio, nuevoFin) => {
+    setAjustesAuto((a) => ({ ...a, [p.autoKey]: { inicio: nuevoInicio, fin: nuevoFin } }));
+  };
+  const eliminarPuertoAuto = (p) => {
+    setAjustesAuto((a) => ({ ...a, [p.autoKey]: 'eliminado' }));
+  };
+
+  /* Los mismos calculos que un puerto detectado (metros, pendiente, VAM,
+     categoria...), pero sobre el tramo que se ha marcado a mano en el
+     perfil, sin pasar por ningun minimo -si esta marcado, se muestra tal
+     cual. */
+  const puertosManuales = useMemo(
+    () => (streams
+      ? tramosManuales
+          .map((t, i) => {
+            const p = construirPuerto(streams, t.inicio, t.fin);
+            /* manualIdx es la posicion en tramosManuales (el estado que
+               de verdad se edita/borra), independiente de donde acabe
+               cayendo este puerto una vez mezclado y ordenado por km con
+               los detectados -eso es lo que le permite a Perfil, mas
+               abajo, encontrar el tramo correcto sin tener que buscarlo
+               por posicion. */
+            return p ? { ...p, manual: true, manualIdx: i } : null;
+          })
+          .filter(Boolean)
+      : []),
+    [streams, tramosManuales]
+  );
+
+  /* Detectados y marcados a mano, juntos y en el orden en que aparecen
+     en la ruta: la tabla de abajo no distingue de donde vino cada uno. */
+  const puertosTabla = useMemo(
+    () => [...puertos, ...puertosManuales].sort((a, b) => a.kmInicio - b.kmInicio),
+    [puertos, puertosManuales]
   );
 
   const reparto = useMemo(
@@ -217,14 +330,14 @@ export default function Entrenamientos({
   */
   const nombresPuertos = useMemo(() => {
     const efforts = sel ? segmentos[sel] : null;
-    return puertos.map((p, i) => {
+    return puertosTabla.map((p, i) => {
       const cima = streams?.latlng ? streams.latlng[p.fin] : null;
       const guardado = buscarNombre(cacheNombres, cima);
       if (guardado?.fuente === 'manual' && guardado.nombre) return guardado.nombre;
       const deStrava = efforts ? emparejarSegmento(p, efforts) : null;
       return deStrava || guardado?.nombre || `Subida ${i + 1}`;
     });
-  }, [puertos, segmentos, sel, streams, cacheNombres]);
+  }, [puertosTabla, segmentos, sel, streams, cacheNombres]);
 
   /* ---------- renombrado manual, igual que en Mis ascensiones ---------- */
 
@@ -275,7 +388,7 @@ export default function Entrenamientos({
 
     setCacheNombres((prev) => {
       let nueva = prev, cambio = false;
-      puertos.forEach((p) => {
+      puertosTabla.forEach((p) => {
         const cima = streams.latlng[p.fin];
         if (!cima) return;
         const n = emparejarSegmento(p, efforts);
@@ -288,7 +401,7 @@ export default function Entrenamientos({
       if (cambio) escribirCache(nueva);
       return cambio ? nueva : prev;
     });
-  }, [segmentos, sel, puertos, streams]);
+  }, [segmentos, sel, puertosTabla, streams]);
 
   /*
     Selector de modo y panel de submodo, sacados a variables para no
@@ -564,7 +677,7 @@ export default function Entrenamientos({
                   </button>
                   <Perfil
                     streams={streams}
-                    puertos={puertos}
+                    puertos={puertosTabla}
                     nombres={nombresPuertos}
                     zonas={zonas}
                     modo={modo}
@@ -577,6 +690,11 @@ export default function Entrenamientos({
                     onPuertoClick={irAPuerto}
                     onHoverChange={verMapa ? setPuntoHover : undefined}
                     llana={tipoRuta(salida, refTerreno) === 'llano'}
+                    marcado
+                    tramosManuales={tramosManuales}
+                    onTramosManualesChange={setTramosManuales}
+                    onEditarPuerto={editarPuertoAuto}
+                    onEliminarPuerto={eliminarPuertoAuto}
                   />
                 </div>
 
@@ -634,61 +752,9 @@ export default function Entrenamientos({
           )}
 
           {/* ---------- puertos ---------- */}
-          <h2>Puertos de esta salida</h2>
-          <p className="hint">
-            Detectados automáticamente sobre el perfil. Ajusta los mínimos si quieres ver solo las
-            subidas serias o incluir también las rampas cortas.
-          </p>
-
-          <div className="panel">
-            <div className="fields">
-              <div>
-                <label htmlFor="mm">Longitud mínima (m)</label>
-                <input id="mm" type="number" min="100" max="5000" step="50"
-                  value={criterio.minMetros}
-                  onChange={(e) => setCriterio({ ...criterio, minMetros: +e.target.value || 100 })} />
-              </div>
-              <div>
-                <label htmlFor="md">Desnivel mínimo (m)</label>
-                <input id="md" type="number" min="10" max="1000" step="5"
-                  value={criterio.minDesnivel}
-                  onChange={(e) => setCriterio({ ...criterio, minDesnivel: +e.target.value || 10 })} />
-              </div>
-              <div>
-                <label htmlFor="mp">Pendiente mínima (%)</label>
-                <input id="mp" type="number" min="1" max="15" step="0.5"
-                  value={criterio.minPend}
-                  onChange={(e) => setCriterio({ ...criterio, minPend: +e.target.value || 1 })} />
-              </div>
-              <div>
-                <label htmlFor="pe">Pendiente de cola (%)</label>
-                <input id="pe" type="number" min="0" max="10" step="0.5"
-                  value={criterio.pendExtension}
-                  onChange={(e) => setCriterio({ ...criterio, pendExtension: +e.target.value || 0 })} />
-              </div>
-              <div>
-                <label htmlFor="fa">Absorber aproximación</label>
-                <input id="fa" type="number" min="0" max="1" step="0.05"
-                  value={criterio.factorAbsorcion}
-                  onChange={(e) => setCriterio({ ...criterio, factorAbsorcion: +e.target.value || 0 })} />
-              </div>
-            </div>
-          </div>
-
-          {puertos.length === 0 ? (
-            <p className="hint" style={{ marginTop: 16 }}>
-              {streams
-                ? 'Ningún tramo cumple esos mínimos. Baja el desnivel o la pendiente mínima para ver subidas más suaves.'
-                : ''}
-            </p>
-          ) : (
+          {puertosTabla.length > 0 && (
             <>
-              <div className="cab-tabla">
-                <span className="rotulo">Puertos detectados</span>
-                <span className="hint" style={{ margin: 0 }}>
-                  Pulsa una fila para ver su perfil detallado
-                </span>
-              </div>
+              <h2>Detalles de la ruta</h2>
 
               <div className="scroll">
                 <table>
@@ -700,7 +766,7 @@ export default function Entrenamientos({
                     </tr>
                   </thead>
                   <tbody>
-                    {puertos.map((p, i) => {
+                    {puertosTabla.map((p, i) => {
                       const c = categoriaPuerto(p.metros, p.pendiente);
                       return (
                         <Fragment key={i}>
@@ -801,29 +867,8 @@ export default function Entrenamientos({
                   </tbody>
                 </table>
               </div>
-
-              <p className="nota">
-                {salida.vatiosReales
-                  ? 'Los vatios de la salida vienen de tu medidor; los de cada puerto son una estimación a partir de la pendiente y el tiempo.'
-                  : `Los vatios son una estimación con ${num(cfg.peso, 0)} kg de peso y ${num(cfg.bici, 0)} kg de bici, sin medidor de potencia.`}
-              </p>
             </>
           )}
-
-          {puertos.length > 0 && (() => {
-            const duro = [...puertos].sort((a, b) => b.desnivel - a.desnivel)[0];
-            return (
-              <div className="callout">
-                <strong>El puerto más duro de esta salida:</strong> {num(duro.metros / 1000, 2)} km
-                al {num(duro.pendiente, 1)} % de media, con rampas de hasta {num(duro.pendienteMax, 1)} %.
-                {duro.vam && <> Lo subiste a {num(duro.vam, 0)} metros verticales por hora</>}
-                {duro.fcMedia && <> con el pulso en {duro.fcMedia} ppm</>}.
-                {duro.metros >= 5000 && duro.pendiente >= 6 && (
-                  <> <strong>Esto ya es un puerto de 5 km al 6 %: objetivo cumplido.</strong></>
-                )}
-              </div>
-            );
-          })()}
 
           {/* ---------- reparto de intensidad ---------- */}
           {reparto && (
