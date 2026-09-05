@@ -189,13 +189,12 @@ export default function Perfil({
   */
   animarEntrada = false,
   /*
-    TEMPORAL: marcado manual de puertos, primer intento. Con esto activo
-    el cursor deja de ir en cruz (simple flecha normal), y solo se pone
-    "clicable" al acercarse al punto que sigue el perfil. Un clic ahi
-    abre un desplegable ("Puerto", de momento la unica opcion); al
-    elegirlo, ese punto queda fijado como la cima y, moviendo el cursor
-    solo hacia atras en el recorrido (nunca mas alla de la cima), se ve
-    el tramo que se ira a marcar. Un segundo clic lo da por bueno.
+    Marcado manual de puertos. Con esto activo el cursor deja de ir en
+    cruz (simple flecha normal), y solo se pone "clicable" al acercarse
+    al punto que sigue el perfil. Un clic ahi fija ese punto como la
+    cima y, moviendo el cursor solo hacia atras en el recorrido (nunca
+    mas alla de la cima), se ve el tramo que se ira a marcar. Un segundo
+    clic lo da por bueno.
 
     Cualquier puerto ya dibujado -detectado automaticamente o marcado a
     mano, da igual- se edita igual: clic derecho sobre su ficha lo pone
@@ -205,23 +204,21 @@ export default function Perfil({
     tramo editable, lo borra en vez de tocar su forma. Un clic normal en
     el fondo, sin nada cogido, sale de la edicion sin cambiar nada.
 
-    tramosManuales/onTramosManualesChange, si llegan, lo suben para que
-    Entrenamientos los use tambien en su tabla de "Detalles de la ruta"
-    (asi un puerto marcado a mano sale ahi con sus cifras, igual que uno
-    detectado) -esto es solo para los que se crean aqui desde cero.
+    onCrearPuerto(inicio, fin), si llega, se llama con el segundo clic que
+    confirma un segmento nuevo (indices del stream completo, como el resto
+    de la app). Entrenamientos decide alli que hacer con el -en concreto,
+    darlo de alta en el catalogo de segmentos manuales por sus coordenadas,
+    para que se reconozca tambien en otras salidas.
 
     onEditarPuerto(puerto, nuevoInicio, nuevoFin) y onEliminarPuerto(puerto)
-    son los que de verdad aplican el editado o el borrado: para un puerto
-    marcado a mano actuan sobre tramosManuales, pero para uno detectado
-    automaticamente Entrenamientos no tiene donde guardarlo salvo que se
-    lo pida explicitamente -de ahi que sean dos callbacks aparte en vez de
-    reutilizar tramosManuales para todo. Sin ellos -el resto de sitios
-    donde se usa Perfil- ningun puerto se puede editar ni borrar, como
-    antes.
+    aplican el editado o el borrado de CUALQUIER puerto -detectado o
+    marcado a mano, Perfil no distingue-: es Entrenamientos quien mira
+    puerto.manual para saber donde vive ese cambio. Sin estos callbacks
+    -el resto de sitios donde se usa Perfil- ningun puerto se puede
+    editar ni borrar, como antes.
   */
   marcado = false,
-  tramosManuales: tramosManualesControlados = null,
-  onTramosManualesChange = null,
+  onCrearPuerto = null,
   onEditarPuerto = null,
   onEliminarPuerto = null,
 }) {
@@ -242,19 +239,26 @@ export default function Perfil({
   const [cercaLinea, setCercaLinea] = useState(false);
   const [marcando, setMarcando] = useState(null); // { cimaIdx } mientras se selecciona el pie hacia atras
   const [inicioMarcado, setInicioMarcado] = useState(null); // indice (reducido) del pie, mientras se arrastra
-  const [tramosInternos, setTramosInternos] = useState([]); // [{ inicio, fin }] ya confirmados, indices del stream completo
-  const tramosManuales = tramosManualesControlados ?? tramosInternos;
-  const setTramosManuales = onTramosManualesChange
-    ? (actualizador) => onTramosManualesChange(
-        typeof actualizador === 'function' ? actualizador(tramosManuales) : actualizador)
-    : setTramosInternos;
   const [editando, setEditando] = useState(null); // { puerto, extremo: 'inicio' | 'fin' | null }: puerto es el objeto de "puertos" que se esta editando ahora mismo, sea detectado o marcado a mano
+  /* Ajuste fino del extremo que se esta arrastrando, en indices SIN
+     reducir (streams.distancia/latlng completos, no los ~900 puntos del
+     dibujo): a raton es dificil acertar el metro exacto, y menos aun con
+     el perfil reducido a 900 puntos para pintarlo ligero -cada paso del
+     raton salta varios metros de golpe. Las flechas izquierda/derecha
+     mueven de un punto crudo en un punto (mayus+flecha, de diez en diez),
+     sumando a lo que ya senala el raton. Se reinicia cada vez que se coge
+     un extremo nuevo. */
+  const [ajusteFino, setAjusteFino] = useState(0);
+  /* Se reinicia en cuanto "editando" cambia de cualquier forma -se coge
+     un extremo nuevo, se suelta, se cancela, se cierra la edicion- para
+     que el ajuste de una vez no se arrastre a la siguiente. */
+  useEffect(() => { setAjusteFino(0); }, [editando]);
 
   /* Identidad estable de un puerto para todo lo que compara "es este mismo
      que se esta editando": los detectados llevan autoKey (fijo mientras no
      cambien streams/criterio, aunque su inicio/fin se editen), y los
-     marcados a mano manualIdx (su posicion en tramosManuales). */
-  const clavePuerto = (p) => (p.manual ? `m${p.manualIdx}` : `a${p.autoKey}`);
+     marcados a mano manualId (su id en el catalogo de segmentos manuales). */
+  const clavePuerto = (p) => (p.manual ? `m${p.manualId}` : `a${p.autoKey}`);
 
   /*
     Ancho real del contenedor, medido con ResizeObserver. Antes el SVG se
@@ -391,6 +395,49 @@ export default function Perfil({
     }
     return puntos;
   }, [datos]);
+
+  /* Confirma la nueva posicion (el hover actual) del extremo que se
+     estaba arrastrando, sin dejar que un extremo cruce al otro. Entrenamientos
+     es quien de verdad guarda el ajuste -en el catalogo si el puerto es
+     manual, en sus propios ajustes si es detectado- vale igual para los
+     dos casos, Perfil no necesita distinguirlos.
+
+     Definida aqui arriba, antes de los "return" de mas abajo (sin datos
+     o sin ancho todavia no hay nada que dibujar): un hook -el de debajo,
+     que la usa- no puede quedar despues de un return condicional, o React
+     se queja de que esta vez se han ejecutado menos hooks que la anterior. */
+  const soltarExtremo = (extremo) => {
+    const t = editando.puerto;
+    const maxIdx = datos.idx[datos.idx.length - 1];
+    const nuevoValor = Math.min(Math.max(datos.idx[hover] + ajusteFino, 0), maxIdx);
+    const nuevoInicio = extremo === 'inicio' ? nuevoValor : t.inicio;
+    const nuevoFin = extremo === 'fin' ? nuevoValor : t.fin;
+    if (nuevoInicio >= nuevoFin) { setEditando({ puerto: t, extremo: null }); return; }
+
+    onEditarPuerto?.(t, nuevoInicio, nuevoFin);
+    setEditando({ puerto: { ...t, inicio: nuevoInicio, fin: nuevoFin }, extremo: null });
+  };
+
+  /* Ajuste fino con el teclado mientras se arrastra un extremo: a raton
+     es dificil acertar el metro exacto -y menos con el perfil reducido a
+     900 puntos para pintarlo ligero, donde cada paso del raton ya salta
+     varios metros de golpe. Las flechas mueven de un punto crudo en uno
+     (Mayus+flecha, de diez en diez) sobre lo que ya senala el raton
+     (hover hace falta como ancla: sin el no hay desde donde ajustar).
+     Enter suelta el extremo ahi mismo; Escape descarta el arrastre -no
+     todo el modo edicion, que se puede volver a coger. */
+  useEffect(() => {
+    if (!editando?.extremo) return;
+    const onKeyDown = (e) => {
+      if (hover == null) return;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); setAjusteFino((v) => v - (e.shiftKey ? 10 : 1)); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); setAjusteFino((v) => v + (e.shiftKey ? 10 : 1)); }
+      else if (e.key === 'Enter') { e.preventDefault(); soltarExtremo(editando.extremo); }
+      else if (e.key === 'Escape') { e.preventDefault(); setEditando({ puerto: editando.puerto, extremo: null }); }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [editando, hover, soltarExtremo]);
 
   if (!datos) {
     return <div ref={contRef}><p className="hint">Esta salida no tiene perfil de altimetría registrado.</p></div>;
@@ -745,7 +792,7 @@ export default function Perfil({
       const cimaIdx = marcando.cimaIdx;
       const inicioIdx = inicioMarcado != null ? inicioMarcado : cimaIdx;
       if (inicioIdx < cimaIdx) {
-        setTramosManuales((arr) => [...arr, { inicio: datos.idx[inicioIdx], fin: datos.idx[cimaIdx] }]);
+        onCrearPuerto?.(datos.idx[inicioIdx], datos.idx[cimaIdx]);
       }
       setMarcando(null);
       setInicioMarcado(null);
@@ -761,28 +808,6 @@ export default function Perfil({
     if (!cercaLinea || hover == null) return;
     setMarcando({ cimaIdx: hover });
     setInicioMarcado(hover);
-  };
-
-  /* Confirma la nueva posicion (el hover actual) del extremo que se
-     estaba arrastrando, sin dejar que un extremo cruce al otro. El
-     puerto que se esta editando (editando.puerto) puede ser tanto uno
-     marcado a mano -el cambio se guarda en tramosManuales, aqui mismo-
-     como uno detectado automaticamente -Entrenamientos es quien tiene
-     donde guardar ese ajuste, de ahi el callback onEditarPuerto. */
-  const soltarExtremo = (extremo) => {
-    const t = editando.puerto;
-    const nuevoValor = datos.idx[hover];
-    const nuevoInicio = extremo === 'inicio' ? nuevoValor : t.inicio;
-    const nuevoFin = extremo === 'fin' ? nuevoValor : t.fin;
-    if (nuevoInicio >= nuevoFin) { setEditando({ puerto: t, extremo: null }); return; }
-
-    if (t.manual) {
-      setTramosManuales((arr) => arr.map((tr, k) =>
-        k === t.manualIdx ? { inicio: nuevoInicio, fin: nuevoFin } : tr));
-    } else {
-      onEditarPuerto?.(t, nuevoInicio, nuevoFin);
-    }
-    setEditando({ puerto: { ...t, inicio: nuevoInicio, fin: nuevoFin }, extremo: null });
   };
 
   /* Las cajas ya traen sitio y medidas; aqui solo se marca cual esta
@@ -952,11 +977,11 @@ export default function Perfil({
               */
               const infoActiva = modo === 'relieve' || modo === 'dureza';
               const trazo = f.activo || infoActiva ? '#D14B42' : '#E0A82E';
-              /* Un marcado a mano siempre se puede editar/borrar -vive en
-                 tramosManuales, que siempre existe aqui dentro-, pero uno
-                 detectado automaticamente solo si Entrenamientos ha dado
-                 los callbacks para guardar el ajuste en alguna parte. */
-              const puedeEditar = marcado && (f.p.manual || !!(onEditarPuerto && onEliminarPuerto));
+              /* Editar/borrar hace falta que Entrenamientos de los dos
+                 callbacks -sin ellos (el resto de sitios donde se usa
+                 Perfil) ningun puerto se puede tocar, ni detectado ni
+                 manual. */
+              const puedeEditar = marcado && !!(onEditarPuerto && onEliminarPuerto);
               return (
               <g key={`f${f.i}`} pointerEvents="none">
                 {/*
@@ -993,11 +1018,12 @@ export default function Perfil({
                     tirador en cada extremo (mas abajo, junto a "marcando")-
                     en vez de preguntar nada. Lo mismo vale para uno
                     detectado automaticamente que para uno marcado a mano:
-                    la diferencia de a donde va a parar el cambio (a
-                    tramosManuales o a los ajustes del detectado) la decide
-                    Entrenamientos dentro de onEditarPuerto/onEliminarPuerto,
-                    no esto. Mientras se esta dibujando un tramo nuevo
-                    (marcando) no se puede abrir edicion a la vez.
+                    la diferencia de a donde va a parar el cambio (al
+                    catalogo de segmentos manuales o a los ajustes del
+                    detectado) la decide Entrenamientos dentro de
+                    onEditarPuerto/onEliminarPuerto, no esto. Mientras se
+                    esta dibujando un tramo nuevo (marcando) no se puede
+                    abrir edicion a la vez.
                   */
                   onContextMenu={puedeEditar
                     ? (e) => { e.preventDefault(); if (!marcando) setEditando({ puerto: f.p, extremo: null }); }
@@ -1167,12 +1193,12 @@ export default function Perfil({
         )}
 
         {/*
-          TEMPORAL: marcado manual. Mientras se arrastra hacia atras se
-          pinta en rojo (el mismo tramo, en progreso, y el mismo color que
-          ya se usa para resaltar el puerto activo en modo "Informacion");
-          en cuanto se confirma con el segundo clic pasa a la lista
-          tramosManuales y se repinta como un puerto normal (amarillo, con
-          su ficha de categoria y distancia). El icono de montana marca la
+          Marcado manual. Mientras se arrastra hacia atras se pinta en rojo
+          (el mismo tramo, en progreso, y el mismo color que ya se usa para
+          resaltar el puerto activo en modo "Informacion"); en cuanto se
+          confirma con el segundo clic, onCrearPuerto lo sube a Entrenamientos
+          y vuelve aqui repintado como un puerto normal (amarillo, con su
+          ficha de categoria y distancia). El icono de montana marca la
           cima fijada mientras se dibuja.
         */}
         {marcado && marcando && (() => {
@@ -1207,21 +1233,36 @@ export default function Perfil({
           const t = editando.puerto;
           const extremo = editando.extremo;
 
-          /* Mientras se arrastra un extremo, su posicion en pantalla es
-             el punto que sigue el cursor ahora mismo (hover), no la
-             guardada -asi el tramo se ve moverse en vivo. Los dos
-             extremos no pueden cruzarse. */
+          /* "a"/"b" (indices reducidos) siguen sirviendo para el area y la
+             linea de relleno -no hace falta mas precision que un punto
+             del dibujo para eso-, pero el TIRADOR que se esta arrastrando
+             se dibuja aparte, en su posicion exacta sin reducir
+             (inicioRawFino/finRawFino): redondear la marca al punto
+             reducido mas cercano escondia el ajuste fino del teclado
+             entero mientras no llegara a cruzar al siguiente punto del
+             perfil (~9 posiciones crudas de un salto en una salida
+             larga). Los dos extremos no pueden cruzarse. */
           let a = mapear(t.inicio), b = mapear(t.fin);
-          if (extremo === 'inicio' && hover != null) a = Math.min(hover, b - 1);
-          if (extremo === 'fin' && hover != null) b = Math.max(hover, a + 1);
+          let inicioRawFino = t.inicio, finRawFino = t.fin;
+          if (hover != null) {
+            const maxIdx = datos.idx[datos.idx.length - 1];
+            const rawFino = Math.min(Math.max(datos.idx[hover] + ajusteFino, 0), maxIdx);
+            if (extremo === 'inicio') { inicioRawFino = Math.min(rawFino, t.fin - 1); a = Math.min(mapear(inicioRawFino), b - 1); }
+            if (extremo === 'fin') { finRawFino = Math.max(rawFino, t.inicio + 1); b = Math.max(mapear(finRawFino), a + 1); }
+          }
           if (b <= a) return null;
 
           const eliminar = (e) => {
             e.preventDefault();
-            if (t.manual) setTramosManuales((arr) => arr.filter((_, k) => k !== t.manualIdx));
-            else onEliminarPuerto?.(t);
+            onEliminarPuerto?.(t);
             setEditando(null);
           };
+
+          /* Posicion en pantalla de un indice SIN reducir, calculada
+             directamente sobre streams (no sobre datos.d/datos.a, que
+             solo tienen los ~900 puntos reducidos). */
+          const xCrudo = (i) => X(streams.distancia[i] / 1000);
+          const yCrudo = (i) => Y(streams.altitud[i]);
 
           return (
             <g>
@@ -1229,15 +1270,17 @@ export default function Perfil({
               <path d={lineaPath(a, b)} fill="none" stroke="#D14B42"
                 strokeWidth="3" strokeLinecap="round" pointerEvents="none" />
 
-              {iconoMontana(X(datos.d[b]), Y(datos.a[b]) - 14, '#D14B42', {
+              {iconoMontana(xCrudo(finRawFino), yCrudo(finRawFino) - 14, '#D14B42', {
                 onContextMenu: eliminar,
                 onClick: extremo === 'fin' ? (() => soltarExtremo('fin'))
                   : extremo == null ? (() => setEditando({ puerto: t, extremo: 'fin' }))
                     : undefined,
-                titulo: 'Clic para mover · clic derecho para borrar',
+                titulo: extremo === 'fin'
+                  ? '← → para ajustar de metro en metro (Mayús para 10 en 10) · Intro para soltar'
+                  : 'Clic para mover · clic derecho para borrar',
               })}
 
-              <circle cx={X(datos.d[a])} cy={Y(datos.a[a])} r="6"
+              <circle cx={xCrudo(inicioRawFino)} cy={yCrudo(inicioRawFino)} r="6"
                 fill="#D14B42" stroke="#0E1116" strokeWidth="2"
                 style={{ cursor: 'pointer' }}
                 onClick={(e) => {
@@ -1245,8 +1288,26 @@ export default function Perfil({
                   if (extremo === 'inicio') soltarExtremo('inicio');
                   else if (extremo == null) setEditando({ puerto: t, extremo: 'inicio' });
                 }}>
-                <title>Arrastra para mover el pie del puerto</title>
+                <title>{extremo === 'inicio'
+                  ? '← → para ajustar de metro en metro (Mayús para 10 en 10) · Intro para soltar'
+                  : 'Arrastra para mover el pie del puerto'}</title>
               </circle>
+
+              {/* Cuanto ha movido el ajuste fino de teclado sobre lo que
+                  ya senalaba el raton -sin esto, el numero de flechas
+                  pulsadas no dice nada si no se sabe a cuantos metros
+                  equivale cada una. */}
+              {hover != null && extremo && ajusteFino !== 0 && (() => {
+                const idxActivo = extremo === 'inicio' ? inicioRawFino : finRawFino;
+                const metros = Math.round(streams.distancia[idxActivo] - streams.distancia[datos.idx[hover]]);
+                return (
+                  <text x={xCrudo(idxActivo)} y={yCrudo(idxActivo) - 26}
+                    textAnchor="middle" fontSize="11" fill="#D14B42"
+                    fontFamily="ui-monospace,Menlo,monospace" pointerEvents="none">
+                    {metros > 0 ? `+${metros} m` : `${metros} m`}
+                  </text>
+                );
+              })()}
             </g>
           );
         })()}

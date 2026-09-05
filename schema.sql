@@ -63,6 +63,23 @@ CREATE TABLE IF NOT EXISTS nombres_cima (
   UNIQUE(lat, lon, fuente)
 );
 
+-- Segmentos marcados a mano en el perfil de una salida (ver Perfil, modo "marcado").
+-- Se identifican por coordenadas, no por indices de stream de una salida concreta,
+-- para poder reconocerlos en cualquier salida futura que pase por el mismo sitio.
+-- metros es la longitud real del tramo (no la linea recta pie-cima): sirve para
+-- descartar un pie+cima que coincidan por coordenadas pero por un camino distinto
+-- (ver encontrarSegmentoManual en lib/metrics.js).
+-- Sin athlete_id: como nombres_cima, es un dato de un solo ciclista.
+CREATE TABLE IF NOT EXISTS segmentos_manuales (
+  id VARCHAR(40) PRIMARY KEY,
+  nombre VARCHAR(255),
+  lat_inicio NUMERIC NOT NULL,
+  lon_inicio NUMERIC NOT NULL,
+  lat_fin NUMERIC NOT NULL,
+  lon_fin NUMERIC NOT NULL,
+  metros NUMERIC
+);
+
 -- Tabla de logros/achievements
 CREATE TABLE IF NOT EXISTS logros (
   id SERIAL PRIMARY KEY,
