@@ -9,6 +9,7 @@ import Ascensiones from './Ascensiones';
 import Evolucion from './Evolucion';
 import Rutas from './Rutas';
 import AnalizadorGPX from './AnalizadorGPX';
+import Amigos from './Amigos';
 import Logros, { TopLogros, calcularLogros, PopupLogrosActualizados } from './Logros';
 import UltimosDias from './UltimosDias';
 import { Flecha, ThOrden, ordenarPor } from './Tablas';
@@ -606,6 +607,8 @@ export default function Dashboard({ atleta }) {
 
       {pestana === 'logros' && <Logros salidas={historicas} cache={cache} cfg={cfg} atleta={atleta}
         refTerreno={refTerreno} splits={splits} />}
+
+      {pestana === 'amigos' && <Amigos />}
 
     </div>
     </Layout>

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import {
   IcoResumen, IcoDatos, IcoActividades, IcoAscensiones,
-  IcoCarga, IcoObjetivos, IcoRutas, IcoGPX, IcoLogros, IcoMenu, IcoCerrar,
+  IcoCarga, IcoObjetivos, IcoRutas, IcoGPX, IcoLogros, IcoComunidad, IcoMenu, IcoCerrar,
 } from './Iconos';
 
 export const SECCIONES = [
@@ -16,6 +16,7 @@ export const SECCIONES = [
   ['rutas', 'Rutas', IcoRutas],
   ['analizador', 'Analizar GPX', IcoGPX],
   ['logros', 'Logros', IcoLogros],
+  ['amigos', 'Amigos', IcoComunidad],
 ];
 
 /*

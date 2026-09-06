@@ -28,6 +28,16 @@ CREATE TABLE IF NOT EXISTS salidas (
   logros_strava INTEGER
 );
 
+-- Atletas que han conectado su Strava alguna vez. Se rellena en el login
+-- (registrarAtleta en lib/repo.js): el nombre de cada ciclista vive si no
+-- solo en su cookie de sesion. De aqui sale la lista de la pestana
+-- "Amigos", donde se comparan resultados entre ciclistas conectados
+-- -pool abierto, sin solicitudes: quien conecta es comparable con el resto.
+CREATE TABLE IF NOT EXISTS atletas (
+  id BIGINT PRIMARY KEY,
+  nombre VARCHAR(255)
+);
+
 -- Tabla de streams (datos del sensor: distancia, altitud, FC, etc.)
 -- Los datos se guardan como arrays JSON
 CREATE TABLE IF NOT EXISTS streams (
@@ -79,6 +89,36 @@ CREATE TABLE IF NOT EXISTS segmentos_manuales (
 -- Anadir la columna a bases de datos que ya tenian la tabla creada sin ella
 -- (CREATE TABLE IF NOT EXISTS no la habria tocado). Es un no-op si ya existe.
 ALTER TABLE segmentos_manuales ADD COLUMN IF NOT EXISTS nombre_vertiente VARCHAR(255);
+
+-- "actualizado" es la version del catalogo: se pone a now() al crear o editar
+-- un segmento. La sincronizacion re-escanea contra puertos_hechos toda salida
+-- cuyo streams.puertos_calc sea anterior a MAX(actualizado). Borrar un segmento
+-- no exige re-escaneo: sus filas de puertos_hechos caen por ON DELETE CASCADE.
+ALTER TABLE segmentos_manuales ADD COLUMN IF NOT EXISTS actualizado TIMESTAMP NOT NULL DEFAULT now();
+
+-- Marca de que salida ya tiene calculados sus puertos_hechos, y contra que
+-- version del catalogo (ver segmentos_manuales.actualizado). NULL = nunca.
+ALTER TABLE streams ADD COLUMN IF NOT EXISTS puertos_calc TIMESTAMP;
+
+-- Cada paso de una salida por un segmento marcado a mano, ya medido: para
+-- comparar tiempos y VAM entre ciclistas en la pestana "Amigos" sin volver a
+-- tocar los streams (que son enormes). Lo llena /api/sync. inicio va en la
+-- clave para que las repeticiones dentro de una misma salida (series,
+-- intervalos en la misma cuesta) cuenten cada una por separado.
+CREATE TABLE IF NOT EXISTS puertos_hechos (
+  athlete_id BIGINT NOT NULL,
+  segmento_id VARCHAR(40) NOT NULL REFERENCES segmentos_manuales(id) ON DELETE CASCADE,
+  salida_id BIGINT NOT NULL REFERENCES salidas(id) ON DELETE CASCADE,
+  inicio INTEGER NOT NULL,
+  fecha TIMESTAMP NOT NULL,
+  segundos INTEGER,
+  vam NUMERIC,
+  desnivel NUMERIC,
+  metros NUMERIC,
+  PRIMARY KEY (salida_id, segmento_id, inicio)
+);
+CREATE INDEX IF NOT EXISTS idx_puertos_hechos_athlete ON puertos_hechos(athlete_id);
+CREATE INDEX IF NOT EXISTS idx_puertos_hechos_segmento ON puertos_hechos(segmento_id);
 
 -- Tabla de logros/achievements
 CREATE TABLE IF NOT EXISTS logros (

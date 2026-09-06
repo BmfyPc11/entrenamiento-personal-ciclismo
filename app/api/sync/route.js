@@ -3,8 +3,10 @@ import { leerSesion, traerActividades, traerStreams, cercaDelLimite } from '@/li
 import {
 	guardarSalidas, guardarStreams, obtenerIdsConStreams, obtenerPersonasConocidas,
 	guardarSplits, obtenerIdsConSplits, obtenerStreams,
+	listarSegmentosManuales, fingerprintCatalogo, obtenerIdsPuertosAlDia, guardarPuertosHechos,
+	registrarAtleta,
 } from '@/lib/repo';
-import { calcularSplits } from '@/lib/metrics';
+import { calcularSplits, medirSegmentosManualesEnSalida } from '@/lib/metrics';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +14,11 @@ export async function POST() {
 	const s = leerSesion();
 	if (!s) return NextResponse.json({ error: 'sin_sesion' }, { status: 401 });
 	const athleteId = s.atleta?.id;
+
+	/* Registrar al atleta en cada sync (no solo en el login OAuth): asi
+	   quien ya tenia la sesion abierta antes de que existiera la tabla
+	   "atletas" aparece en la pestana Amigos sin tener que reconectar. */
+	try { await registrarAtleta(s.atleta); } catch {}
 
 	const conocidas = await obtenerPersonasConocidas(athleteId);
 	const { salidas, error } = await traerActividades(5, conocidas);
@@ -28,6 +35,11 @@ export async function POST() {
 	  Strava corta la tanda a medias, lo que se quede sin sincronizar sea
 	  lo mas viejo y no lo ultimo que ha subido el usuario.
 	*/
+	/* Catalogo de segmentos manuales y su version, para medir los puertos de
+	   cada salida (ver puertos_hechos en schema.sql). Se leen una vez. */
+	const definicionesSegmentos = await listarSegmentosManuales();
+	const fpPuertos = await fingerprintCatalogo();
+
 	const idsConStreams = await obtenerIdsConStreams(athleteId);
 	const pendientes = salidas.filter((salida) => !idsConStreams.has(salida.id)).reverse();
 
@@ -39,20 +51,32 @@ export async function POST() {
 		if (r.streams) {
 			await guardarStreams(salida.id, r.streams);
 			await guardarSplits(salida.id, calcularSplits(r.streams));
+			await guardarPuertosHechos(salida.id, fpPuertos,
+				medirSegmentosManualesEnSalida(r.streams, definicionesSegmentos));
 		}
 	}
 
 	/*
-	  Backfill de splits para salidas que ya tenian streams guardados de
-	  antes de que este calculo existiera. Es lectura/escritura local en
-	  Postgres, sin llamar a Strava, asi que no compite con el limite de
-	  la API y puede procesar todo el historico pendiente de una vez.
+	  Backfill sobre salidas que ya tenian streams guardados: splits que
+	  faltan (de antes de que ese calculo existiera) y puertos_hechos que no
+	  estan al dia con la version actual del catalogo (segmento nuevo o
+	  editado). Es lectura/escritura local en Postgres, sin llamar a Strava,
+	  asi que no compite con el limite de la API. Un solo recorrido, con una
+	  sola lectura de streams por salida.
 	*/
 	const idsConSplits = await obtenerIdsConSplits(athleteId);
-	const faltanSplits = [...idsConStreams].filter((id) => !idsConSplits.has(id));
-	for (const id of faltanSplits) {
+	const idsPuertosAlDia = await obtenerIdsPuertosAlDia(athleteId, fpPuertos);
+	for (const id of idsConStreams) {
+		const faltaSplits = !idsConSplits.has(id);
+		const faltaPuertos = !idsPuertosAlDia.has(id);
+		if (!faltaSplits && !faltaPuertos) continue;
 		const streams = await obtenerStreams(id);
-		if (streams) await guardarSplits(id, calcularSplits(streams));
+		if (!streams) continue;
+		if (faltaSplits) await guardarSplits(id, calcularSplits(streams));
+		if (faltaPuertos) {
+			await guardarPuertosHechos(id, fpPuertos,
+				medirSegmentosManualesEnSalida(streams, definicionesSegmentos));
+		}
 	}
 
 	return NextResponse.json({
