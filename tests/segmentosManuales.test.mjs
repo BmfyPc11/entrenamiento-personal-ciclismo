@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   encontrarSegmentoManual, encontrarTodosLosSegmentosManuales,
   encontrarTodosLosSegmentosManualesEnSalida, recogerSegmentosManuales,
-  descartarSolapados, agruparAscensiones,
+  nombreSegmentoQueComparteExtremo, descartarSolapados, agruparAscensiones,
 } from '../lib/metrics.js';
 
 /*
@@ -281,6 +281,49 @@ test('recogerSegmentosManuales deja vertientes con nombres distintos como grupos
   assert.equal(grupo.vertientes.length, 1);
 });
 
+/* ---------- nombreSegmentoQueComparteExtremo ---------- */
+
+test('nombreSegmentoQueComparteExtremo vincula por compartir la cima, aunque el pie sea otro', () => {
+  const st = streamsDe(rectaNorteSur(50));
+  const existente = {
+    id: 'existente', nombre: 'Puerto ya marcado',
+    latInicio: st.latlng[10][0], lonInicio: 2,
+    latFin: st.latlng[40][0], lonFin: 2,
+  };
+  const nuevo = {
+    latInicio: st.latlng[25][0], lonInicio: 2, // otro punto de partida
+    latFin: st.latlng[40][0], lonFin: 2,       // misma cima
+  };
+  const nombre = nombreSegmentoQueComparteExtremo(nuevo, [existente]);
+  assert.equal(nombre, 'Puerto ya marcado');
+});
+
+test('nombreSegmentoQueComparteExtremo no encuentra nada si ningun extremo coincide', () => {
+  const st = streamsDe(rectaNorteSur(50));
+  const existente = {
+    id: 'existente', nombre: 'Puerto ya marcado',
+    latInicio: st.latlng[10][0], lonInicio: 2,
+    latFin: st.latlng[20][0], lonFin: 2,
+  };
+  const nuevo = { latInicio: st.latlng[0][0], lonInicio: 2, latFin: st.latlng[5][0], lonFin: 2 };
+  const nombre = nombreSegmentoQueComparteExtremo(nuevo, [existente]);
+  assert.equal(nombre, null);
+});
+
+test('nombreSegmentoQueComparteExtremo no vincula solo por caer dentro de otro tramo sin compartir ningun extremo', () => {
+  const st = streamsDe(rectaNorteSur(50));
+  const existente = {
+    id: 'existente', nombre: 'Puerto ya marcado',
+    latInicio: st.latlng[10][0], lonInicio: 2,
+    latFin: st.latlng[40][0], lonFin: 2,
+  };
+  // El nuevo cae entero dentro del existente (20-30) pero no comparte ni
+  // el pie ni la cima con el.
+  const nuevo = { latInicio: st.latlng[20][0], lonInicio: 2, latFin: st.latlng[30][0], lonFin: 2 };
+  const nombre = nombreSegmentoQueComparteExtremo(nuevo, [existente]);
+  assert.equal(nombre, null);
+});
+
 test('encontrarTodosLosSegmentosManualesEnSalida descarta un tramo corto que cae entero dentro de otro mas largo de otro nombre', () => {
   const st = streamsDe(rectaNorteSur(50));
   const largo = {
@@ -510,10 +553,19 @@ test('un circuito de varias vueltas no se salta una vuelta intermedia por ruido 
     offset(13000),        // 12: lejos
   ];
   const latlng = lat.map((v) => [v, 2]);
-  const distancia = latlng.map((_, i) => i * 100);
+  /* Distancia real recorrida entre puntos consecutivos (la longitud, aqui
+     fija en 2, no cambia) -no un valor de relleno como i*100: el margen
+     de idxPrimeraPasadaCerca/idxCercanoAcotado decide "cuanto nos hemos
+     alejado" a partir de esta distancia, asi que tiene que reflejar de
+     verdad lo lejos que quedan los puntos "lejos" o el test no prueba lo
+     que dice probar. */
+  const distancia = [0];
+  for (let i = 1; i < lat.length; i++) {
+    distancia.push(distancia[i - 1] + Math.abs(lat[i] - lat[i - 1]) * metrosPorGrado);
+  }
   const streams = { latlng, distancia };
 
-  const def = { latInicio: 0, lonInicio: 2, latFin: offset(300), lonFin: 2, metros: 100 };
+  const def = { latInicio: 0, lonInicio: 2, latFin: offset(300), lonFin: 2, metros: 300 };
 
   const r = encontrarTodosLosSegmentosManuales(streams, def);
   assert.equal(r.length, 3, 'las tres vueltas tienen que reconocerse, ninguna saltada');
@@ -522,6 +574,62 @@ test('un circuito de varias vueltas no se salta una vuelta intermedia por ruido 
     { inicio: 5, fin: 6 },
     { inicio: 9, fin: 10 },
   ]);
+});
+
+/*
+  El bug real reportado (segunda vez): una vertiente corta que empieza a
+  media subida de otra mas larga y comparte con ella la cima -el caso de
+  "Tir de Montjuic" dentro de "Alt de Montjuic"- no se reconocia en las
+  salidas que subian la vertiente larga entera, aunque pasaran
+  fisicamente por las coordenadas exactas de la corta.
+
+  La causa: la carretera roza el radio del pie de la corta dos veces
+  seguidas -una curva que se acerca, se aleja un poco, y vuelve a
+  acercarse mas- y idxPrimeraPasadaCerca se quedaba con el primer roce
+  (mas lejos) en vez del segundo (mas cerca), alargando el tramo
+  detectado lo bastante para que la comprobacion de longitud lo
+  descartase entero.
+*/
+test('una vertiente corta que empieza a media subida de otra se reconoce aunque la carretera roce su pie dos veces antes de asentarse', () => {
+  const metrosPorGrado = 111320;
+  const norte = (metros) => metros / metrosPorGrado;
+  const este = (metros) => metros / (metrosPorGrado * Math.cos(0));
+
+  // Ruta real: sube derecha hacia el norte, con un pequeno rodeo hacia el
+  // este justo al pasar por el pie de la vertiente corta (indices 2-4)
+  // antes de volver a la linea recta.
+  const puntos = [
+    [0, 2],                                   // 0: pie de la vertiente larga
+    [norte(500), 2],                          // 1
+    [norte(1000), 2 + este(90)],              // 2: roza el pie de la corta a 90 m (dentro del radio, pero no es el punto real)
+    [norte(1050), 2 + este(150)],             // 3: se aleja (fuera del radio)
+    [norte(1020), 2 + este(5)],               // 4: vuelve a acercarse, esta vez a solo unos metros -el punto real
+    [norte(1500), 2],                         // 5
+    [norte(2000), 2],                         // 6: cima, compartida por las dos vertientes
+  ];
+  const latlng = puntos.map((p) => [p[0], p[1]]);
+  const distancia = [0];
+  for (let i = 1; i < puntos.length; i++) {
+    const dLat = (puntos[i][0] - puntos[i - 1][0]) * metrosPorGrado;
+    const dLon = (puntos[i][1] - puntos[i - 1][1]) * metrosPorGrado * Math.cos(0);
+    distancia.push(distancia[i - 1] + Math.hypot(dLat, dLon));
+  }
+  const streams = { latlng, distancia };
+
+  const larga = { latInicio: 0, lonInicio: 2, latFin: norte(2000), lonFin: 2, metros: distancia[6] };
+  const corta = {
+    latInicio: norte(1020), lonInicio: 2 + este(5), // el punto real (indice 4)
+    latFin: norte(2000), lonFin: 2,
+    metros: distancia[6] - distancia[4],
+  };
+
+  const rLarga = encontrarTodosLosSegmentosManuales(streams, larga);
+  assert.equal(rLarga.length, 1);
+  assert.deepEqual(rLarga[0], { inicio: 0, fin: 6 });
+
+  const rCorta = encontrarTodosLosSegmentosManuales(streams, corta);
+  assert.equal(rCorta.length, 1, 'la corta tiene que reconocerse tambien, no descartarse por el roce previo');
+  assert.deepEqual(rCorta[0], { inicio: 4, fin: 6 });
 });
 
 test('recogerSegmentosManuales cuenta cada repeticion de la misma salida como un intento', () => {

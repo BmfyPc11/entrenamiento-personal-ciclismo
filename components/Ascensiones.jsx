@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState } from 'react';
 import PerfilPuerto from './PerfilPuerto';
 import { recogerSegmentosManuales, vatiosPuerto, num, duracion, fechaCorta, categoriaPuerto } from '@/lib/metrics';
-import { useSegmentosManuales, actualizarSegmentoManual, eliminarSegmentoManual } from '@/lib/segmentosManualesCache';
+import { useSegmentosManuales, actualizarSegmentoManual } from '@/lib/segmentosManualesCache';
 
 export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, pedirStreams }) {
   const [cargando, setCargando] = useState(false);
@@ -40,13 +40,6 @@ export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, ped
     setDefinicionesSegmentos((prev) => prev.map((d) => (idsGrupo.has(d.id) ? { ...d, nombre } : d)));
     idsGrupo.forEach((id) => actualizarSegmentoManual(id, { nombre }));
     setEditandoSegmento(null);
-  };
-
-  const borrarGrupo = (g) => {
-    const idsGrupo = new Set(g.vertientes.map((v) => v.id));
-    setDefinicionesSegmentos((prev) => prev.filter((d) => !idsGrupo.has(d.id)));
-    idsGrupo.forEach((id) => eliminarSegmentoManual(id));
-    if (abiertoSegmento === g.id) setAbiertoSegmento(null);
   };
 
   /* El nombre propio de UNA vertiente (no el del grupo, que es lo que la
@@ -288,19 +281,24 @@ export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, ped
             <table>
               <thead>
                 <tr>
-                  <th>Nombre</th><th>Km</th><th>% Med</th><th>Desnivel</th>
-                  <th>Veces</th><th>Mejor tiempo</th>
+                  <th>Nombre</th><th>Km</th><th>% Med</th><th>% Max</th><th>Desnivel</th>
+                  <th>Coef. Dif.</th>
                 </tr>
               </thead>
               <tbody>
-                {gruposSegmentos.map((g) => {
-                  if (!g.mejor) return null; // sin ningun intento reconocido todavia
+                {gruposSegmentos
+                  .filter((g) => g.mejor) // sin ningun intento reconocido todavia
+                  /* Por defecto, de mas a menos dificil -mismo coeficiente
+                     que decide la categoria (km x % medio al cuadrado),
+                     calculado sobre la vertiente principal de cada grupo. */
+                  .map((g) => ({ g, c: categoriaPuerto(g.principal.metros, g.principal.pendiente) }))
+                  .sort((a, b) => b.c.coef - a.c.coef)
+                  .map(({ g, c }) => {
                   /* La fila principal describe la vertiente principal -la
                      mas usada, ver recogerSegmentosManuales- no la del
                      mejor tiempo (g.mejor), que puede ser una vertiente
                      distinta y mucho menos habitual. */
                   const p = g.principal;
-                  const c = categoriaPuerto(p.metros, p.pendiente);
                   const abiertoEste = abiertoSegmento === g.id;
                   return (
                     <Fragment key={g.id}>
@@ -352,18 +350,9 @@ export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, ped
                       </td>
                       <td>{num(p.metros / 1000, 2)} km</td>
                       <td><strong>{num(p.pendiente, 1)} %</strong></td>
+                      <td>{num(p.pendienteMax, 1)} %</td>
                       <td>+{num(p.desnivel, 0)} m</td>
-                      <td>{g.veces}</td>
-                      <td>
-                        {p.segundos ? duracion(p.segundos) : '—'}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); borrarGrupo(g); }}
-                          title="Borrar este segmento"
-                          style={{ marginLeft: 10, padding: '2px 7px', border: 'none',
-                            background: 'transparent', color: 'var(--ink3)' }}>
-                          ✕
-                        </button>
-                      </td>
+                      <td>{num(c.coef, 0)}</td>
                     </tr>
 
                     {abiertoEste && detalleSegmento(g)}

@@ -6,7 +6,7 @@ import Mapa from './Mapa';
 import PerfilPuerto from './PerfilPuerto';
 import { IcoExpandir, IcoCerrar, IcoActividades, IcoFlecha, IcoMapa, IcoBuscar } from './Iconos';
 import {
-  construirPuerto, encontrarTodosLosSegmentosManualesEnSalida,
+  construirPuerto, encontrarTodosLosSegmentosManualesEnSalida, nombreSegmentoQueComparteExtremo,
   repartoZonas, repartoDureza, repartoVelocidad, valorarEntrenamiento,
   TRAMOS_DUREZA, TRAMOS_VELOCIDAD, vatiosPuerto, vatiosSalida, categoriaPuerto,
   num, duracion, fechaLarga, fechaDDMMAA, kmh, km, metrosPorKm, tipoRuta, TIPO_INSIGNIA,
@@ -223,13 +223,26 @@ export default function Entrenamientos({
      pase por el mismo sitio (ver encontrarSegmentoManual en lib/metrics).
      metros (la longitud real de este tramo) viaja con la definicion para
      que esa misma funcion pueda descartar un pie+cima que coincidan de
-     casualidad pero por un camino de otra longitud. */
+     casualidad pero por un camino de otra longitud.
+
+     Si el pie o la cima del tramo dibujado coincide con el de otro
+     segmento YA existente en el catalogo entero -la misma cima vista
+     desde otro punto de partida, esta misma subida vuelta a marcar en
+     otra salida- el nuevo segmento nace ya con ese nombre: queda
+     vinculado como otra vertiente (ver recogerSegmentosManuales) sin
+     tener que renombrarlo a mano para juntarlo. No hace falta que ese
+     otro segmento se reconozca tambien en esta salida -se compara por
+     coordenadas contra todo el catalogo, no contra lo que aqui se vea. */
   const crearSegmentoManual = (inicioIdx, finIdx) => {
     const a = streams?.latlng?.[inicioIdx], b = streams?.latlng?.[finIdx];
     if (!a || !b) return;
+    const nombreVinculado = nombreSegmentoQueComparteExtremo(
+      { latInicio: a[0], lonInicio: a[1], latFin: b[0], lonFin: b[1] },
+      definicionesSegmentos
+    );
     const nueva = {
       id: crypto.randomUUID(),
-      nombre: `Segmento ${definicionesSegmentos.length + 1}`,
+      nombre: nombreVinculado || `Segmento ${definicionesSegmentos.length + 1}`,
       latInicio: a[0], lonInicio: a[1],
       latFin: b[0], lonFin: b[1],
       metros: streams.distancia[finIdx] - streams.distancia[inicioIdx],
@@ -249,7 +262,7 @@ export default function Entrenamientos({
     return rangosManuales
       .map(({ inicio, fin, def }) => {
         const p = construirPuerto(streams, inicio, fin);
-        return p ? { ...p, manual: true, manualId: def.id, nombreManual: def.nombre } : null;
+        return p ? { ...p, manual: true, manualId: def.id, nombreManual: def.nombre, nombreVertiente: def.nombreVertiente } : null;
       })
       .filter(Boolean)
       .sort((a, b) => a.kmInicio - b.kmInicio);
@@ -266,12 +279,42 @@ export default function Entrenamientos({
 
   /* ---------- nombres de los segmentos ---------- */
 
+  /* Todas las definiciones que comparten nombre (recortado de espacios)
+     -las vertientes de una misma subida, ver recogerSegmentosManuales-
+     agrupadas en el orden en que se crearon: hace falta para saber, mas
+     abajo, si un puerto tiene mas de una vertiente y que numero le toca
+     por defecto si no tiene nombre propio. */
+  const vertientesPorNombre = useMemo(() => {
+    const m = new Map();
+    for (const def of definicionesSegmentos) {
+      const clave = def.nombre?.trim() || def.id;
+      if (!m.has(clave)) m.set(clave, []);
+      m.get(clave).push(def);
+    }
+    return m;
+  }, [definicionesSegmentos]);
+
   /* Todo puerto es manual ahora: su nombre viene siempre del catalogo de
      segmentos manuales -el mismo que se ve y se edita en "Mis
-     segmentos"-, sin sistema de nombrado automatico de por medio. */
+     segmentos"-, sin sistema de nombrado automatico de por medio.
+
+     Si tiene mas de una vertiente vinculada, se le anade entre parentesis
+     el nombre de esta vertiente en concreto -su etiqueta propia
+     (nombreVertiente) o, si no tiene, "Vertiente N" por su orden de
+     creacion, igual que en el selector de Ascensiones.jsx- para poder
+     distinguir de un vistazo cual de las vertientes es esta sin tener
+     que abrir "Mis ascensiones". Con una sola vertiente no hace falta
+     desambiguar nada, asi que se deja el nombre tal cual. */
   const nombresPuertos = useMemo(
-    () => puertosTabla.map((p, i) => p.nombreManual || `Segmento ${i + 1}`),
-    [puertosTabla]
+    () => puertosTabla.map((p, i) => {
+      const base = p.nombreManual || `Segmento ${i + 1}`;
+      const vertientes = vertientesPorNombre.get(p.nombreManual?.trim() || p.manualId);
+      if (!vertientes || vertientes.length < 2) return base;
+      const indiceOriginal = vertientes.findIndex((d) => d.id === p.manualId);
+      const etiqueta = p.nombreVertiente || `Vertiente ${indiceOriginal + 1}`;
+      return `${base} (${etiqueta})`;
+    }),
+    [puertosTabla, vertientesPorNombre]
   );
 
   /* ---------- renombrado, igual que en Mis segmentos ---------- */
