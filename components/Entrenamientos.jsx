@@ -11,10 +11,7 @@ import {
   TRAMOS_DUREZA, TRAMOS_VELOCIDAD, vatiosPuerto, vatiosSalida, categoriaPuerto,
   num, duracion, fechaLarga, fechaDDMMAA, kmh, km, metrosPorKm, tipoRuta, TIPO_INSIGNIA,
 } from '@/lib/metrics';
-import {
-  useSegmentosManuales, crearSegmentoManual as crearSegmentoManualEnServidor,
-  actualizarSegmentoManual, eliminarSegmentoManual,
-} from '@/lib/segmentosManualesCache';
+import { useSegmentosManuales, guardarSegmentosManuales } from '@/lib/segmentosManualesCache';
 
 export default function Entrenamientos({
   salidas, cfg, zonas, umbral, cache, pedirStreams,
@@ -207,13 +204,16 @@ export default function Entrenamientos({
     const a = streams?.latlng?.[nuevoInicio], b = streams?.latlng?.[nuevoFin];
     if (!a || !b) return;
     const metros = streams.distancia[nuevoFin] - streams.distancia[nuevoInicio];
-    const cambios = { latInicio: a[0], lonInicio: a[1], latFin: b[0], lonFin: b[1], metros };
-    setDefinicionesSegmentos((prev) => prev.map((d) => (d.id === p.manualId ? { ...d, ...cambios } : d)));
-    actualizarSegmentoManual(p.manualId, cambios);
+    const actualizadas = definicionesSegmentos.map((d) => (d.id === p.manualId
+      ? { ...d, latInicio: a[0], lonInicio: a[1], latFin: b[0], lonFin: b[1], metros }
+      : d));
+    setDefinicionesSegmentos(actualizadas);
+    guardarSegmentosManuales(actualizadas);
   };
   const eliminarPuerto = (p) => {
-    setDefinicionesSegmentos((prev) => prev.filter((d) => d.id !== p.manualId));
-    eliminarSegmentoManual(p.manualId);
+    const actualizadas = definicionesSegmentos.filter((d) => d.id !== p.manualId);
+    setDefinicionesSegmentos(actualizadas);
+    guardarSegmentosManuales(actualizadas);
   };
 
   /* Da de alta un segmento nuevo en el catalogo, a partir del tramo recien
@@ -234,8 +234,9 @@ export default function Entrenamientos({
       latFin: b[0], lonFin: b[1],
       metros: streams.distancia[finIdx] - streams.distancia[inicioIdx],
     };
-    setDefinicionesSegmentos((prev) => [...prev, nueva]);
-    crearSegmentoManualEnServidor(nueva);
+    const actualizadas = [...definicionesSegmentos, nueva];
+    setDefinicionesSegmentos(actualizadas);
+    guardarSegmentosManuales(actualizadas);
   };
 
   /* Los mismos calculos que un puerto detectado antes (metros, pendiente,
@@ -285,20 +286,16 @@ export default function Entrenamientos({
      nombre nuevo en vez de partirse en dos. Misma logica que
      renombrarGrupo en Ascensiones.jsx. */
   const renombrarPuerto = (defId, nombre) => {
-    let idsAfectados = [];
-    setDefinicionesSegmentos((prev) => {
-      const def = prev.find((d) => d.id === defId);
-      if (!def) return prev;
-      const nombreActual = def.nombre?.trim();
-      idsAfectados = prev
-        .filter((d) => d.id === defId || (nombreActual && d.nombre?.trim() === nombreActual))
-        .map((d) => d.id);
-      return prev.map((d) => (idsAfectados.includes(d.id) ? { ...d, nombre } : d));
-    });
-    /* El updater de arriba corre sincronamente (React solo difiere el
-       re-render, no la llamada), asi que idsAfectados ya esta relleno
-       aqui abajo. */
-    idsAfectados.forEach((id) => actualizarSegmentoManual(id, { nombre }));
+    const def = definicionesSegmentos.find((d) => d.id === defId);
+    if (!def) return;
+    const nombreActual = def.nombre?.trim();
+    const actualizadas = definicionesSegmentos.map((d) =>
+      (d.id === defId || (nombreActual && d.nombre?.trim() === nombreActual))
+        ? { ...d, nombre }
+        : d
+    );
+    setDefinicionesSegmentos(actualizadas);
+    guardarSegmentosManuales(actualizadas);
   };
 
   /* Vacio se queda con el nombre que ya tenia -no hay nada a lo que
