@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { leerSesion, traerActividades, traerStreams, traerSegmentos, cercaDelLimite } from '@/lib/strava';
+import { leerSesion, traerActividades, traerStreams, cercaDelLimite } from '@/lib/strava';
 import {
-	guardarSalidas, guardarStreams, guardarSegmentos, obtenerIdsConStreams, obtenerPersonasConocidas,
+	guardarSalidas, guardarStreams, obtenerIdsConStreams, obtenerPersonasConocidas,
 	guardarSplits, obtenerIdsConSplits, obtenerStreams,
 } from '@/lib/repo';
 import { calcularSplits } from '@/lib/metrics';
@@ -20,10 +20,10 @@ export async function POST() {
 	await guardarSalidas(salidas, athleteId);
 
 	/*
-	  El detalle (streams + segmentos) solo se pide de lo que todavia no lo
-	  tiene guardado: son datos que no cambian una vez terminada la salida,
-	  asi que releerlos en cada sincronizacion era trabajo tirado -y lo que
-	  de verdad hacia lenta la sincronizacion cuanto mas historico habia.
+	  El detalle (streams) solo se pide de lo que todavia no lo tiene
+	  guardado: son datos que no cambian una vez terminada la salida, asi
+	  que releerlos en cada sincronizacion era trabajo tirado -y lo que de
+	  verdad hacia lenta la sincronizacion cuanto mas historico habia.
 	  Se procesan de mas reciente a mas antigua para que, si el limite de
 	  Strava corta la tanda a medias, lo que se quede sin sincronizar sea
 	  lo mas viejo y no lo ultimo que ha subido el usuario.
@@ -40,8 +40,6 @@ export async function POST() {
 			await guardarStreams(salida.id, r.streams);
 			await guardarSplits(salida.id, calcularSplits(r.streams));
 		}
-		const rs = await traerSegmentos(salida.id);
-		if (rs.segmentos) await guardarSegmentos(salida.id, rs.segmentos);
 	}
 
 	/*

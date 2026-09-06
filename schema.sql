@@ -42,26 +42,14 @@ CREATE TABLE IF NOT EXISTS streams (
   latlng JSONB
 );
 
--- Tabla de segmentos (puertos/climbs detectados en Strava)
-CREATE TABLE IF NOT EXISTS segmentos (
-  id SERIAL PRIMARY KEY,
-  salida_id BIGINT NOT NULL REFERENCES salidas(id) ON DELETE CASCADE,
-  nombre VARCHAR(255),
-  inicio INTEGER,
-  fin INTEGER,
-  categoria INTEGER
-);
-
--- Tabla de nombres manuales de cimas
--- Sirve para cache de nombres que el usuario ha editado manualmente
-CREATE TABLE IF NOT EXISTS nombres_cima (
-  id SERIAL PRIMARY KEY,
-  lat NUMERIC NOT NULL,
-  lon NUMERIC NOT NULL,
-  nombre VARCHAR(255),
-  fuente VARCHAR(50), -- 'manual', 'strava', 'osm'
-  UNIQUE(lat, lon, fuente)
-);
+-- Dos tablas retiradas en 2026-09, al pasar el nombrado de puertos a una
+-- unica fuente -el catalogo de segmentos_manuales, cruzado por coordenadas,
+-- la misma que usa el perfil de una salida real- sin servicios externos:
+--   segmentos     -> puertos detectados en Strava (segment_efforts); se
+--                    escribian en cada sync pero ya nadie los leia.
+--   nombres_cima  -> cache de nombres de cima via OpenStreetMap/Overpass.
+DROP TABLE IF EXISTS segmentos;
+DROP TABLE IF EXISTS nombres_cima;
 
 -- Segmentos marcados a mano en el perfil de una salida (ver Perfil, modo "marcado").
 -- Se identifican por coordenadas, no por indices de stream de una salida concreta,
@@ -76,7 +64,7 @@ CREATE TABLE IF NOT EXISTS nombres_cima (
 -- "Corta" o "Por el norte"), para distinguirlas en el selector de Ascensiones.jsx
 -- ya que todas comparten el mismo "nombre". Sin ella se etiquetan solas por su
 -- longitud.
--- Sin athlete_id: como nombres_cima, es un dato de un solo ciclista.
+-- Sin athlete_id: es un dato de un solo ciclista, no por atleta.
 CREATE TABLE IF NOT EXISTS segmentos_manuales (
   id VARCHAR(40) PRIMARY KEY,
   nombre VARCHAR(255),
@@ -103,5 +91,3 @@ CREATE TABLE IF NOT EXISTS logros (
 -- Índices para búsquedas frecuentes
 CREATE INDEX IF NOT EXISTS idx_salidas_athlete_id ON salidas(athlete_id);
 CREATE INDEX IF NOT EXISTS idx_salidas_fecha ON salidas(fecha);
-CREATE INDEX IF NOT EXISTS idx_segmentos_salida_id ON segmentos(salida_id);
-CREATE INDEX IF NOT EXISTS idx_nombres_cima_location ON nombres_cima(lat, lon);

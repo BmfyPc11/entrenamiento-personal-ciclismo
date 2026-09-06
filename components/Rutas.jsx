@@ -4,13 +4,12 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import Perfil from './Perfil';
 import PerfilPuerto from './PerfilPuerto';
 import { ThOrden, ordenarPor } from './Tablas';
-import { parseGPX, referenciasCiclista, analizarRuta } from '@/lib/gpx';
+import { parseGPX, referenciasCiclista, analizarRuta, nombrarPuertosRuta } from '@/lib/gpx';
 import {
   distanciaEquivalente, nivelDificultad, TRAMOS_DUREZA, num, categoriaPuerto,
   tipoRuta, TIPO_INSIGNIA,
 } from '@/lib/metrics';
-import { buscarNombre, guardarNombre } from '@/lib/nombres';
-import { useCacheNombres, escribirCache } from '@/lib/nombresCache';
+import { useSegmentosManuales } from '@/lib/segmentosManualesCache';
 
 /*
   Traduce el codigo de error del servidor a algo accionable.
@@ -286,48 +285,18 @@ function DetalleRuta({ ruta, datos, cargando, ref_, cfg, zonas }) {
     [datos, ref_, cfg]
   );
 
-  const [cacheNombres, setCacheNombres] = useCacheNombres();
-
   /*
-    Una ruta guardada no se ha rodado, asi que no hay segmentos de
-    Strava que consultar: aqui la unica fuente posible es la cima de
-    OSM. Se piden solo las de la ruta abierta y de una en una, que
-    Overpass lo mantienen voluntarios.
+    Los nombres de las subidas salen del catalogo de segmentos marcados a
+    mano (los mismos de "Tus ascensos"), cruzando por coordenadas. Lo que
+    no este marcado se queda en "Subida N". Antes esto consultaba
+    OpenStreetMap cima a cima; ver nombrarPuertosRuta en lib/gpx.js.
   */
-  useEffect(() => {
-    if (!an?.puertos?.length || !datos?.puntos) return;
-    let cancelado = false;
-
-    (async () => {
-      let nueva = cacheNombres;
-      for (const p of an.puertos) {
-        if (cancelado) break;
-        const pt = datos.puntos[p.fin];
-        if (!pt) continue;
-        const cima = [pt.lat, pt.lon];
-        if (buscarNombre(nueva, cima)) continue;
-        try {
-          const r = await fetch(
-            `/api/nombres/cima?lat=${pt.lat}&lon=${pt.lon}&alt=${Math.round(pt.ele)}`,
-            { cache: 'no-store' });
-          const j = await r.json();
-          nueva = guardarNombre(nueva, cima, j.nombre || null, 'osm');
-        } catch {
-          nueva = guardarNombre(nueva, cima, null, 'osm');
-        }
-        if (!cancelado) { setCacheNombres(nueva); escribirCache(nueva); }
-        await new Promise((r) => setTimeout(r, 1100));
-      }
-    })();
-
-    return () => { cancelado = true; };
-  }, [an, datos, cacheNombres]);
-
-  const nombrePuerto = (p, i) => {
-    const pt = datos?.puntos?.[p.fin];
-    const n = pt ? buscarNombre(cacheNombres, [pt.lat, pt.lon])?.nombre : null;
-    return n || `Subida ${i + 1}`;
-  };
+  const [definicionesSegmentos] = useSegmentosManuales();
+  const nombres = useMemo(
+    () => (an ? nombrarPuertosRuta(datos, an.puertos, definicionesSegmentos) : []),
+    [an, datos, definicionesSegmentos]
+  );
+  const nombrePuerto = (p, i) => nombres[i] || `Subida ${i + 1}`;
 
   if (cargando && !datos) return <p className="hint">Descargando el trazado de la ruta…</p>;
   if (!datos) return null;

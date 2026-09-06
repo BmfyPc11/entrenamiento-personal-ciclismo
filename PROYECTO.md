@@ -79,19 +79,17 @@ git add . && git commit -m "vX.X" && git push
 
 ## Aprendizajes clave (para no repetir errores)
 - Nominatim responde direcciones, no relieve: preguntado por cimas reales de
-  la zona acierta 1 de 4 (devuelve el distrito o el municipio). Para nombrar
-  puertos sirven los segmentos de Strava y los nodos de cima de OSM vía
-  Overpass, no la geocodificación inversa
-- Los segmentos de Strava son malos para medir un puerto pero son la mejor
-  fuente para nombrarlo: es como lo llama un ciclista. Hay que exigir que el
-  segmento sea la misma subida (intersección sobre unión) y no que la roce,
-  o un sprint de 200 m se queda con el nombre de un puerto de 4 km
+  la zona acierta 1 de 4 (devuelve el distrito o el municipio). La
+  geocodificación inversa no sirve para nombrar puertos
+- Nombrar puertos automáticamente (segmentos de Strava, nodos de cima de OSM
+  vía Overpass) se probó y se retiró en 2026-09: demasiada dependencia de
+  servicios externos que fallan, para un resultado peor que el nombre que el
+  ciclista pone él mismo. Ahora la única fuente de nombres es el catálogo de
+  segmentos marcados a mano (`segmentos_manuales`), cruzado por coordenadas,
+  y lo que no está marcado se queda en "Subida N"
 - Los identificadores de Strava son enteros de 64 bits y JSON.parse los
   redondea. Hay que entrecomillarlos en el texto antes de parsear, o dos
   rutas distintas acaban con el mismo id
-- Overpass es un servicio de voluntarios y falla a menudo (2 de cada 6
-  consultas en las pruebas). Todo lo que dependa de él tiene que degradar
-  a "Subida N" sin romperse, y cachear también los resultados negativos
 - Nunca ejecutar `npm run build` con `next dev` levantado: el build machaca
   `.next` y el servidor de desarrollo queda apuntando a chunks que ya no
   existen ("Cannot find module './948.js'"). Para verificar en caliente,

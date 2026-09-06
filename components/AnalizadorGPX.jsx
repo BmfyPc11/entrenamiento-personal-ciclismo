@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Perfil from './Perfil';
 import PerfilPuerto from './PerfilPuerto';
-import { parseGPX, referenciasCiclista, analizarRuta } from '@/lib/gpx';
+import { parseGPX, referenciasCiclista, analizarRuta, nombrarPuertosRuta } from '@/lib/gpx';
 import { TRAMOS_DUREZA, num, categoriaPuerto } from '@/lib/metrics';
-import { buscarNombre, guardarNombre } from '@/lib/nombres';
-import { useCacheNombres, escribirCache } from '@/lib/nombresCache';
+import { useSegmentosManuales } from '@/lib/segmentosManualesCache';
 
 export default function AnalizadorGPX({ salidas, cache, excluidas, cfg, zonas }) {
   const [datos, setDatos] = useState(null);
@@ -26,47 +25,18 @@ export default function AnalizadorGPX({ salidas, cache, excluidas, cfg, zonas })
     [datos, ref, cfg]
   );
 
-  const [cacheNombres, setCacheNombres] = useCacheNombres();
-
   /*
-    Un GPX subido no se ha rodado con Strava, asi que no hay segmentos
-    que consultar: la unica fuente es la cima de OSM. De una en una y
-    con pausa, porque Overpass lo mantienen voluntarios.
+    Los nombres de las subidas salen del catalogo de segmentos marcados a
+    mano (los mismos de "Tus ascensos"), cruzando por coordenadas. Lo que
+    no este marcado se queda en "Subida N". Antes esto consultaba
+    OpenStreetMap cima a cima; ver nombrarPuertosRuta en lib/gpx.js.
   */
-  useEffect(() => {
-    if (!an?.puertos?.length || !datos?.puntos) return;
-    let cancelado = false;
-
-    (async () => {
-      let nueva = cacheNombres;
-      for (const p of an.puertos) {
-        if (cancelado) break;
-        const pt = datos.puntos[p.fin];
-        if (!pt) continue;
-        const cima = [pt.lat, pt.lon];
-        if (buscarNombre(nueva, cima)) continue;
-        try {
-          const r = await fetch(
-            `/api/nombres/cima?lat=${pt.lat}&lon=${pt.lon}&alt=${Math.round(pt.ele)}`,
-            { cache: 'no-store' });
-          const j = await r.json();
-          nueva = guardarNombre(nueva, cima, j.nombre || null, 'osm');
-        } catch {
-          nueva = guardarNombre(nueva, cima, null, 'osm');
-        }
-        if (!cancelado) { setCacheNombres(nueva); escribirCache(nueva); }
-        await new Promise((r) => setTimeout(r, 1100));
-      }
-    })();
-
-    return () => { cancelado = true; };
-  }, [an, datos, cacheNombres]);
-
-  const nombrePuerto = (p, i) => {
-    const pt = datos?.puntos?.[p.fin];
-    const n = pt ? buscarNombre(cacheNombres, [pt.lat, pt.lon])?.nombre : null;
-    return n || `Subida ${i + 1}`;
-  };
+  const [definicionesSegmentos] = useSegmentosManuales();
+  const nombres = useMemo(
+    () => (an ? nombrarPuertosRuta(datos, an.puertos, definicionesSegmentos) : []),
+    [an, datos, definicionesSegmentos]
+  );
+  const nombrePuerto = (p, i) => nombres[i] || `Subida ${i + 1}`;
 
   const leer = (file) => {
     if (!file) return;
