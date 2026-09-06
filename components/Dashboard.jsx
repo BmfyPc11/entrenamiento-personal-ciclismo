@@ -16,7 +16,7 @@ import Consejo from './Consejo';
 import { IcoAviso } from './Iconos';
 import Layout, { SECCIONES } from './Layout';
 import { OBJETIVOS_INICIALES } from './objetivosLib';
-import { Linea, Barras, Carga } from './Graficos';
+import { Carga } from './Graficos';
 import {
   PERFILES_BICI, detectarPuertos, serieCarga, umbralEstimado,
   vatios, vatiosPuerto, repartoZonas, repartoGlobal,
