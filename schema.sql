@@ -69,16 +69,28 @@ CREATE TABLE IF NOT EXISTS nombres_cima (
 -- metros es la longitud real del tramo (no la linea recta pie-cima): sirve para
 -- descartar un pie+cima que coincidan por coordenadas pero por un camino distinto
 -- (ver encontrarSegmentoManual en lib/metrics.js).
+-- Dos vertientes de la misma subida (una version reducida, un desvio que llega
+-- al mismo alto por otro camino...) se vinculan solas si comparten "nombre"
+-- -no hace falta ninguna tabla ni columna aparte, ver recogerSegmentosManuales.
+-- nombre_vertiente es aparte: la etiqueta propia de ESA vertiente (por ejemplo
+-- "Corta" o "Por el norte"), para distinguirlas en el selector de Ascensiones.jsx
+-- ya que todas comparten el mismo "nombre". Sin ella se etiquetan solas por su
+-- longitud.
 -- Sin athlete_id: como nombres_cima, es un dato de un solo ciclista.
 CREATE TABLE IF NOT EXISTS segmentos_manuales (
   id VARCHAR(40) PRIMARY KEY,
   nombre VARCHAR(255),
+  nombre_vertiente VARCHAR(255),
   lat_inicio NUMERIC NOT NULL,
   lon_inicio NUMERIC NOT NULL,
   lat_fin NUMERIC NOT NULL,
   lon_fin NUMERIC NOT NULL,
   metros NUMERIC
 );
+
+-- Anadir la columna a bases de datos que ya tenian la tabla creada sin ella
+-- (CREATE TABLE IF NOT EXISTS no la habria tocado). Es un no-op si ya existe.
+ALTER TABLE segmentos_manuales ADD COLUMN IF NOT EXISTS nombre_vertiente VARCHAR(255);
 
 -- Tabla de logros/achievements
 CREATE TABLE IF NOT EXISTS logros (

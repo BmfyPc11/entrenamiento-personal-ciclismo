@@ -91,6 +91,25 @@ function mapearIdx(iOriginal, datos) {
   return mejor;
 }
 
+/* Indice del stream completo cuya distancia acumulada (streams.distancia,
+   en metros) esta mas cerca de "km" -lo contrario de mapearIdx: aqui se
+   entra con una distancia y se sale con un indice del stream ORIGINAL,
+   no del reducido. Sirve para traducir la ventana de zoom del perfil
+   (que vive en km, ver kmDesde/kmHasta) a los mismos indices que usa el
+   resto de la app (Mapa, los propios puertos). */
+function idxParaKm(streams, km) {
+  const d = streams?.distancia;
+  if (!d || !d.length) return 0;
+  const objetivo = km * 1000;
+  let mejor = 0, dif = Infinity;
+  for (let i = 0; i < d.length; i++) {
+    const dd = Math.abs(d[i] - objetivo);
+    if (dd < dif) { dif = dd; mejor = i; }
+    else if (d[i] > objetivo) break; // d es no decreciente: pasado el objetivo, ya no mejora
+  }
+  return mejor;
+}
+
 /* Insignia redonda con una montaña dentro, para marcar la cima de un
    puerto marcado a mano (ver prop `marcado` de Perfil). onClick entra
    en edicion o suelta el extremo que se este arrastrando, segun toque;
@@ -216,11 +235,28 @@ export default function Perfil({
     puerto.manual para saber donde vive ese cambio. Sin estos callbacks
     -el resto de sitios donde se usa Perfil- ningun puerto se puede
     editar ni borrar, como antes.
+
+    onVentanaEdicionChange({ inicio, fin } | null), si llega, avisa del
+    tramo (indices del stream completo) que el zoom del propio perfil deja
+    visible -null en cuanto no hay zoom aplicado. Es lo que le permite a
+    Entrenamientos, mas arriba, hacer que el mapa acerque el mismo tramo
+    (ver Mapa, prop ventanaEdicion): el perfil no sabe que existe un mapa,
+    solo informa de que trozo de recorrido esta mostrando.
+
+    mapaAbierto: el zoom del perfil (la rueda, ver mas abajo) solo hacia
+    falta mientras se editaba un tramo -para acertar el pie o la cima con
+    precision-, pero con el mapa abierto tambien sirve para explorar el
+    perfil y ver a la vez el detalle en el mapa, sin tener que entrar en
+    edicion. Con esto activo la rueda hace zoom siempre, este o no
+    editando; sin el (el resto de sitios donde se usa Perfil, o el mapa
+    cerrado) solo mientras se edita, como antes.
   */
   marcado = false,
   onCrearPuerto = null,
   onEditarPuerto = null,
   onEliminarPuerto = null,
+  onVentanaEdicionChange = null,
+  mapaAbierto = false,
 }) {
   const [hover, setHover] = useState(null);
 
@@ -252,6 +288,62 @@ export default function Perfil({
      cambien streams/criterio, aunque su inicio/fin se editen), y los
      marcados a mano manualId (su id en el catalogo de segmentos manuales). */
   const clavePuerto = (p) => (p.manual ? `m${p.manualId}` : `a${p.autoKey}`);
+
+  /*
+    Zoom del propio perfil (no el mapa), solo mientras se esta editando un
+    tramo: acercar el trazado con la rueda separa en pantalla los puntos
+    reducidos (hasta 900 para todo el recorrido, ver "datos" mas abajo)
+    que a escala completa pueden caer pegados en el mismo pixel, asi que
+    el raton por si solo no puede elegir entre ellos. El ajuste fino con
+    las flechas (ver ajusteFino) ya resuelve la precision por debajo del
+    punto reducido; esto resuelve la precision de ACERTAR ese punto con
+    el raton en primer lugar.
+
+    { escala, centroKm } o null (sin zoom, se ve el recorrido entero).
+    Se reinicia en cuanto se deja de editar o se empieza a editar OTRO
+    puerto -clavePuertoEditando, mas abajo- pero no al pasar de mover un
+    extremo a mover el otro del mismo puerto: interesa poder seguir
+    zoomado en la misma zona para los dos. Tambien se reinicia en cuanto
+    se pierde del todo la posibilidad de zoom (zoomHabilitado, mas abajo)
+    -si no, con el mapa cerrado y sin editar se quedaria zoomado sin
+    ninguna rueda que pudiera devolverlo a la vista completa.
+  */
+  const [zoomPerfil, setZoomPerfil] = useState(null);
+  const clavePuertoEditando = editando ? clavePuerto(editando.puerto) : null;
+  useEffect(() => { setZoomPerfil(null); }, [clavePuertoEditando]);
+  /* Ver el comentario de la prop mapaAbierto: la rueda hace zoom en el
+     perfil mientras se edita un tramo (siempre valido) o, sin editar,
+     mientras el mapa esta abierto. */
+  const zoomHabilitado = !!editando || mapaAbierto;
+  useEffect(() => { if (!zoomHabilitado) setZoomPerfil(null); }, [zoomHabilitado]);
+  const svgRef = useRef(null);
+
+  /*
+    Avisa a quien nos use del tramo (indices del stream completo) que el
+    zoom deja visible, para que -por ejemplo- el mapa pueda acercar lo
+    mismo (ver onVentanaEdicionChange en las props). Se calcula mas abajo,
+    despues de conocer kmDesde/kmHasta (que a su vez necesitan "ancho" ya
+    medido), pero el aviso en si tiene que engancharse aqui arriba, antes
+    de los "return" condicionales, por el mismo motivo que el listener de
+    la rueda: no puede ser un hook que unas veces se ejecute y otras no.
+
+    Sin dependencias -corre despues de cada render- pero comparando contra
+    lo ultimo avisado antes de llamar de verdad al callback: si no, cada
+    simple movimiento del raton (que tambien dispara un render, por el
+    hover) reenviaria el mismo tramo una y otra vez.
+  */
+  const ventanaEdicionRef = useRef(null);
+  const ventanaAvisadaRef = useRef(undefined);
+  useEffect(() => {
+    const actual = ventanaEdicionRef.current;
+    const previa = ventanaAvisadaRef.current;
+    const cambio = (actual == null) !== (previa == null) ||
+      (actual && previa && (actual.inicio !== previa.inicio || actual.fin !== previa.fin));
+    if (cambio) {
+      ventanaAvisadaRef.current = actual;
+      onVentanaEdicionChange?.(actual);
+    }
+  });
 
   /*
     Ancho real del contenedor, medido con ResizeObserver. Antes el SVG se
@@ -390,6 +482,28 @@ export default function Perfil({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [editando, hover, soltarExtremo]);
 
+  /* El listener de la rueda para el zoom del perfil se engancha aqui,
+     antes de los "return" de mas abajo -mismo motivo que soltarExtremo
+     un poco mas arriba: en el primer render (sin ancho medido todavia)
+     este hook tiene que ejecutarse igual, o React se queja de que el
+     numero de hooks no coincide con el siguiente render.
+
+     La funcion real (onWheelPerfil, definida mas abajo porque necesita
+     kmDesde/rangoVisible, que dependen de W y no existen todavia aqui)
+     se guarda en un ref y se actualiza en cada render -igual que hace
+     vistaRef en Mapa.jsx para lo mismo-, asi el listener nativo (necesario
+     para que preventDefault() frene el scroll de la pagina; ver el
+     comentario de onWheelPerfil) siempre llama a la version mas reciente
+     sin tener que desengancharse y volver a enganchar en cada render. */
+  const onWheelPerfilRef = useRef(() => {});
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const listener = (e) => onWheelPerfilRef.current(e);
+    svg.addEventListener('wheel', listener, { passive: false });
+    return () => svg.removeEventListener('wheel', listener);
+  }, [ancho, datos]);
+
   if (!datos) {
     return <div ref={contRef}><p className="hint">Esta salida no tiene perfil de altimetría registrado.</p></div>;
   }
@@ -402,7 +516,32 @@ export default function Perfil({
   const minA = Math.min(...datos.a);
   const maxD = datos.d[datos.d.length - 1];
 
-  const X = (k) => L + (k / maxD) * (W - L - R);
+  /* Ventana visible del eje de distancia: todo el recorrido (0..maxD) sin
+     zoom, o un tramo mas estrecho centrado en zoomPerfil.centroKm con el.
+     ESCALA_ZOOM_MAX y VENTANA_ZOOM_MIN_KM limitan cuanto se puede acercar
+     -no tiene sentido (ni es preciso) acercar mas alla de unas pocas
+     decenas de metros, que ya es mucho mas fino que el punto reducido que
+     se intenta acertar. */
+  const ESCALA_ZOOM_MAX = 40;
+  const VENTANA_ZOOM_MIN_KM = 0.03;
+  let kmDesde = 0, kmHasta = maxD;
+  if (zoomPerfil && zoomPerfil.escala > 1 && maxD > 0) {
+    const ventana = Math.max(VENTANA_ZOOM_MIN_KM, Math.min(maxD, maxD / zoomPerfil.escala));
+    const centro = Math.min(Math.max(zoomPerfil.centroKm, ventana / 2), maxD - ventana / 2);
+    kmDesde = centro - ventana / 2;
+    kmHasta = centro + ventana / 2;
+  }
+  const rangoVisible = kmHasta - kmDesde;
+
+  /* El tramo visible, en indices del stream completo -null si no hay
+     zoom aplicado (kmDesde/kmHasta cubren todo el recorrido, avisar de
+     "todo" no le sirve a nadie). Ver el useEffect de mas arriba, que es
+     quien de verdad llama a onVentanaEdicionChange. */
+  ventanaEdicionRef.current = (kmDesde > 0 || kmHasta < maxD)
+    ? { inicio: idxParaKm(streams, kmDesde), fin: idxParaKm(streams, kmHasta) }
+    : null;
+
+  const X = (k) => L + ((k - kmDesde) / rangoVisible) * (W - L - R);
 
   /*
     El grafico ya no crece para hacer sitio a las fichas.
@@ -676,8 +815,8 @@ export default function Perfil({
   const onMove = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - r.left) / r.width) * W;
-    const kmPos = ((x - L) / (W - L - R)) * maxD;
-    if (kmPos < 0 || kmPos > maxD) { setHover(null); onHoverChange?.(null); return; }
+    const kmPos = kmDesde + ((x - L) / (W - L - R)) * rangoVisible;
+    if (kmPos < kmDesde || kmPos > kmHasta) { setHover(null); onHoverChange?.(null); return; }
     let mejor = 0, dif = Infinity;
     datos.d.forEach((v, i) => { const dd = Math.abs(v - kmPos); if (dd < dif) { dif = dd; mejor = i; } });
 
@@ -709,6 +848,34 @@ export default function Perfil({
       setInicioMarcado(mejor > marcando.cimaIdx ? marcando.cimaIdx : mejor);
     }
   };
+
+  /* Zoom del perfil con la rueda, mientras se edita un tramo o -sin
+     editar- mientras el mapa esta abierto (ver zoomHabilitado y la prop
+     mapaAbierto); fuera de eso la rueda hace lo de siempre, scrollear la
+     pagina. Centrado en el punto de recorrido que hay bajo el cursor -en
+     cuanto vuelve a acercar o alejar, ese punto es el nuevo centro de la
+     ventana visible, igual de facil de seguir con el raton que hacer
+     zoom en el mapa. */
+  const onWheelPerfil = (e) => {
+    if (!zoomHabilitado) return;
+    const escalaActual = zoomPerfil?.escala ?? 1;
+    const factor = e.deltaY < 0 ? 1.4 : 1 / 1.4;
+    if (escalaActual <= 1 && factor < 1) return;
+
+    e.preventDefault();
+    const r = svgRef.current.getBoundingClientRect();
+    const x = ((e.clientX - r.left) / r.width) * W;
+    const kmCursor = kmDesde + ((x - L) / (W - L - R)) * rangoVisible;
+
+    const escalaNueva = Math.min(ESCALA_ZOOM_MAX, Math.max(1, escalaActual * factor));
+    if (escalaNueva <= 1) { setZoomPerfil(null); return; }
+    setZoomPerfil({ escala: escalaNueva, centroKm: kmCursor });
+  };
+  /* El listener nativo (enganchado mas arriba, antes de los "return") ya
+     esta puesto -esto solo lo mantiene apuntando a la version de
+     onWheelPerfil de este render, que es la que tiene el kmDesde y el
+     rangoVisible de ahora mismo. */
+  onWheelPerfilRef.current = onWheelPerfil;
 
   /* Clic en el fondo del grafico (no sobre un tirador, que para propagacion
      antes de llegar aqui). Segun el estado actual: cierra un marcado en
@@ -756,6 +923,7 @@ export default function Perfil({
   return (
     <div ref={contRef} style={marcado ? { position: 'relative' } : undefined}>
       <svg
+        ref={svgRef}
         viewBox={`0 ${origenY} ${W} ${alturaSvg}`}
         width={W}
         height={alturaSvg}

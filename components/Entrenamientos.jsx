@@ -6,7 +6,7 @@ import Mapa from './Mapa';
 import PerfilPuerto from './PerfilPuerto';
 import { IcoExpandir, IcoCerrar, IcoActividades, IcoFlecha, IcoMapa, IcoBuscar } from './Iconos';
 import {
-  construirPuerto, encontrarTodosLosSegmentosManuales,
+  construirPuerto, encontrarTodosLosSegmentosManualesEnSalida,
   repartoZonas, repartoDureza, repartoVelocidad, valorarEntrenamiento,
   TRAMOS_DUREZA, TRAMOS_VELOCIDAD, vatiosPuerto, vatiosSalida, categoriaPuerto,
   num, duracion, fechaLarga, fechaDDMMAA, kmh, km, metrosPorKm, tipoRuta, TIPO_INSIGNIA,
@@ -67,6 +67,11 @@ export default function Entrenamientos({
   /* Punto bajo el cursor en el perfil (indice del stream completo), para
      pintar el mismo punto en el mapa mientras se recorre el grafico. */
   const [puntoHover, setPuntoHover] = useState(null);
+  /* Tramo (indices del stream completo) que el zoom del perfil deja
+     visible mientras se edita un puerto -null sin zoom aplicado. Se lo
+     pasamos al mapa para que acerque el mismo tramo (ver Perfil, prop
+     onVentanaEdicionChange, y Mapa, prop ventanaEdicion). */
+  const [ventanaEdicion, setVentanaEdicion] = useState(null);
   /* Una fila de la tabla por puerto, para poder llevar la vista hasta ella
      cuando se pulsa su ficha en el perfil (ver irAPuerto mas abajo). */
   const filaPuertoRefs = useRef([]);
@@ -189,8 +194,7 @@ export default function Entrenamientos({
      coincidencia. */
   const rangosManuales = useMemo(() => {
     if (!streams) return [];
-    return definicionesSegmentos
-      .flatMap((def) => encontrarTodosLosSegmentosManuales(streams, def).map((idxs) => ({ ...idxs, def })));
+    return encontrarTodosLosSegmentosManualesEnSalida(streams, definicionesSegmentos);
   }, [streams, definicionesSegmentos]);
 
   /* Edita o borra un segmento manual: recalcula sus coordenadas a partir
@@ -276,15 +280,29 @@ export default function Entrenamientos({
   const [editandoPuerto, setEditandoPuerto] = useState(null);
   const [borradorPuerto, setBorradorPuerto] = useState('');
 
+  /* Renombra TODAS las vertientes vinculadas a esta -las que comparten su
+     nombre actual, que es lo unico que las vincula (ver
+     recogerSegmentosManuales)- para que el grupo entero se quede con el
+     nombre nuevo en vez de partirse en dos. Misma logica que
+     renombrarGrupo en Ascensiones.jsx. */
+  const renombrarPuerto = (defId, nombre) => {
+    const def = definicionesSegmentos.find((d) => d.id === defId);
+    if (!def) return;
+    const nombreActual = def.nombre?.trim();
+    const actualizadas = definicionesSegmentos.map((d) =>
+      (d.id === defId || (nombreActual && d.nombre?.trim() === nombreActual))
+        ? { ...d, nombre }
+        : d
+    );
+    setDefinicionesSegmentos(actualizadas);
+    guardarSegmentosManuales(actualizadas);
+  };
+
   /* Vacio se queda con el nombre que ya tenia -no hay nada a lo que
      "volver" para un segmento manual. */
   const guardarManualPuerto = (p) => {
     const nombre = borradorPuerto.trim();
-    const actualizadas = definicionesSegmentos.map((d) => (d.id === p.manualId
-      ? { ...d, nombre: nombre || d.nombre }
-      : d));
-    setDefinicionesSegmentos(actualizadas);
-    guardarSegmentosManuales(actualizadas);
+    if (nombre) renombrarPuerto(p.manualId, nombre);
     setEditandoPuerto(null);
   };
 
@@ -579,12 +597,15 @@ export default function Entrenamientos({
                     onCrearPuerto={crearSegmentoManual}
                     onEditarPuerto={editarPuerto}
                     onEliminarPuerto={eliminarPuerto}
+                    onVentanaEdicionChange={verMapa ? setVentanaEdicion : undefined}
+                    mapaAbierto={verMapa}
                   />
                 </div>
 
                 {verMapa && (
                   <div style={{ flex: '0 0 40%', minWidth: 0 }}>
-                    <Mapa streams={streams} puertos={puertosTabla} hoverIdx={puntoHover} />
+                    <Mapa streams={streams} puertos={puertosTabla} hoverIdx={puntoHover}
+                      ventanaEdicion={ventanaEdicion} />
                   </div>
                 )}
               </div>

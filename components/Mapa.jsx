@@ -7,6 +7,14 @@ import { IcoRestablecer } from './Iconos';
    sentido alejar mas) y maximo 6 (suficiente para distinguir una rotonda
    o el trazado de una ciudad sin pixelar el trazo). */
 const ZOOM_MIN = 1, ZOOM_MAX = 6;
+
+/* Techo aparte para el ajuste automatico al tramo que se esta editando
+   (ver ventanaEdicion mas abajo): ahi el recuadro a encajar puede ser
+   mucho mas pequeno que una rotonda -unas pocas decenas de metros de un
+   pie o una cima- y el techo de 6 del zoom manual se queda corto, deja
+   el tramo diminuto en medio del recuadro en vez de ocupandolo. Con la
+   ruta real detras (no cuadricula) subir el zoom aqui no pixela nada. */
+const ZOOM_MAX_EDICION = 30;
 const VISTA_INICIAL = { escala: ZOOM_MIN, x: 0, y: 0 };
 
 /* Misma reduccion que usa Perfil: un maximo de 900 puntos para que el SVG
@@ -42,7 +50,7 @@ function mapearIdx(iOriginal, idx) {
   meta (bandera de cuadros) que ya tiene el perfil, para que las dos
   vistas de la misma salida se lean como parte del mismo dibujo.
 */
-export default function Mapa({ streams, puertos = [], hoverIdx = null }) {
+export default function Mapa({ streams, puertos = [], hoverIdx = null, ventanaEdicion = null }) {
   const svgRef = useRef(null);
   const [vista, setVista] = useState(VISTA_INICIAL);
 
@@ -200,23 +208,49 @@ export default function Mapa({ streams, puertos = [], hoverIdx = null }) {
   };
 
   /*
-    Con zoom aplicado, sigue el punto que se recorre en el perfil: cada
-    vez que cambia "hoverIdx" se recoloca la vista para que ese punto
-    caiga en el centro del recuadro, igual que si se hubiera hecho zoom
-    ahi con la rueda. Sin zoom (escala minima) ya se ve toda la ruta, asi
-    que no hay nada que centrar -moverse ahi solo desplazaria la vista
-    sin motivo.
+    Acerca el mapa al mismo tramo que el zoom del perfil deja visible
+    mientras se edita un puerto (ventanaEdicion, indices del stream
+    completo -ver Perfil, prop onVentanaEdicionChange). Se calcula el
+    recuadro real (en el mismo sistema de coordenadas que ya usan X/Y,
+    asi que no hace falta reconvertir nada) que ocupan esos puntos y se
+    ajusta la vista para que quepa entero, con un margen alrededor para
+    que el trazo no quede pegado al borde.
+
+    Sin ventanaEdicion (se sale de la edicion, o el perfil no tiene zoom
+    aplicado) se vuelve a la vista inicial -el mapa entero-, igual que
+    hace el perfil consigo mismo.
   */
   useEffect(() => {
-    if (!puntoHover) return;
-    const centro = { x: vbX + vbW / 2, y: vbY + vbH / 2 };
-    setVista((v) => (
-      v.escala <= ZOOM_MIN
-        ? v
-        : { ...v, x: centro.x - v.escala * puntoHover.x, y: centro.y - v.escala * puntoHover.y }
-    ));
+    if (!ventanaEdicion) { setVista(VISTA_INICIAL); return; }
+    const { inicio, fin } = ventanaEdicion;
+    const ll = streams?.latlng;
+    if (!ll || fin <= inicio) return;
+
+    let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
+    for (let i = inicio; i <= fin; i++) {
+      const p = ll[i];
+      if (!p || (p[0] === 0 && p[1] === 0)) continue;
+      const px = X(p[1]), py = Y(p[0]);
+      if (px < xMin) xMin = px;
+      if (px > xMax) xMax = px;
+      if (py < yMin) yMin = py;
+      if (py > yMax) yMax = py;
+    }
+    if (!isFinite(xMin) || !isFinite(yMin)) return;
+
+    const MARGEN = 1.15; // aire alrededor del tramo, para que no toque los bordes
+    const anchoBbox = Math.max(xMax - xMin, 1) * MARGEN;
+    const altoBbox = Math.max(yMax - yMin, 1) * MARGEN;
+    const escalaNueva = Math.min(ZOOM_MAX_EDICION, Math.max(ZOOM_MIN, Math.min(vbW / anchoBbox, vbH / altoBbox)));
+    const centroMapa = { x: vbX + vbW / 2, y: vbY + vbH / 2 };
+    const centroBbox = { x: (xMin + xMax) / 2, y: (yMin + yMax) / 2 };
+    setVista({
+      escala: escalaNueva,
+      x: centroMapa.x - escalaNueva * centroBbox.x,
+      y: centroMapa.y - escalaNueva * centroBbox.y,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hoverIdx]);
+  }, [ventanaEdicion]);
 
   /*
     Zoom centrado en el cursor: el punto del mapa que hay bajo el raton se
