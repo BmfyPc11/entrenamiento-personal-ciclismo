@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState } from 'react';
 import PerfilPuerto from './PerfilPuerto';
 import { recogerSegmentosManuales, vatiosPuerto, num, duracion, fechaCorta, categoriaPuerto } from '@/lib/metrics';
-import { useSegmentosManuales, guardarSegmentosManuales } from '@/lib/segmentosManualesCache';
+import { useSegmentosManuales, actualizarSegmentoManual, eliminarSegmentoManual } from '@/lib/segmentosManualesCache';
 
 export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, pedirStreams }) {
   const [cargando, setCargando] = useState(false);
@@ -37,17 +37,15 @@ export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, ped
      compartir el mismo nombre. */
   const renombrarGrupo = (g, nombre) => {
     const idsGrupo = new Set(g.vertientes.map((v) => v.id));
-    const actualizadas = definicionesSegmentos.map((d) => (idsGrupo.has(d.id) ? { ...d, nombre } : d));
-    setDefinicionesSegmentos(actualizadas);
-    guardarSegmentosManuales(actualizadas);
+    setDefinicionesSegmentos((prev) => prev.map((d) => (idsGrupo.has(d.id) ? { ...d, nombre } : d)));
+    idsGrupo.forEach((id) => actualizarSegmentoManual(id, { nombre }));
     setEditandoSegmento(null);
   };
 
   const borrarGrupo = (g) => {
     const idsGrupo = new Set(g.vertientes.map((v) => v.id));
-    const actualizadas = definicionesSegmentos.filter((d) => !idsGrupo.has(d.id));
-    setDefinicionesSegmentos(actualizadas);
-    guardarSegmentosManuales(actualizadas);
+    setDefinicionesSegmentos((prev) => prev.filter((d) => !idsGrupo.has(d.id)));
+    idsGrupo.forEach((id) => eliminarSegmentoManual(id));
     if (abiertoSegmento === g.id) setAbiertoSegmento(null);
   };
 
@@ -55,11 +53,10 @@ export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, ped
      vincula a las demas -ver renombrarGrupo). Vacio vuelve a la etiqueta
      por defecto (su longitud), no hay nada a lo que "volver" aparte. */
   const renombrarVertiente = (vertienteId, nombreVertiente) => {
-    const actualizadas = definicionesSegmentos.map((d) => (d.id === vertienteId
+    setDefinicionesSegmentos((prev) => prev.map((d) => (d.id === vertienteId
       ? { ...d, nombreVertiente: nombreVertiente || null }
-      : d));
-    setDefinicionesSegmentos(actualizadas);
-    guardarSegmentosManuales(actualizadas);
+      : d)));
+    actualizarSegmentoManual(vertienteId, { nombreVertiente: nombreVertiente || null });
     setEditandoVertiente(null);
   };
 
