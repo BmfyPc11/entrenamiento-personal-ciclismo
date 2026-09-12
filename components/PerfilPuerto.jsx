@@ -201,7 +201,7 @@ export default function PerfilPuerto({ streams, puerto, indice, cfg, zonas, nomb
           return (
             <g key={i} onMouseEnter={() => setFoco(i)} style={{ cursor: 'default' }}>
               <rect x={x1} y={yFranjaTop} width={x2 - x1} height={franjaH}
-                fill="#101318" opacity={foco === null ? 1 : activo ? 1 : 0.45} />
+                fill="#211C15" opacity={foco === null ? 1 : activo ? 1 : 0.45} />
               {x1 > mIzq && (
                 <line x1={x1} x2={x1} y1={yFranjaTop} y2={yFranjaTop + franjaH}
                   stroke="var(--bg)" strokeWidth="1" />
@@ -265,7 +265,7 @@ export default function PerfilPuerto({ streams, puerto, indice, cfg, zonas, nomb
         <circle cx={xCima} cy={yInsignia} r={rInsignia} fill={cat.color} />
         <text x={xCima} y={yInsignia + 4} textAnchor="middle"
           fontFamily={HELVETICA} fontWeight="700" fontSize="11.5"
-          fill={cat.codigo === 'hc' ? '#FFFFFF' : '#0A0C0F'}>
+          fill={cat.codigo === 'hc' ? '#FFFFFF' : '#1B1712'}>
           {cat.nombre}
         </text>
         <text x={xFicha} y={yInsignia - 3} textAnchor="end"

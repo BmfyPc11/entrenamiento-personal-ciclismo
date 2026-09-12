@@ -6,27 +6,36 @@
     apagado por mucho borde que se le ponga. De ahi que el fondo baje y
     la tarjeta suba, en vez de dejar los dos rondando el mismo negro.
   */
-  --bg:#08090C; --bg2:#101419; --card:#161B23; --card2:#1F2530;
-  --line:#2B3340; --line2:#3C4757;
+  /*
+    Paleta "Cartografico" (v3.3): mismo perfil oscuro de siempre, pero
+    con los tonos calentados hacia tierra/piedra/oliva en vez del
+    azulado original. La logica de separacion entre superficies (fondo
+    mas bajo, tarjeta mas alta) no cambia, solo el matiz.
+  */
+  --bg:#1B1712; --bg2:#211C15; --card:#29241C; --card2:#332C21;
+  --line:#4A4030; --line2:#5C513C;
 
-  --ink:#F2F4F6; --ink2:#A8B2BE; --ink3:#6E7885;
+  --ink:#F3ECE0; --ink2:#C6B89E; --ink3:#948564;
 
   /*
     Acento de marca. Se usa SOLO en cromo de interfaz: seccion activa,
     foco de teclado, marca de la cabecera. NUNCA dentro de una grafica.
 
-    El motivo es que la zona 3 ya es ambar y el subrayado de los puertos
-    ya es amarillo. Si el acento fuese ese mismo tono, el color dejaria
-    de significar nada dentro de las graficas: no se sabria si algo esta
-    amarillo porque es zona 3 o porque esta seleccionado. Por eso este
-    amarillo es mas vivo y vive fuera de los datos.
+    El motivo es que la zona 3 ya es ocre y el subrayado de los puertos
+    ya es ocre/dorado. Si el acento fuese ese mismo tono, el color
+    dejaria de significar nada dentro de las graficas: no se sabria si
+    algo esta dorado porque es zona 3 o porque esta seleccionado. Por
+    eso este dorado es mas vivo (mas claro, mas saturado) y vive fuera
+    de los datos.
   */
-  --acento:#F2C230; --acento-ink:#0A0C0F;
+  --acento:#D9A544; --acento-ink:#1B1712;
 
-  /* Colores con significado. No se tocan: cada uno quiere decir algo
-     concreto y estan validados contra fondo oscuro. */
-  --red:#D14B42; --blue:#4A90D9; --green:#6FA35A; --amber:#E0A82E; --orange:#E07B2E;
-  --z1:#8FA3AC; --z2:#6FA35A; --z3:#E0A82E; --z4:#E07B2E; --z5:#D14B42;
+  /* Colores con significado, recalentados a la misma paleta de tierra.
+     Cada uno sigue queriendo decir lo mismo que antes -verde crece,
+     rojo duele-, solo cambia el matiz: salvia, pizarra, ocre, terracota
+     y ladrillo en vez de verde/azul/verde/ambar/naranja saturados. */
+  --red:#A1332B; --blue:#5C7A8C; --green:#7C8F5B; --amber:#C99A3E; --orange:#C1622D;
+  --z1:#8B8567; --z2:#7C8F5B; --z3:#C99A3E; --z4:#C1622D; --z5:#A1332B;
 
   --sans:"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
@@ -49,8 +58,17 @@ body{color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6;
 
 .app{display:flex;min-height:100vh}
 
+/*
+  Textura de lineas de nivel, muy tenue: un guiño cartografico en la
+  barra lateral, que esta siempre a la vista pero nunca compite con el
+  contenido -por eso vive detras de todo, en opacidad de rastro.
+*/
 .lateral{width:var(--lateral);flex:0 0 var(--lateral);border-right:1px solid var(--line);
-  background:var(--bg2);display:flex;flex-direction:column;
+  background-color:var(--bg2);
+  background-image:
+    repeating-radial-gradient(ellipse at 15% 20%, rgba(193,127,45,.08) 0px, rgba(193,127,45,.08) 1px, transparent 1px, transparent 26px),
+    repeating-radial-gradient(ellipse at 85% 75%, rgba(201,154,62,.07) 0px, rgba(201,154,62,.07) 1px, transparent 1px, transparent 34px);
+  display:flex;flex-direction:column;
   position:sticky;top:0;height:100vh}
 
 .marca{padding:var(--e5) var(--e5) var(--e4);border-bottom:1px solid var(--line)}
@@ -107,6 +125,25 @@ body{color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6;
   padding:44px 0 28px;flex-wrap:wrap;position:sticky;top:0;z-index:15;
   background:var(--bg)}
 @media(max-width:900px){.top{top:var(--barra-movil-h)}}
+
+/*
+  Cabecera de Resumen: la unica que lleva el degradado calido y la
+  textura de lineas de nivel completos de la direccion "Cartografico" -
+  las demas secciones comparten .top pero no este acento, que es la
+  carta de presentacion del panel. El margen negativo la hace sangrar
+  hasta el borde de .wrap y el padding la vuelve a alinear, para que el
+  titulo caiga en el mismo sitio de siempre.
+*/
+.top-cartografico{
+  background-color:var(--bg);
+  background-image:
+    linear-gradient(160deg, var(--bg2) 0%, #3A2618 55%, #5A3420 100%),
+    repeating-radial-gradient(ellipse at 20% 30%, rgba(193,98,45,.10) 0px, rgba(193,98,45,.10) 1px, transparent 1px, transparent 26px),
+    repeating-radial-gradient(ellipse at 80% 70%, rgba(201,154,62,.09) 0px, rgba(201,154,62,.09) 1px, transparent 1px, transparent 34px);
+  margin:0 calc(-1 * var(--e5));
+  padding-left:var(--e5);padding-right:var(--e5);
+  border-radius:0 0 var(--r-l) var(--r-l);
+}
 
 /* En Actividades el resumen general (Distancia, Desnivel, Tiempo...) se
    queda fijo junto con el titulo, no solo el titulo: los dos viven dentro
@@ -293,7 +330,7 @@ svg{display:block;max-width:100%;height:auto}
 */
 .banner-sync{
   display:flex;align-items:center;gap:14px;flex-wrap:wrap;
-  padding:11px 20px;background:rgba(74,144,217,.16);
+  padding:11px 20px;background:rgba(92,122,140,.18);
   border-bottom:1px solid var(--blue);color:var(--ink);font-size:13.5px;
   animation:bannerSyncBajar .5s cubic-bezier(.16,1,.3,1);
 }
@@ -301,7 +338,7 @@ svg{display:block;max-width:100%;height:auto}
 .banner-sync button{font-family:var(--mono);font-size:12px;font-weight:600;
   padding:7px 14px;border-radius:999px;border:1px solid var(--blue);
   background:transparent;color:var(--blue);cursor:pointer}
-.banner-sync button:hover{background:rgba(74,144,217,.14)}
+.banner-sync button:hover{background:rgba(92,122,140,.16)}
 .banner-sync button:disabled{opacity:.6;cursor:default}
 .banner-sync-cerrar{border:0!important;padding:4px 6px!important;
   font-size:13px;color:var(--ink3)!important}
@@ -1008,7 +1045,7 @@ th:first-child .th-orden,
 */
 .tabla-salidas .marca-max{display:inline-block;font-family:var(--mono);
   font-weight:600;padding:2px 9px;margin-right:-9px;border-radius:var(--r-l);
-  background:#E0C020;color:#0E1116}
+  background:var(--acento);color:var(--acento-ink)}
 
 /*
   Boton de expandir sobre el propio grafico del perfil. Circular y
@@ -1302,3 +1339,129 @@ nav.logros-categorias button[aria-selected="true"] svg{color:var(--acento-ink)}
 .popup-nav button:hover:not(:disabled){background:var(--bg2);color:var(--ink)}
 .popup-nav button svg{width:15px;height:15px}
 .popup-contador{font-family:var(--mono);font-size:12px;color:var(--ink3);min-width:44px;text-align:center}
+
+/* ============================================================
+   Resumen — variante editorial (experimental).
+
+   Solo toca Dashboard.jsx / pestana "resumen": las clases de aqui
+   abajo (resumen-*, cifras-lista, tabla-resumen-editorial,
+   zonas-editorial) no las usa ninguna otra pantalla, asi que se
+   editan directamente sin miedo a arrastrar el cambio fuera del
+   dashboard. Consejo y Top logros SI son componentes compartidos
+   (Entrenamientos, AnalizadorGPX y Rutas tambien pintan un
+   ".consejo"), asi que van reenvueltos en un div propio en vez de
+   tocar sus clases genericas.
+   ============================================================ */
+
+/*
+  Cifras, Top logros y Tus zonas apretados en una sola fila de tres,
+  justo debajo de la cabecera grande: son las tres piezas de "vistazo
+  rapido" de Resumen, y viendolas juntas se comparan mejor que una
+  debajo de otra. Cada columna manda su propio h2, del mismo tamano que
+  el resto de la app -no hace falta encogerlo, el apretado ya lo da el
+  contenido de cada columna.
+*/
+.resumen-compact-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:36px;align-items:start;margin-top:8px}
+@media(max-width:860px){
+  .resumen-compact-row{grid-template-columns:1fr;gap:0}
+}
+
+.resumen-compact-row h2{font-size:15px;font-weight:600;letter-spacing:.01em;
+  margin:0 0 12px}
+
+.resumen-compact-row .cifras-lista{margin-top:0}
+.resumen-compact-row .fila-cifra{padding:11px 0;gap:6px 10px}
+.resumen-compact-row .fila-cifra .etiqueta{font-size:13.5px}
+.resumen-compact-row .fila-cifra .valor{font-size:15px}
+.resumen-compact-row .fila-cifra .detalle{font-size:11px}
+
+.resumen-compact-row .resumen-top-logros{margin:0}
+.resumen-compact-row .top-logro{padding:10px 0;gap:9px}
+.resumen-compact-row .top-logro .insignia-circulo{width:30px;height:30px;font-size:10px}
+.resumen-compact-row .top-logro .nombre{font-size:12.5px}
+.resumen-compact-row .top-logro .tier{font-size:11px}
+
+.resumen-compact-row .zonas-editorial .legend{font-size:10.5px;gap:8px 12px}
+
+.resumen-masthead{padding:var(--e6) 0 0}
+.resumen-masthead .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--amber)}
+.resumen-masthead .cifra{display:flex;align-items:flex-end;gap:24px;flex-wrap:wrap;
+  margin-top:18px}
+.resumen-masthead .hero{font-family:Georgia,"Iowan Old Style","Palatino Linotype",serif;
+  font-weight:700;font-size:clamp(44px,7vw,80px);line-height:.95;letter-spacing:-.02em;
+  margin:0;color:var(--ink);text-transform:none}
+.resumen-masthead .dek{font-family:Georgia,serif;font-style:italic;font-size:19px;
+  color:var(--ink2);margin:0 0 8px;max-width:32ch}
+.resumen-masthead .masthead-delta{font-family:var(--mono);font-size:12px;color:var(--ink3);
+  margin:6px 0 0}
+.resumen-tabs{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-top:26px}
+.resumen-tabs button{font-family:var(--mono);font-size:11px;letter-spacing:.04em;
+  color:var(--ink3);background:none;border:0;border-bottom:2px solid transparent;
+  border-radius:0;padding:0 0 9px}
+.resumen-tabs button:hover{background:none;color:var(--ink)}
+.resumen-tabs button[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--acento);
+  font-weight:500}
+.resumen-tabs .campo-fecha{margin:0 0 9px}
+.masthead-rule{border:0;border-top:1px solid var(--line);margin-top:24px}
+
+.cifras-lista{margin-top:8px}
+.fila-cifra{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 14px;
+  padding:16px 0;border-top:1px solid var(--line)}
+.cifras-lista .fila-cifra:last-child{border-bottom:1px solid var(--line)}
+.fila-cifra .etiqueta{font-family:Georgia,serif;font-style:italic;font-size:16px;
+  color:var(--ink2);flex:1 1 auto}
+.fila-cifra .valor{font-family:var(--mono);font-size:19px;font-weight:600;color:var(--ink)}
+.fila-cifra .valor small{font-size:12px;font-weight:400;color:var(--ink3);margin-left:3px}
+.fila-cifra .detalle{font-size:12px;color:var(--ink3);flex:1 0 100%}
+
+.resumen-consejo .consejo,
+.valoracion-editorial .consejo{background:none;border:0;border-radius:0;padding:26px 0 0 44px;
+  margin:28px 0 0;position:relative;max-width:70ch}
+.resumen-consejo .consejo::before,
+.valoracion-editorial .consejo::before{content:'\201C';position:absolute;left:-4px;top:-14px;
+  font-family:Georgia,serif;font-size:64px;line-height:1;color:var(--acento)}
+.resumen-consejo .consejo .tag,
+.valoracion-editorial .consejo .tag{padding:0;margin:0 0 8px}
+.resumen-consejo .consejo .tit,
+.valoracion-editorial .consejo .tit{font-family:Georgia,serif;font-style:italic;font-weight:700;
+  font-size:24px;color:var(--ink)}
+.resumen-consejo .consejo p:not(.tit),
+.valoracion-editorial .consejo p:not(.tit){font-family:Georgia,serif;font-style:italic;
+  font-size:18px;line-height:1.55;color:var(--ink2)}
+/* La h2 generica ("Valoracion del entrenador") queda oculta aqui: el
+   tag de dentro de la cita ("Que ha sido esta salida") ya hace ese
+   papel, y las dos juntas eran un titulo repetido. */
+.valoracion-editorial h2{display:none}
+
+.resumen-top-logros h2{margin-bottom:4px}
+.resumen-top-logros .top-logros-grid{display:block;margin:20px 0 0}
+.resumen-top-logros .top-logro{background:none;border:0;border-radius:0;
+  border-top:1px solid var(--line);padding:15px 0}
+.resumen-top-logros .top-logros-grid .top-logro:last-child{border-bottom:1px solid var(--line)}
+
+.zonas-editorial{padding:0}
+.zonas-editorial .legend{border-top:1px solid var(--line);padding-top:var(--e3)}
+
+.tabla-resumen-editorial{background:none;border:0;border-radius:0;
+  overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tabla-resumen-editorial .tabla-salidas{font-family:Georgia,serif}
+.tabla-resumen-editorial .tabla-salidas th{background:none;font-family:var(--mono);
+  border-bottom:2px solid var(--ink)}
+.tabla-resumen-editorial .tabla-salidas td.col-nombre{font-family:Georgia,serif;
+  font-style:italic;font-weight:400}
+.tabla-resumen-editorial .tabla-salidas td:not(.col-tipo):not(.col-fecha):not(.col-nombre){
+  font-family:var(--mono)}
+.tabla-resumen-editorial .tabla-salidas .cat{border-radius:3px;padding:3px 5px;
+  min-width:24px;font-size:9.5px}
+
+/* Tabla "Detalles de la ruta" de Actividades: mismo tratamiento de
+   filas finas que la de Resumen, aplicado aqui a mano porque es una
+   tabla distinta (puertos, no salidas) con sus propias columnas. */
+.scroll.tabla-editorial-actividades{background:none;border:0;border-radius:0}
+.tabla-puertos-editorial th{border-bottom:2px solid var(--ink)}
+.tabla-puertos-editorial td:first-child{font-family:Georgia,serif;font-style:italic;
+  font-weight:400}
+.tabla-puertos-editorial .flecha,
+.tabla-puertos-editorial .cat{font-family:var(--mono);font-style:normal}

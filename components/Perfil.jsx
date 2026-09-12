@@ -125,7 +125,7 @@ function iconoMontana(cx, cy, color, { onClick, onContextMenu, titulo } = {}) {
       style={interactivo ? { cursor: 'pointer' } : undefined}>
       {titulo && <title>{titulo}</title>}
       <circle r="10" fill={color} />
-      <path d="M -5.5,3.5 L -1.5,-3 L 1,0.5 L 3,-4 L 5.5,3.5 Z" fill="#0E1116" />
+      <path d="M -5.5,3.5 L -1.5,-3 L 1,0.5 L 3,-4 L 5.5,3.5 Z" fill="#1B1712" />
     </g>
   );
 }
@@ -934,8 +934,8 @@ export default function Perfil({
       >
         <defs>
           <linearGradient id="relieve" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#4A5563" stopOpacity=".55" />
-            <stop offset="100%" stopColor="#4A5563" stopOpacity=".05" />
+            <stop offset="0%" stopColor="#6B6354" stopOpacity=".55" />
+            <stop offset="100%" stopColor="#6B6354" stopOpacity=".05" />
           </linearGradient>
           {/* Mismo gradiente que el de "relieve" -de arriba abajo, mas
               opaco a mas transparente- pero en el amarillo de "amarillo",
@@ -944,15 +944,15 @@ export default function Perfil({
               da algo de profundidad al crecer, en vez de un bloque de
               color liso. */}
           <linearGradient id="relieve-amarillo" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#E0A82E" stopOpacity=".55" />
-            <stop offset="100%" stopColor="#E0A82E" stopOpacity=".05" />
+            <stop offset="0%" stopColor="#C99A3E" stopOpacity=".55" />
+            <stop offset="100%" stopColor="#C99A3E" stopOpacity=".05" />
           </linearGradient>
         </defs>
 
         {guias.map((v) => (
           <g key={v}>
-            <line x1={L} y1={Y(v)} x2={W - R} y2={Y(v)} stroke="#2A3341" strokeWidth="1" />
-            <text x={L - 8} y={Y(v) + 4} textAnchor="end" fill="#6B7684"
+            <line x1={L} y1={Y(v)} x2={W - R} y2={Y(v)} stroke="#4A4030" strokeWidth="1" />
+            <text x={L - 8} y={Y(v) + 4} textAnchor="end" fill="#948564"
               fontSize="10" fontFamily="ui-monospace,Menlo,monospace">{v}</text>
           </g>
         ))}
@@ -969,7 +969,7 @@ export default function Perfil({
                   opacity={atenuado ? 0.12 : 1} />
               );
             })}
-            <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#E8EAED"
+            <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#F3ECE0"
               strokeWidth="1.2" strokeLinejoin="round" opacity="0.45" />
           </>
         ) : modo === 'velocidad' && datos.t ? (
@@ -984,7 +984,7 @@ export default function Perfil({
                   opacity={atenuado ? 0.12 : 1} />
               );
             })}
-            <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#E8EAED"
+            <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#F3ECE0"
               strokeWidth="1.2" strokeLinejoin="round" opacity="0.45" />
           </>
         ) : modo === 'zonas' && datos.fc && zonas ? (
@@ -994,11 +994,11 @@ export default function Perfil({
               const atenuado = zonaFoco.length > 0 && !zonaFoco.includes(t.zona);
               return (
                 <path key={i} d={areaPath(t.ini, t.fin)}
-                  fill={z ? z.color : '#4A5563'}
+                  fill={z ? z.color : '#6B6354'}
                   opacity={atenuado ? 0.13 : 0.82} />
               );
             })}
-            <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#0E1116"
+            <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#1B1712"
               strokeWidth="1.2" strokeLinejoin="round" opacity=".55" />
           </>
         ) : (
@@ -1014,7 +1014,7 @@ export default function Perfil({
               style={animarEntrada ? { transformOrigin: `0px ${H - B}px` } : undefined} />
             <path ref={animarEntrada ? lineaRef : undefined}
               d={lineaPath(0, datos.d.length - 1)} fill="none"
-              stroke={amarillo ? '#E0A82E' : '#C8CFD8'}
+              stroke={amarillo ? '#C99A3E' : '#C6B89E'}
               strokeWidth="1.7" strokeLinejoin="round"
               className={animarEntrada ? 'perfil-linea-anim' : undefined}
               strokeDasharray={animarEntrada ? lineaLen : undefined}
@@ -1035,7 +1035,7 @@ export default function Perfil({
           const a = mapear(p.inicio), b = mapear(p.fin);
           if (b <= a) return null;
           return (
-            <path key={`m${i}`} d={areaPath(a, b)} fill="#D14B42" opacity="0.16" pointerEvents="none" />
+            <path key={`m${i}`} d={areaPath(a, b)} fill="#A1332B" opacity="0.16" pointerEvents="none" />
           );
         })}
 
@@ -1054,7 +1054,7 @@ export default function Perfil({
           const activo = puertoActivo === i;
           return (
             <path key={`s${i}`} d={lineaPath(a, b)} fill="none"
-              stroke={activo ? '#D14B42' : '#E0A82E'}
+              stroke={activo ? '#A1332B' : '#C99A3E'}
               strokeWidth={activo ? 4.5 : 3.2} strokeLinecap="round" />
           );
         })}
@@ -1073,7 +1073,7 @@ export default function Perfil({
                 vuelve a funcionar.
               */
               const infoActiva = modo === 'relieve' || modo === 'dureza';
-              const trazo = f.activo || infoActiva ? '#D14B42' : '#E0A82E';
+              const trazo = f.activo || infoActiva ? '#A1332B' : '#C99A3E';
               /* Editar/borrar hace falta que Entrenamientos de los dos
                  callbacks -sin ellos (el resto de sitios donde se usa
                  Perfil) ningun puerto se puede tocar, ni detectado ni
@@ -1138,7 +1138,7 @@ export default function Perfil({
                     style={animarEntrada
                       ? { transformOrigin: `${f.ancho / 2}px ${f.alto}px` } : undefined}>
                     <rect width={f.ancho} height={f.alto} rx="7"
-                      fill="#161C26" stroke={trazo}
+                      fill="#29241C" stroke={trazo}
                       strokeWidth={f.activo ? 1.6 : 1} opacity=".97" />
 
                     {/*
@@ -1150,12 +1150,12 @@ export default function Perfil({
                     <rect x={(f.ancho - f.anchoCat) / 2} y="5" width={f.anchoCat} height="20" rx="6"
                       fill={f.cat.color} />
                     <text x={f.ancho / 2} y="19.5" textAnchor="middle"
-                      fill={f.cat.codigo === 'hc' ? '#FFFFFF' : '#0E1116'}
+                      fill={f.cat.codigo === 'hc' ? '#FFFFFF' : '#1B1712'}
                       fontSize={compacto ? 13 : 12.5} fontWeight="800"
                       fontFamily="ui-monospace,Menlo,monospace">
                       {f.cat.nombre}
                     </text>
-                    <text x={f.ancho / 2} y={f.alto - 6} textAnchor="middle" fill="#E8EAED"
+                    <text x={f.ancho / 2} y={f.alto - 6} textAnchor="middle" fill="#F3ECE0"
                       fontSize="11.5" fontWeight="400"
                       fontFamily='"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif'>
                       {f.textoDist}
@@ -1188,20 +1188,20 @@ export default function Perfil({
           return (
             <>
               <line x1={xIni} y1={ySueloIni} x2={xIni} y2={yIconoIni}
-                stroke="#E8EAED" strokeWidth="1.2" strokeDasharray="4 3" opacity="0.65" />
+                stroke="#F3ECE0" strokeWidth="1.2" strokeDasharray="4 3" opacity="0.65" />
               <g transform={`translate(${xIni},${yIconoIni})`}>
-                <circle r="9" fill="#F2C230" />
-                <path d="M -3,-5 L 6,0 L -3,5 Z" fill="#0E1116" />
+                <circle r="9" fill="#D9A544" />
+                <path d="M -3,-5 L 6,0 L -3,5 Z" fill="#1B1712" />
               </g>
 
               <line x1={xFin} y1={ySueloFin} x2={xFin} y2={yIconoFin}
-                stroke="#E8EAED" strokeWidth="1.2" strokeDasharray="4 3" opacity="0.65" />
+                stroke="#F3ECE0" strokeWidth="1.2" strokeDasharray="4 3" opacity="0.65" />
               <g transform={`translate(${xFin},${yIconoFin})`}>
-                <circle r="9" fill="#F2C230" />
+                <circle r="9" fill="#D9A544" />
                 {[0, 1, 2, 3].flatMap((col) => [0, 1].map((fila) => (
                   (col + fila) % 2 === 0 && (
                     <rect key={`${col}-${fila}`} x={-6 + col * 3} y={-4 + fila * 4}
-                      width="3" height="4" fill="#0E1116" />
+                      width="3" height="4" fill="#1B1712" />
                   )
                 )))}
               </g>
@@ -1209,9 +1209,9 @@ export default function Perfil({
           );
         })()}
 
-        <line x1={L} y1={H - B} x2={W - R} y2={H - B} stroke="#2A3341" strokeWidth="1" />
+        <line x1={L} y1={H - B} x2={W - R} y2={H - B} stroke="#4A4030" strokeWidth="1" />
         {[0, 0.25, 0.5, 0.75, 1].map((f) => (
-          <text key={f} x={X(maxD * f)} y={H - 9} textAnchor="middle" fill="#6B7684"
+          <text key={f} x={X(maxD * f)} y={H - 9} textAnchor="middle" fill="#948564"
             fontSize="10" fontFamily="ui-monospace,Menlo,monospace">
             {num(maxD * f, 0)} km
           </text>
@@ -1235,8 +1235,8 @@ export default function Perfil({
               onMouseLeave={() => setParadaFoco(null)}
               style={{ cursor: 'pointer' }} />
             <circle cx={p.x} cy={p.y} r={paradaFoco === p.i ? p.radio + 1.5 : p.radio}
-              fill="#D14B42" fillOpacity={paradaFoco === p.i ? 0.55 : 0.35}
-              stroke="#D14B42" strokeOpacity={paradaFoco === p.i ? 0.9 : 0.6}
+              fill="#A1332B" fillOpacity={paradaFoco === p.i ? 0.55 : 0.35}
+              stroke="#A1332B" strokeOpacity={paradaFoco === p.i ? 0.9 : 0.6}
               strokeWidth="1.3" pointerEvents="none" />
           </g>
         ))}
@@ -1247,12 +1247,12 @@ export default function Perfil({
           return (
             <g pointerEvents="none">
               <g transform={`translate(${Math.min(p.x + 10, W - 140)},${Math.max(p.y - 46, T + 4)})`}>
-                <rect width="130" height="38" rx="2" fill="#212936" stroke="#3A4553" opacity=".97" />
-                <text x="9" y="17" fill="#E8EAED" fontSize="11.5" fontWeight="600"
+                <rect width="130" height="38" rx="2" fill="#29241C" stroke="#5C513C" opacity=".97" />
+                <text x="9" y="17" fill="#F3ECE0" fontSize="11.5" fontWeight="600"
                   fontFamily="ui-monospace,Menlo,monospace">
                   Parada · {duracion(p.segundos)}
                 </text>
-                <text x="9" y="32" fill="#9BA5B4" fontSize="10.5"
+                <text x="9" y="32" fill="#C6B89E" fontSize="10.5"
                   fontFamily="ui-monospace,Menlo,monospace">
                   km {num(p.km, 1)}
                 </text>
@@ -1264,9 +1264,9 @@ export default function Perfil({
         {!simple && hover != null && paradaFoco == null && (
           <g pointerEvents="none">
             <line x1={X(datos.d[hover])} y1={T} x2={X(datos.d[hover])} y2={H - B}
-              stroke="#9BA5B4" strokeWidth="1" strokeDasharray="3 3" opacity=".55" />
+              stroke="#C6B89E" strokeWidth="1" strokeDasharray="3 3" opacity=".55" />
             <circle cx={X(datos.d[hover])} cy={Y(datos.a[hover])} r="4.5"
-              fill="#0E1116" stroke="#E8EAED" strokeWidth="2" />
+              fill="#1B1712" stroke="#F3ECE0" strokeWidth="2" />
             {/* Solo distancia y tiempo transcurrido, en formato reloj: es
                 lo que se busca al pasar el cursor por el perfil -"donde
                 voy" y "cuanto llevo"-, sin la altitud ni la FC/zona que
@@ -1274,13 +1274,13 @@ export default function Perfil({
                 vertical, la leyenda de zonas). */}
             <g transform={`translate(${Math.min(X(datos.d[hover]) + 10, W - 150)},${T + 4})`}>
               <rect width="140" height={datos.t ? 34 : 24} rx="2"
-                fill="#212936" stroke="#3A4553" opacity=".97" />
-              <text x="9" y="18" fill="#E8EAED" fontSize="11.5"
+                fill="#29241C" stroke="#5C513C" opacity=".97" />
+              <text x="9" y="18" fill="#F3ECE0" fontSize="11.5"
                 fontFamily="ui-monospace,Menlo,monospace">
                 {num(datos.d[hover], 2)} km
               </text>
               {datos.t && (
-                <text x="9" y="30" fill="#9BA5B4" fontSize="11"
+                <text x="9" y="30" fill="#C6B89E" fontSize="11"
                   fontFamily="ui-monospace,Menlo,monospace">
                   {tiempoReloj(datos.t[hover])}
                 </text>
@@ -1306,12 +1306,12 @@ export default function Perfil({
             <g pointerEvents="none">
               {b > a && (
                 <>
-                  <path d={areaPath(a, b)} fill="#D14B42" opacity="0.35" />
-                  <path d={lineaPath(a, b)} fill="none" stroke="#D14B42"
+                  <path d={areaPath(a, b)} fill="#A1332B" opacity="0.35" />
+                  <path d={lineaPath(a, b)} fill="none" stroke="#A1332B"
                     strokeWidth="3" strokeLinecap="round" />
                 </>
               )}
-              {iconoMontana(X(datos.d[cimaIdx]), Y(datos.a[cimaIdx]) - 14, '#D14B42')}
+              {iconoMontana(X(datos.d[cimaIdx]), Y(datos.a[cimaIdx]) - 14, '#A1332B')}
             </g>
           );
         })()}
@@ -1363,11 +1363,11 @@ export default function Perfil({
 
           return (
             <g>
-              <path d={areaPath(a, b)} fill="#D14B42" opacity="0.35" pointerEvents="none" />
-              <path d={lineaPath(a, b)} fill="none" stroke="#D14B42"
+              <path d={areaPath(a, b)} fill="#A1332B" opacity="0.35" pointerEvents="none" />
+              <path d={lineaPath(a, b)} fill="none" stroke="#A1332B"
                 strokeWidth="3" strokeLinecap="round" pointerEvents="none" />
 
-              {iconoMontana(xCrudo(finRawFino), yCrudo(finRawFino) - 14, '#D14B42', {
+              {iconoMontana(xCrudo(finRawFino), yCrudo(finRawFino) - 14, '#A1332B', {
                 onContextMenu: eliminar,
                 onClick: extremo === 'fin' ? (() => soltarExtremo('fin'))
                   : extremo == null ? (() => setEditando({ puerto: t, extremo: 'fin' }))
@@ -1378,7 +1378,7 @@ export default function Perfil({
               })}
 
               <circle cx={xCrudo(inicioRawFino)} cy={yCrudo(inicioRawFino)} r="6"
-                fill="#D14B42" stroke="#0E1116" strokeWidth="2"
+                fill="#A1332B" stroke="#1B1712" strokeWidth="2"
                 style={{ cursor: 'pointer' }}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1399,7 +1399,7 @@ export default function Perfil({
                 const metros = Math.round(streams.distancia[idxActivo] - streams.distancia[datos.idx[hover]]);
                 return (
                   <text x={xCrudo(idxActivo)} y={yCrudo(idxActivo) - 26}
-                    textAnchor="middle" fontSize="11" fill="#D14B42"
+                    textAnchor="middle" fontSize="11" fill="#A1332B"
                     fontFamily="ui-monospace,Menlo,monospace" pointerEvents="none">
                     {metros > 0 ? `+${metros} m` : `${metros} m`}
                   </text>

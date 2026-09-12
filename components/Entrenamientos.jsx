@@ -707,8 +707,8 @@ export default function Entrenamientos({
             <>
               <h2>Detalles de la ruta</h2>
 
-              <div className="scroll">
-                <table>
+              <div className="scroll tabla-editorial-actividades">
+                <table className="tabla-puertos-editorial">
                   <thead>
                     <tr>
                       <th>Puerto</th><th>Km</th><th>Long.</th><th>Desn.</th>
@@ -734,7 +734,7 @@ export default function Entrenamientos({
                               <span className="flecha">{puertoAbierto === i ? '▾' : '▸'}</span>
                               <span className="cat" title={`Coeficiente ${num(c.coef, 0)}`}
                                 style={{ background: c.color,
-                                  color: c.codigo === 'hc' ? '#FFFFFF' : '#0A0C0F' }}>
+                                  color: c.codigo === 'hc' ? '#FFFFFF' : '#1B1712' }}>
                                 {c.nombre}
                               </span>
                               {editandoPuerto === i ? (
@@ -819,7 +819,7 @@ export default function Entrenamientos({
             <>
               <h2>Reparto de intensidad</h2>
               <p className="hint">Cuánto tiempo pasaste en cada zona durante esta salida.</p>
-              <div className="chart">
+              <div className="zonas-editorial">
                 <svg viewBox="0 0 1000 64" width="100%">
                   {(() => {
                     let acc = 0;
@@ -832,13 +832,13 @@ export default function Entrenamientos({
                         <g key={z.n}>
                           <rect x={x} y="8" width={w} height="34" fill={z.color} />
                           {w > 55 && (
-                            <text x={x + w / 2} y="30" textAnchor="middle" fill="#0E1116"
+                            <text x={x + w / 2} y="30" textAnchor="middle" fill="#1B1712"
                               fontSize="13" fontWeight="600" fontFamily="ui-monospace,Menlo,monospace">
                               {num(reparto.porcentaje[k], 0)} %
                             </text>
                           )}
                           {w > 90 && (
-                            <text x={x + w / 2} y="57" textAnchor="middle" fill="#6B7684"
+                            <text x={x + w / 2} y="57" textAnchor="middle" fill="#948564"
                               fontSize="11" fontFamily="ui-monospace,Menlo,monospace">
                               {duracion(reparto.segundos[k])}
                             </text>
@@ -859,10 +859,12 @@ export default function Entrenamientos({
 
           {/* ---------- valoracion del entrenador ---------- */}
           {streams && (
-            <Valoracion
-              salida={salida} streams={streams} reparto={reparto} dureza={dureza}
-              puertos={puertosTabla} cfg={cfg} zonas={zonas} umbral={umbral}
-            />
+            <div className="valoracion-editorial">
+              <Valoracion
+                salida={salida} streams={streams} reparto={reparto} dureza={dureza}
+                puertos={puertosTabla} cfg={cfg} zonas={zonas} umbral={umbral}
+              />
+            </div>
           )}
         </>
       )}

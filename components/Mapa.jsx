@@ -357,7 +357,7 @@ export default function Mapa({ streams, puertos = [], hoverIdx = null, ventanaEd
         }}>
       <g transform={`translate(${vista.x} ${vista.y}) scale(${vista.escala})`}>
       <polyline points={puntos(0, datos.idx.length - 1)} fill="none"
-        stroke="#E0A82E" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        stroke="#C99A3E" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
 
       {/* Los tramos de puerto se remarcan en rojo sobre el trazado base,
           igual que en el perfil: de un vistazo se ve donde caen las
@@ -368,22 +368,22 @@ export default function Mapa({ streams, puertos = [], hoverIdx = null, ventanaEd
         if (b <= a) return null;
         return (
           <polyline key={i} points={puntos(a, b)} fill="none"
-            stroke="#D14B42" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+            stroke="#A1332B" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
         );
       })}
 
       {/* Mismos iconos que el inicio/fin del perfil: play para la salida,
           bandera de cuadros para la meta. */}
       <g transform={`translate(${xIni},${yIni})`}>
-        <circle r="9" fill="#F2C230" stroke="#0E1116" strokeWidth="1.5" />
-        <path d="M -3,-5 L 6,0 L -3,5 Z" fill="#0E1116" />
+        <circle r="9" fill="#D9A544" stroke="#1B1712" strokeWidth="1.5" />
+        <path d="M -3,-5 L 6,0 L -3,5 Z" fill="#1B1712" />
       </g>
       <g transform={`translate(${xFin},${yFin})`}>
-        <circle r="9" fill="#F2C230" stroke="#0E1116" strokeWidth="1.5" />
+        <circle r="9" fill="#D9A544" stroke="#1B1712" strokeWidth="1.5" />
         {[0, 1, 2, 3].flatMap((col) => [0, 1].map((fila) => (
           (col + fila) % 2 === 0 && (
             <rect key={`${col}-${fila}`} x={-6 + col * 3} y={-4 + fila * 4}
-              width="3" height="4" fill="#0E1116" />
+              width="3" height="4" fill="#1B1712" />
           )
         )))}
       </g>
@@ -392,8 +392,8 @@ export default function Mapa({ streams, puertos = [], hoverIdx = null, ventanaEd
           circulo simple, sin ficha ni texto -aqui solo hace falta "donde
           estas", el detalle ya se lee en el tooltip del propio perfil. */}
       {puntoHover && (
-        <circle cx={puntoHover.x} cy={puntoHover.y} r="5" fill="#0E1116"
-          stroke="#E8EAED" strokeWidth="2" pointerEvents="none" />
+        <circle cx={puntoHover.x} cy={puntoHover.y} r="5" fill="#1B1712"
+          stroke="#F3ECE0" strokeWidth="2" pointerEvents="none" />
       )}
       </g>
       </svg>
