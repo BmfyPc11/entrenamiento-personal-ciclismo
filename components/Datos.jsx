@@ -1,14 +1,15 @@
 'use client';
 
-import { MODELOS_ZONAS, NOMBRES_ZONA, PERFILES_BICI } from '@/lib/metrics';
+import { useState } from 'react';
+import { MODELOS_ZONAS, NOMBRES_ZONA, PERFILES_BICI, num, duracion } from '@/lib/metrics';
 
 /*
-  Pestaña de configuracion pura: las constantes que editas y los rangos
-  de cada zona que salen de ellas. El reparto real de tiempo por zona -lo
-  que mides, no lo que defines- vive ahora en Resumen, donde ademas
-  respeta el filtro de fechas en vez de arrastrar todo el historial.
+  Constantes y zonas -lo que defines-, mas debajo el reparto real de
+  tiempo por zona de todo el historial -lo que mides-. Va con todo el
+  historial, no con el rango de fechas de Resumen: esta pestana no tiene
+  filtro de fechas propio.
 */
-export default function Datos({ cfg, setCfg, zonas }) {
+export default function Datos({ cfg, setCfg, zonas, reparto }) {
   const cambiarModelo = (id) => {
     if (id === 'personalizado') {
       // Al pasar a manual se parte de las zonas actuales, no de cero
@@ -147,7 +148,120 @@ export default function Datos({ cfg, setCfg, zonas }) {
           </dl>
         </section>
       </div>
+
+      <RepartoZonas zonas={zonas} reparto={reparto} />
     </>
+  );
+}
+
+/*
+  El reparto real de tiempo por zona, de todo el historial -a diferencia
+  de la tabla de arriba, que es definicion, no medicion. La lectura
+  textual queda oculta detras de un boton -es la explicacion larga, no
+  hace falta que ocupe sitio siempre.
+*/
+function RepartoZonas({ zonas, reparto }) {
+  const [verInfo, setVerInfo] = useState(false);
+  const hayDatos = reparto && reparto.total > 0;
+
+  if (!hayDatos) return null;
+
+  return (
+    <>
+      <h2>Tus zonas</h2>
+      <p className="hint">
+        Acumulado de las {reparto.analizadas} salidas con pulsómetro de todo tu historial,{' '}
+        {duracion(reparto.total)} en total.
+      </p>
+      <div className="chart">
+        <BarrasZonas zonas={zonas} reparto={reparto} />
+        <div className="legend">
+          {zonas.map((z) => (
+            <span key={z.n}>
+              <i style={{ background: z.color }} />Z{z.n} {z.nombre} · {num(reparto.porcentaje[z.n - 1], 0)} %
+            </span>
+          ))}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--e3)' }}>
+          <button aria-expanded={verInfo} onClick={() => setVerInfo((v) => !v)}>
+            {verInfo ? 'Ocultar' : 'Qué significa'}
+          </button>
+        </div>
+      </div>
+      {verInfo && <Veredicto reparto={reparto} zonas={zonas} />}
+    </>
+  );
+}
+
+/* ---------- barras horizontales del reparto por zonas ---------- */
+function BarrasZonas({ zonas, reparto }) {
+  const max = Math.max(...reparto.segundos) || 1;
+  return (
+    <svg viewBox="0 0 1000 260" width="100%">
+      {zonas.map((z, i) => {
+        const y = 14 + i * 48;
+        const w = (reparto.segundos[i] / max) * 700;
+        return (
+          <g key={z.n}>
+            <text x="0" y={y + 22} fill="#C6B89E" fontSize="13" fontFamily="Helvetica,Arial,sans-serif">
+              Z{z.n} {z.nombre}
+            </text>
+            <rect x="170" y={y + 6} width="700" height="22" fill="#211C15" rx="4" />
+            <rect x="170" y={y + 6} width={Math.max(w, 2)} height="22" fill={z.color} rx="4" />
+            <text x="885" y={y + 22} fill="#F3ECE0" fontSize="13" fontWeight="500"
+              fontFamily="ui-monospace,Menlo,monospace">
+              {num(reparto.porcentaje[i], 0)} %
+            </text>
+            <text x="1000" y={y + 22} textAnchor="end" fill="#948564" fontSize="12"
+              fontFamily="ui-monospace,Menlo,monospace">
+              {duracion(reparto.segundos[i])}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/* ---------- lectura del reparto ---------- */
+function Veredicto({ reparto, zonas }) {
+  const suave = reparto.porcentaje[0] + reparto.porcentaje[1];
+  const media = reparto.porcentaje[2];
+  const dura = reparto.porcentaje[3] + reparto.porcentaje[4];
+
+  if (media > 28) {
+    return (
+      <div className="callout warn">
+        <strong>Un {num(media, 0)} % de tu tiempo cae en zona 3.</strong> Es el ritmo que más cansa
+        y menos aporta: demasiado duro para construir base, demasiado suave para subir el umbral. En
+        las salidas de fondo, obligarte a bajar de {zonas[2].desde} ppm aunque tengas que poner un
+        desarrollo ridículo en las rampas.
+      </div>
+    );
+  }
+  if (suave >= 75 && dura >= 10) {
+    return (
+      <div className="callout ok">
+        <strong>Reparto polarizado de manual:</strong> {num(suave, 0)} % en fondo y {num(dura, 0)} %
+        en alta intensidad. Es exactamente lo que buscas. Ahora el margen de mejora está en subir el
+        volumen, no en cambiar el reparto.
+      </div>
+    );
+  }
+  if (dura < 8) {
+    return (
+      <div className="callout">
+        <strong>Solo un {num(dura, 0)} % por encima del umbral.</strong> Tienes base de sobra pero te
+        falta el estímulo que sube el techo. Una sesión dura por semana, sin tocar el resto, cambiaría
+        bastante el panorama.
+      </div>
+    );
+  }
+  return (
+    <div className="callout ok">
+      <strong>{num(suave, 0)} % en fondo, {num(dura, 0)} % en alta intensidad.</strong> El reparto es
+      razonable. Vigila solo que la zona 3 no se vaya creciendo mes a mes.
+    </div>
   );
 }
 

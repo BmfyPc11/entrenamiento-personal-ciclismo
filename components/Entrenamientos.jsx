@@ -707,8 +707,8 @@ export default function Entrenamientos({
             <>
               <h2>Detalles de la ruta</h2>
 
-              <div className="scroll tabla-editorial-actividades">
-                <table className="tabla-puertos-editorial">
+              <div className="scroll">
+                <table>
                   <thead>
                     <tr>
                       <th>Puerto</th><th>Km</th><th>Long.</th><th>Desn.</th>
@@ -819,7 +819,7 @@ export default function Entrenamientos({
             <>
               <h2>Reparto de intensidad</h2>
               <p className="hint">Cuánto tiempo pasaste en cada zona durante esta salida.</p>
-              <div className="zonas-editorial">
+              <div className="chart">
                 <svg viewBox="0 0 1000 64" width="100%">
                   {(() => {
                     let acc = 0;
@@ -859,12 +859,10 @@ export default function Entrenamientos({
 
           {/* ---------- valoracion del entrenador ---------- */}
           {streams && (
-            <div className="valoracion-editorial">
-              <Valoracion
-                salida={salida} streams={streams} reparto={reparto} dureza={dureza}
-                puertos={puertosTabla} cfg={cfg} zonas={zonas} umbral={umbral}
-              />
-            </div>
+            <Valoracion
+              salida={salida} streams={streams} reparto={reparto} dureza={dureza}
+              puertos={puertosTabla} cfg={cfg} zonas={zonas} umbral={umbral}
+            />
           )}
         </>
       )}
