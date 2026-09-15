@@ -14,11 +14,15 @@ export function Carga({ serie, altura = 290 }) {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%">
-      <line x1={L} y1={Y(0)} x2={W - R} y2={Y(0)} stroke="#4A5563" strokeWidth="1.5" />
-      <path d={path('condicion')} fill="none" stroke="#4A90D9" strokeWidth="2.8" strokeLinejoin="round" />
-      <path d={path('fatiga')} fill="none" stroke="#D14B42" strokeWidth="1.9" strokeLinejoin="round" />
+      <line x1={L} y1={Y(0)} x2={W - R} y2={Y(0)} stroke="#4A5563" strokeWidth="1.5"
+        className="g-crece-x" style={{ animationDelay: '0s' }} />
+      <path d={path('condicion')} fill="none" stroke="#4A90D9" strokeWidth="2.8" strokeLinejoin="round"
+        className="g-crece-y" style={{ animationDelay: '.08s' }} />
+      <path d={path('fatiga')} fill="none" stroke="#D14B42" strokeWidth="1.9" strokeLinejoin="round"
+        className="g-crece-y" style={{ animationDelay: '.18s' }} />
       <path d={path('forma')} fill="none" stroke="#6FA35A" strokeWidth="1.9"
-        strokeDasharray="5 4" strokeLinejoin="round" />
+        strokeDasharray="5 4" strokeLinejoin="round"
+        className="g-crece-y" style={{ animationDelay: '.28s' }} />
       {serie.map((s, i) =>
         i % Math.ceil(serie.length / 8) === 0 || i === serie.length - 1 ? (
           <text key={i} x={X(i)} y={H - B + 18} textAnchor="middle" fill="#6B7684"

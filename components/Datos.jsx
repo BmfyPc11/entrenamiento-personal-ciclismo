@@ -207,7 +207,8 @@ function BarrasZonas({ zonas, reparto }) {
               Z{z.n} {z.nombre}
             </text>
             <rect x="170" y={y + 6} width="700" height="22" fill="#211C15" rx="4" />
-            <rect x="170" y={y + 6} width={Math.max(w, 2)} height="22" fill={z.color} rx="4" />
+            <rect x="170" y={y + 6} width={Math.max(w, 2)} height="22" fill={z.color} rx="4"
+              className="g-crece-x" style={{ animationDelay: `${i * 0.06}s` }} />
             <text x="885" y={y + 22} fill="#F3ECE0" fontSize="13" fontWeight="500"
               fontFamily="ui-monospace,Menlo,monospace">
               {num(reparto.porcentaje[i], 0)} %

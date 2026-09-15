@@ -157,7 +157,8 @@ function Barras({ zonas, reparto }) {
               Z{z.n} {z.nombre}
             </text>
             <rect x="170" y={y + 6} width="700" height="22" fill="#151A21" rx="4" />
-            <rect x="170" y={y + 6} width={Math.max(w, 2)} height="22" fill={z.color} rx="4" />
+            <rect x="170" y={y + 6} width={Math.max(w, 2)} height="22" fill={z.color} rx="4"
+              className="g-crece-x" style={{ animationDelay: `${i * 0.06}s` }} />
             <text x="885" y={y + 22} fill="#E8EAED" fontSize="13" fontWeight="500"
               fontFamily="ui-monospace,Menlo,monospace">
               {num(reparto.porcentaje[i], 0)} %
@@ -197,14 +198,16 @@ function Radar({ zonas, reparto }) {
           stroke="#2A3341" strokeWidth="1" />
       ))}
 
-      <polygon points={forma} fill="#4A90D9" fillOpacity=".18" stroke="#4A90D9" strokeWidth="2" />
+      <polygon points={forma} fill="#4A90D9" fillOpacity=".18" stroke="#4A90D9" strokeWidth="2"
+        className="g-pop" style={{ animationDelay: '.05s' }} />
 
       {zonas.map((z, i) => {
         const [px, py] = punto(i, Math.max(reparto.porcentaje[i] / max, 0.02));
         const [lx, ly] = punto(i, 1.19);
         return (
           <g key={z.n}>
-            <circle cx={px} cy={py} r="5" fill={z.color} stroke="#0E1116" strokeWidth="2" />
+            <circle cx={px} cy={py} r="5" fill={z.color} stroke="#0E1116" strokeWidth="2"
+              className="g-pop" style={{ animationDelay: `${0.18 + i * 0.05}s` }} />
             <text x={lx} y={ly} textAnchor="middle" fill={z.color} fontSize="13" fontWeight="500"
               fontFamily="Helvetica,Arial,sans-serif">
               Z{z.n}
@@ -243,7 +246,8 @@ function Pastel({ zonas, reparto }) {
       <g key={z.n}>
         <path
           d={`M ${x1} ${y1} A ${R} ${R} 0 ${grande} 1 ${x2} ${y2} L ${x3} ${y3} A ${r} ${r} 0 ${grande} 0 ${x4} ${y4} Z`}
-          fill={z.color} stroke="#0E1116" strokeWidth="2" />
+          fill={z.color} stroke="#0E1116" strokeWidth="2"
+          className="g-pop" style={{ animationDelay: `${i * 0.07}s` }} />
         {frac > 0.06 && (
           <text x={tx} y={ty + 5} textAnchor="middle" fill="#0E1116" fontSize="14" fontWeight="500"
             fontFamily="ui-monospace,Menlo,monospace">

@@ -1194,8 +1194,12 @@ function RadarLogros({ categorias }) {
         const [x, y] = punto(i, radio);
         return <line key={c.id} x1={centro} y1={centro} x2={x} y2={y} className="radar-eje" />;
       })}
-      <polygon points={datos.map((p) => p.join(',')).join(' ')} className="radar-datos" />
-      {datos.map(([x, y], i) => <circle key={categorias[i].id} cx={x} cy={y} r="2.6" className="radar-punto" />)}
+      <polygon points={datos.map((p) => p.join(',')).join(' ')} className="radar-datos g-pop"
+        style={{ animationDelay: '.05s' }} />
+      {datos.map(([x, y], i) => (
+        <circle key={categorias[i].id} cx={x} cy={y} r="2.6" className="radar-punto g-pop"
+          style={{ animationDelay: `${0.18 + i * 0.04}s` }} />
+      ))}
       {categorias.map((c, i) => {
         const [x, y] = punto(i, radio + 20);
         return (

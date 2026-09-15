@@ -1176,7 +1176,8 @@ function CargaTab({ salidas, cfg, umbral, zonas, global: rep }) {
                   const x = acc; acc += w;
                   return w > 0 ? (
                     <g key={z.n}>
-                      <rect x={x} y="10" width={w} height="34" fill={z.color} />
+                      <rect x={x} y="10" width={w} height="34" fill={z.color}
+                        className="g-crece-x" style={{ animationDelay: `${k * 0.06}s` }} />
                       {w > 55 && (
                         <text x={x + w / 2} y="32" textAnchor="middle" fill="#0E1116" fontSize="13"
                           fontWeight="500" fontFamily="ui-monospace,Menlo,monospace">

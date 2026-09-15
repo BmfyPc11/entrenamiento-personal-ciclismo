@@ -813,6 +813,11 @@ h1{font-size:clamp(26px,3.4vw,34px)}
   llevar ya un rato abierto -de ahi tambien el frame de retraso de
   claseAbierta antes de que estas reglas lleguen a aplicar.
 */
+/* El fundido al cambiar de modo de color del perfil (Perfil.jsx,
+   modoListo) vive entero en estilo inline -opacidad Y transicion-,
+   no aqui: la transicion solo puede declararse al subir a 1, nunca al
+   bajar a 0, y eso solo se puede decidir en el propio commit de React. */
+
 .perfil-area-anim{transform:scaleY(.02);transition:transform .6s cubic-bezier(.16,1,.3,1)}
 .perfil-linea-anim{stroke-dashoffset:var(--linea-len);transition:stroke-dashoffset .78s cubic-bezier(.33,1,.68,1)}
 .perfil-cima-stem{transform:scaleY(0);transition:transform .5s cubic-bezier(.16,1,.3,1)}
@@ -840,6 +845,34 @@ h1{font-size:clamp(26px,3.4vw,34px)}
   100%{transform:scale(2.3);opacity:0}
 }
 
+/*
+  Entrada de los graficos SVG que no son el perfil (barras, curvas,
+  radar, sectores): mismo lenguaje que las animaciones de arriba, pero
+  con @keyframes puro en vez de transition + cambio de clase. Estos
+  graficos no necesitan volver atras -solo entran una vez al montarse-
+  asi que no hace falta el truco del frame de retraso que si necesita
+  .fila-detalle-panel.
+
+  transform-box:fill-box hace que el origen de la transformacion sea la
+  propia caja del elemento (su barra, su linea, su sector), no el
+  viewport del SVG entero -asi cada uno crece desde si mismo sin
+  importar donde caiga dentro del grafico.
+*/
+.g-crece-x{transform-box:fill-box;transform-origin:left center;
+  transform:scaleX(0);animation:gCreceX .7s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes gCreceX{to{transform:scaleX(1)}}
+
+.g-crece-y{transform-box:fill-box;transform-origin:bottom center;
+  transform:scaleY(.04);animation:gCreceY .6s cubic-bezier(.16,1,.3,1) forwards}
+@keyframes gCreceY{to{transform:scaleY(1)}}
+
+.g-pop{transform-box:fill-box;transform-origin:center;
+  opacity:0;transform:scale(.55);
+  animation:gPop .5s cubic-bezier(.34,1.56,.64,1) forwards}
+@keyframes gPop{to{opacity:1;transform:scale(1)}}
+
+.g-fade{opacity:0;animation:gFade .5s ease forwards}
+@keyframes gFade{to{opacity:1}}
 
 /* Nota al pie de un bloque: aclara como se ha calculado lo de arriba. */
 .nota{font-size:12.5px;color:var(--ink3);line-height:1.55;margin:var(--e3) 0 0}

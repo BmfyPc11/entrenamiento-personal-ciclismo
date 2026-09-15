@@ -15,6 +15,10 @@ export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, ped
      mejor tiempo", que es el valor por defecto al abrir uno nuevo (ver el
      onClick de la fila mas abajo, que la reinicia). */
   const [vertienteActiva, setVertienteActiva] = useState(null);
+  /* Que vista del detalle se ve: el perfil de altimetria o el scatter de
+     tendencia. Vive aqui (no dentro de detalleSegmento) porque solo hay un
+     grupo abierto a la vez -igual que vertienteActiva. */
+  const [vistaDetalle, setVistaDetalle] = useState('perfil');
   /* Edicion del nombre propio de una vertiente (nombreVertiente, distinto
      del nombre del grupo que las vincula -ver renombrarVertiente). */
   const [editandoVertiente, setEditandoVertiente] = useState(null);
@@ -192,9 +196,27 @@ export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, ped
             </div>
           )}
 
-          {st && mejor && (
+          {st && mejor && intentos.length > 1 && (
+            <div className="chips" style={{ marginBottom: 14 }}>
+              <button type="button" aria-pressed={vistaDetalle === 'perfil'}
+                onClick={() => setVistaDetalle('perfil')}
+                style={vistaDetalle === 'perfil' ? { background: 'var(--ink)', borderColor: 'var(--ink)' } : null}>
+                Perfil
+              </button>
+              <button type="button" aria-pressed={vistaDetalle === 'tendencia'}
+                onClick={() => setVistaDetalle('tendencia')}
+                style={vistaDetalle === 'tendencia' ? { background: 'var(--ink)', borderColor: 'var(--ink)' } : null}>
+                Tendencia
+              </button>
+            </div>
+          )}
+
+          {st && mejor && (vistaDetalle === 'perfil' || intentos.length <= 1) && (
             <PerfilPuerto streams={st} puerto={mejor} indice={0}
               cfg={cfg} zonas={zonas} nombre={g.nombre} />
+          )}
+          {st && mejor && intentos.length > 1 && vistaDetalle === 'tendencia' && (
+            <TendenciaPuerto intentos={intentos} />
           )}
 
           <p className="hint" style={{ margin: '18px 0 8px' }}>
@@ -305,6 +327,7 @@ export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, ped
                     <tr onClick={() => {
                         setAbiertoSegmento(abiertoEste ? null : g.id);
                         setVertienteActiva(null); // al abrir un grupo nuevo, empieza en la vertiente principal
+                        setVistaDetalle('perfil'); // y en la vista de perfil, no en la que se dejara la vez anterior
                       }}
                       style={{ cursor: 'pointer',
                         background: abiertoEste ? 'var(--card2)' : undefined }}>
@@ -365,5 +388,85 @@ export default function Ascensiones({ salidas, cache, excluidas, cfg, zonas, ped
         </>
       )}
     </>
+  );
+}
+
+/*
+  Dispersion de tiempo por fecha, con recta de tendencia: cada punto es un
+  paso por la vertiente, y la recta (regresion lineal simple sobre el
+  tiempo normalizado, no sobre el tiempo real -evita que fechas muy
+  separadas hagan inestable la pendiente) dice de un vistazo si vas a
+  mejor o a peor con las salidas, en vez de tener que leer la tabla fila a
+  fila. El eje vertical va invertido a proposito: menos segundos (mas
+  rapido) se dibuja mas arriba, que es como se lee "mejora" en cualquier
+  otro grafico de esta app (Carga y forma, Evolucion).
+*/
+function TendenciaPuerto({ intentos }) {
+  const validos = intentos
+    .filter((it) => it.segundos != null)
+    .map((it) => ({ ...it, t: new Date(it.fecha).getTime() }))
+    .sort((a, b) => a.t - b.t);
+
+  if (validos.length < 2) return null;
+
+  const W = 760, H = 200;
+  const mIzq = 58, mDer = 18, mSup = 18, mInf = 30;
+  const ancho = W - mIzq - mDer, alto = H - mSup - mInf;
+
+  const tMin = validos[0].t, tMax = validos[validos.length - 1].t;
+  const segs = validos.map((it) => it.segundos);
+  const segMin = Math.min(...segs) * 0.94, segMax = Math.max(...segs) * 1.06;
+
+  const x = (t) => (tMax === tMin ? mIzq + ancho / 2 : mIzq + ((t - tMin) / (tMax - tMin)) * ancho);
+  const y = (s) => mSup + ((s - segMin) / (segMax - segMin)) * alto;
+
+  /* Regresion sobre t normalizado a [0,1] -no sobre el timestamp real- para
+     que la pendiente no pierda precision con fechas de mas de una decada
+     de separacion (el propio rango de esta app, ano a ano). */
+  const n = validos.length;
+  const tsNorm = validos.map((it) => (tMax === tMin ? 0 : (it.t - tMin) / (tMax - tMin)));
+  const mediaT = tsNorm.reduce((s, v) => s + v, 0) / n;
+  const mediaS = segs.reduce((s, v) => s + v, 0) / n;
+  let sumProd = 0, sumCuad = 0;
+  tsNorm.forEach((tn, i) => { sumProd += (tn - mediaT) * (segs[i] - mediaS); sumCuad += (tn - mediaT) ** 2; });
+  const pendiente = sumCuad ? sumProd / sumCuad : 0;
+  const ordenada = mediaS - pendiente * mediaT;
+  const segEn = (tn) => ordenada + pendiente * tn;
+
+  const mejorando = pendiente < 0;
+
+  return (
+    <div className="panel" style={{ marginBottom: 14 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%">
+        {[0, 0.5, 1].map((f) => (
+          <line key={f} x1={mIzq} x2={W - mDer} y1={mSup + alto * f} y2={mSup + alto * f}
+            stroke="var(--line)" strokeWidth="1" opacity=".5" />
+        ))}
+
+        {validos.length >= 3 && (
+          <line x1={mIzq} y1={y(segEn(0))} x2={W - mDer} y2={y(segEn(1))}
+            stroke={mejorando ? 'var(--green)' : 'var(--red)'} strokeWidth="2" strokeDasharray="6 5"
+            className="g-crece-x" />
+        )}
+
+        {validos.map((it, i) => (
+          <circle key={i} cx={x(it.t)} cy={y(it.segundos)} r="4.5"
+            fill="var(--blue)" stroke="var(--bg2)" strokeWidth="1.5"
+            className="g-pop" style={{ animationDelay: `${i * 0.03}s` }}>
+            <title>{`${fechaCorta(it.fecha)} · ${duracion(it.segundos)}`}</title>
+          </circle>
+        ))}
+
+        <text x={mIzq - 8} y={mSup + 4} textAnchor="end" fontFamily="var(--mono)"
+          fontSize="10.5" fill="var(--ink2)">{duracion(segMin)}</text>
+        <text x={mIzq - 8} y={mSup + alto} textAnchor="end" fontFamily="var(--mono)"
+          fontSize="10.5" fill="var(--ink2)">{duracion(segMax)}</text>
+
+        <text x={mIzq} y={H - 8} textAnchor="start" fontFamily="var(--mono)"
+          fontSize="10" fill="var(--ink3)">{fechaCorta(validos[0].fecha)}</text>
+        <text x={W - mDer} y={H - 8} textAnchor="end" fontFamily="var(--mono)"
+          fontSize="10" fill="var(--ink3)">{fechaCorta(validos[validos.length - 1].fecha)}</text>
+      </svg>
+    </div>
   );
 }

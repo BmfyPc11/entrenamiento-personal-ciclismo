@@ -179,15 +179,17 @@ function Terreno({ t }) {
               stroke="var(--line)" strokeWidth="1" opacity=".5" />
           ))}
 
-          {conLinea.map((z) => (
+          {conLinea.map((z, zi) => (
             <path key={z.n} fill="none" stroke={z.color} strokeWidth="2" strokeLinejoin="round"
               d={dibujables(z).map((p, i) =>
-                `${i ? 'L' : 'M'} ${x(p.orden)} ${y(valor(p))}`).join(' ')} />
+                `${i ? 'L' : 'M'} ${x(p.orden)} ${y(valor(p))}`).join(' ')}
+              className="g-crece-y" style={{ animationDelay: `${zi * 0.06}s` }} />
           ))}
 
           {zonasVisibles.map((z) => dibujables(z).map((p, i) => (
             <circle key={`${z.n}-${i}`} cx={x(p.orden)} cy={y(valor(p))} r="3.5"
-              fill={z.color} />
+              fill={z.color}
+              className="g-pop" style={{ animationDelay: `${0.3 + i * 0.02}s` }} />
           )))}
 
           <text x={mIzq - 8} y={mSup + 4} textAnchor="end" fontFamily="var(--mono)"

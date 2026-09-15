@@ -401,6 +401,55 @@ export default function Perfil({
     se guarda en una custom property CSS (--linea-len) y es el CSS quien
     decide destino (0) y origen (la propia --linea-len) del recorrido.
   */
+  /*
+    Fundido al cambiar de modo (relieve/dureza/zonas/velocidad): sin esto
+    el color salta de golpe de uno a otro. Es un cruce de verdad -color
+    viejo desvaneciendose mientras el nuevo entra encima, nunca un hueco
+    de por medio- asi que hacen falta DOS capas superpuestas durante la
+    transicion: la que entra (el modo actual, tramos ya calculados mas
+    abajo) y la que sale, que es una FOTO CONGELADA del ultimo color
+    pintado -capaAnteriorRef, actualizada en cada render- de antes de que
+    "modo" cambiara. No hace falta recalcular tramos para el modo
+    saliente: basta con reutilizar el JSX que ya se pinto la ultima vez.
+
+    El "a 0/1 iniciales" se deciden DURANTE el render (no en un efecto):
+    comparando modo contra la ultima vez visto y llamando a los setState
+    ahi mismo, React reintenta el render antes de comprometer nada al
+    DOM, asi que ni el color nuevo a opacidad plena ni el hueco entre
+    los dos llegan a pintarse ni un solo fotograma.
+
+    El "cruce de verdad" (entra sube a 1, sale baja a 0, ambos con
+    transicion) vive en un efecto normal, con DOS requestAnimationFrame
+    anidados -con uno solo, el propio callback puede caer todavia dentro
+    de la misma vuelta de pintado en la que se puso el estado inicial, y
+    la transicion CSS nunca ve un fotograma ya pintado del que partir.
+  */
+  const modoAnteriorRef = useRef(modo);
+  const capaAnteriorRef = useRef(null); // { modo, jsx } del ultimo color pintado
+  const [modoListo, setModoListo] = useState(true);
+  const [capaSaliente, setCapaSaliente] = useState(null); // { modo, jsx } | null
+  if (modoAnteriorRef.current !== modo) {
+    modoAnteriorRef.current = modo;
+    setModoListo(false);
+    setCapaSaliente(capaAnteriorRef.current);
+  }
+  useEffect(() => {
+    if (modoListo) return;
+    let id2;
+    const id1 = requestAnimationFrame(() => {
+      id2 = requestAnimationFrame(() => setModoListo(true));
+    });
+    return () => { cancelAnimationFrame(id1); if (id2) cancelAnimationFrame(id2); };
+  }, [modoListo]);
+  /* Una vez el cruce termina (algo mas que los .4s de la transicion CSS,
+     para no cortarla a mitad) la capa saliente deja de pintarse: ya
+     esta a opacidad 0 y solo ocupaba sitio en el DOM sin aportar nada. */
+  useEffect(() => {
+    if (!modoListo || !capaSaliente) return;
+    const id = setTimeout(() => setCapaSaliente(null), 450);
+    return () => clearTimeout(id);
+  }, [modoListo, capaSaliente]);
+
   const lineaRef = useRef(null);
   const [lineaLen, setLineaLen] = useState(0);
   useLayoutEffect(() => {
@@ -920,6 +969,83 @@ export default function Perfil({
       ? 'crosshair'
       : (marcando || editando || cercaLinea) ? 'pointer' : 'default';
 
+  /*
+    El color del perfil segun el modo (dureza/velocidad/zonas/relieve),
+    sacado a variable para poder pintarlo dos veces: una vez como la capa
+    que entra (mas abajo) y, cuando toca, reutilizado tal cual -sin
+    recalcular nada- como la foto congelada de capaSaliente en el
+    proximo cambio de modo (ver capaAnteriorRef, arriba del todo).
+  */
+  const capaColor = modo === 'dureza' ? (
+    <>
+      {tramos.map((t, i) => {
+        const c = TRAMOS_DUREZA[t.dureza - 1];
+        const atenuado = durezaFoco.length > 0 && !durezaFoco.includes(t.dureza);
+        return (
+          <path key={i} d={areaPath(t.ini, Math.min(t.fin + 1, datos.d.length - 1))}
+            fill={c.color} stroke={c.color} strokeWidth="0.6"
+            shapeRendering="crispEdges"
+            opacity={atenuado ? 0.12 : 1} />
+        );
+      })}
+      <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#F3ECE0"
+        strokeWidth="1.2" strokeLinejoin="round" opacity="0.45" />
+    </>
+  ) : modo === 'velocidad' && datos.t ? (
+    <>
+      {tramos.map((t, i) => {
+        const c = TRAMOS_VELOCIDAD[t.velocidad - 1];
+        const atenuado = velFoco.length > 0 && !velFoco.includes(t.velocidad);
+        return (
+          <path key={i} d={areaPath(t.ini, Math.min(t.fin + 1, datos.d.length - 1))}
+            fill={c.color} stroke={c.color} strokeWidth="0.6"
+            shapeRendering="crispEdges"
+            opacity={atenuado ? 0.12 : 1} />
+        );
+      })}
+      <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#F3ECE0"
+        strokeWidth="1.2" strokeLinejoin="round" opacity="0.45" />
+    </>
+  ) : modo === 'zonas' && datos.fc && zonas ? (
+    <>
+      {tramos.map((t, i) => {
+        const z = zonas.find((x) => x.n === t.zona);
+        const atenuado = zonaFoco.length > 0 && !zonaFoco.includes(t.zona);
+        return (
+          <path key={i} d={areaPath(t.ini, t.fin)}
+            fill={z ? z.color : '#6B6354'}
+            opacity={atenuado ? 0.13 : 0.82} />
+        );
+      })}
+      <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#1B1712"
+        strokeWidth="1.2" strokeLinejoin="round" opacity=".55" />
+    </>
+  ) : (
+    <>
+      {/*
+        "Informacion" va solida, sin degradado ni transparencia: es
+        la vista de referencia, sin dar a entender que hay un dato
+        detras del color como en dureza/velocidad/zonas.
+      */}
+      <path d={areaPath(0, datos.d.length - 1)}
+        fill={amarillo ? 'url(#relieve-amarillo)' : 'url(#relieve)'}
+        className={animarEntrada ? 'perfil-area-anim' : undefined}
+        style={animarEntrada ? { transformOrigin: `0px ${H - B}px` } : undefined} />
+      <path ref={animarEntrada ? lineaRef : undefined}
+        d={lineaPath(0, datos.d.length - 1)} fill="none"
+        stroke={amarillo ? '#C99A3E' : '#C6B89E'}
+        strokeWidth="1.7" strokeLinejoin="round"
+        className={animarEntrada ? 'perfil-linea-anim' : undefined}
+        strokeDasharray={animarEntrada ? lineaLen : undefined}
+        style={animarEntrada ? { '--linea-len': lineaLen } : undefined} />
+    </>
+  );
+  /* Se guarda DURANTE el render (no en un efecto: si no, un render
+     descartado por Strict Mode en desarrollo podria dejar la referencia
+     desincronizada) para que el proximo cambio de modo tenga de donde
+     coger la foto congelada. */
+  capaAnteriorRef.current = { modo, jsx: capaColor };
+
   return (
     <div ref={contRef} style={marcado ? { position: 'relative' } : undefined}>
       <svg
@@ -957,70 +1083,21 @@ export default function Perfil({
           </g>
         ))}
 
-        {modo === 'dureza' ? (
-          <>
-            {tramos.map((t, i) => {
-              const c = TRAMOS_DUREZA[t.dureza - 1];
-              const atenuado = durezaFoco.length > 0 && !durezaFoco.includes(t.dureza);
-              return (
-                <path key={i} d={areaPath(t.ini, Math.min(t.fin + 1, datos.d.length - 1))}
-                  fill={c.color} stroke={c.color} strokeWidth="0.6"
-                  shapeRendering="crispEdges"
-                  opacity={atenuado ? 0.12 : 1} />
-              );
-            })}
-            <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#F3ECE0"
-              strokeWidth="1.2" strokeLinejoin="round" opacity="0.45" />
-          </>
-        ) : modo === 'velocidad' && datos.t ? (
-          <>
-            {tramos.map((t, i) => {
-              const c = TRAMOS_VELOCIDAD[t.velocidad - 1];
-              const atenuado = velFoco.length > 0 && !velFoco.includes(t.velocidad);
-              return (
-                <path key={i} d={areaPath(t.ini, Math.min(t.fin + 1, datos.d.length - 1))}
-                  fill={c.color} stroke={c.color} strokeWidth="0.6"
-                  shapeRendering="crispEdges"
-                  opacity={atenuado ? 0.12 : 1} />
-              );
-            })}
-            <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#F3ECE0"
-              strokeWidth="1.2" strokeLinejoin="round" opacity="0.45" />
-          </>
-        ) : modo === 'zonas' && datos.fc && zonas ? (
-          <>
-            {tramos.map((t, i) => {
-              const z = zonas.find((x) => x.n === t.zona);
-              const atenuado = zonaFoco.length > 0 && !zonaFoco.includes(t.zona);
-              return (
-                <path key={i} d={areaPath(t.ini, t.fin)}
-                  fill={z ? z.color : '#6B6354'}
-                  opacity={atenuado ? 0.13 : 0.82} />
-              );
-            })}
-            <path d={lineaPath(0, datos.d.length - 1)} fill="none" stroke="#1B1712"
-              strokeWidth="1.2" strokeLinejoin="round" opacity=".55" />
-          </>
-        ) : (
-          <>
-            {/*
-              "Informacion" va solida, sin degradado ni transparencia: es
-              la vista de referencia, sin dar a entender que hay un dato
-              detras del color como en dureza/velocidad/zonas.
-            */}
-            <path d={areaPath(0, datos.d.length - 1)}
-              fill={amarillo ? 'url(#relieve-amarillo)' : 'url(#relieve)'}
-              className={animarEntrada ? 'perfil-area-anim' : undefined}
-              style={animarEntrada ? { transformOrigin: `0px ${H - B}px` } : undefined} />
-            <path ref={animarEntrada ? lineaRef : undefined}
-              d={lineaPath(0, datos.d.length - 1)} fill="none"
-              stroke={amarillo ? '#C99A3E' : '#C6B89E'}
-              strokeWidth="1.7" strokeLinejoin="round"
-              className={animarEntrada ? 'perfil-linea-anim' : undefined}
-              strokeDasharray={animarEntrada ? lineaLen : undefined}
-              style={animarEntrada ? { '--linea-len': lineaLen } : undefined} />
-          </>
+        {/*
+          Cruce de verdad entre el color que sale y el que entra, las dos
+          capas superpuestas mientras dura la transicion -ver el bloque
+          de comentarios grande junto a capaAnteriorRef, arriba del todo,
+          para el porque del doble rAF y de por que "transition" solo se
+          declara en el sentido que de verdad tiene que animarse.
+        */}
+        {capaSaliente && (
+          <g style={{ opacity: modoListo ? 0 : 1, transition: modoListo ? 'opacity .4s ease' : 'none' }}>
+            {capaSaliente.jsx}
+          </g>
         )}
+        <g style={{ opacity: modoListo ? 1 : 0, transition: modoListo ? 'opacity .4s ease' : 'none' }}>
+          {capaColor}
+        </g>
 
         {/*
           Marca ligera de la totalidad del puerto -de inicio a cima-, en
