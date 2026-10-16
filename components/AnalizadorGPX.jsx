@@ -155,7 +155,7 @@ export default function AnalizadorGPX({ salidas, cache, excluidas, cfg, zonas })
           <div className="panel">
             <Perfil streams={datos.streams} zonas={zonas} modo={modo}
               puertos={an.puertos} nombres={an.puertos.map(nombrePuerto)}
-              durezaFoco={durezaFoco} altura={340} />
+              durezaFoco={durezaFoco === null ? [] : [durezaFoco]} altura={340} />
 
             <div className="chips" style={{ marginTop: 14 }}>
               <button aria-pressed={modo === 'relieve'}
